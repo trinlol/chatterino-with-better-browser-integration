@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Twitch Predictions Mover",
+  "name": "Chatterino Companion",
   "version": "1.0",
-  "description": "Moves Twitch prediction and poll banners to a floating, draggable window so they are not blocked by Chatterino.",
+  "description": "Claims channel points, handles pinned messages, and integrates Twitch web features with Chatterino.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4D8JIc1Plb2P6BebXD3saQVqStgmKZpJNxa0O4VRzBUsPZSCe4Y1nxV++E6SxRx1WwzAW7AiZza4TcSqCAJLshLaqZRSFY5Q5x7cLzGF3w+XT73rVG4Qj6S1T0vFo59ZyUPrQ+/SS0fRYlq4DidfyYmi5+SNHMdXy7lAY+oFoUeACxLUDIql6bfIDUovzShBIEToBHwCn5zqHZOpKeCKwb010WlFcgm6omaTfLsRnRHCQ1oNfFhaJBid4KhVzpczpqPOZLmylZDy/35ek2vGjKH582YZHw1HHXLlXVXSXy1ZuWyHeT2BcWk2++loNXAXO7jAMozc0yU6fQyAcOHF6wIDAQAB",
   "background": {
     "service_worker": "background.js"

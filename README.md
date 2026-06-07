@@ -38,7 +38,7 @@ Fixes the annoying window bugs when clicking the browser:
 2. **Install the Extension**: 
    - Open your browser and navigate to `chrome://extensions/` (or `edge://extensions/`).
    - Enable **Developer mode**.
-   - Click **Load unpacked** and select the [`twitch-predictions-mover`](./twitch-predictions-mover/) directory in this repository.
+   - Click **Load unpacked** and select the [`chatterino-companion`](./chatterino-companion/) directory in this repository.
 3. Run the compiled `chatterino.exe`!
 
 ---
