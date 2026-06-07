@@ -56,7 +56,10 @@
     '[data-a-target="chat-pinned-message"]',
     '.pinned-chat__highlight-card',
     '.pinned-chat__container',
-    '.pinned-chat-list-item'
+    '.pinned-chat-list-item',
+    '.community-highlight-stack__card',
+    '.community-highlight-stack',
+    '.community-highlight'
   ];
 
   // Load saved settings
@@ -145,12 +148,15 @@
       if (textEl) {
         pinnedText = textEl.textContent.trim();
       } else {
-        pinnedText = pinnedBanner.innerText
-          .split('\n')
-          .map(s => s.trim())
-          .filter(s => s && !s.includes('✕') && !s.toLowerCase().includes('dismiss') && !s.toLowerCase().includes('unpin'))
-          .join(' ');
+        pinnedText = pinnedBanner.textContent.trim();
       }
+
+      // Clean up close buttons, UI labels, and extra whitespace
+      pinnedText = pinnedText
+        .replace(/✕/g, '')
+        .replace(/\b(dismiss|unpin|pinned message)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
     }
 
     const pinFingerprint = JSON.stringify({ text: pinnedText });

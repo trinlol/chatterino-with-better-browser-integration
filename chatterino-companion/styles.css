@@ -74,6 +74,9 @@
 [data-a-target="chat-pinned-message"],
 .pinned-chat__highlight-card,
 .pinned-chat__container,
-.pinned-chat-list-item {
+.pinned-chat-list-item,
+.community-highlight-stack__card,
+.community-highlight-stack,
+.community-highlight {
   display: none !important;
 }
