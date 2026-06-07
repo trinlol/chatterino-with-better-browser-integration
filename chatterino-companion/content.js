@@ -8,9 +8,27 @@
   let lastPredictionTitle = '';
   let isMinimized = false;
   let lastPinFingerprint = '';
-
   let pollIntervalId = null;
   let syncIntervalId = null;
+  let currentChannel = '';
+
+  function getTwitchChannelName() {
+    const path = window.location.pathname.toLowerCase();
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length === 0) return '';
+    
+    if (parts[0] === 'popout' && parts[1]) {
+      return parts[1];
+    }
+    if (parts[0] === 'moderator' && parts[1]) {
+      return parts[1];
+    }
+    const staticPages = ['directory', 'videos', 'settings', 'subscriptions', 'wallet', 'drops', 'search'];
+    if (staticPages.includes(parts[0])) {
+      return '';
+    }
+    return parts[0];
+  }
 
   function isContextInvalidated() {
     if (!chrome?.runtime?.id) {
@@ -39,11 +57,6 @@
 
   // Periodically reset fingerprints to keep Chatterino in sync in case of restarts or new splits
   syncIntervalId = setInterval(resetFingerprints, 10000);
-
-  // Sync fingerprints on startup to handle race conditions during page load/F5 reload
-  setTimeout(resetFingerprints, 1000);
-  setTimeout(resetFingerprints, 2000);
-  setTimeout(resetFingerprints, 5000);
 
   const selectors = [
     '[data-test-selector="community-prediction-banner"]',
@@ -112,6 +125,18 @@
   // Check for prediction or poll banners and move them
   function checkAndMoveBanners() {
     if (isContextInvalidated()) return;
+
+    const channelName = getTwitchChannelName();
+    if (channelName !== currentChannel) {
+      currentChannel = channelName;
+      resetFingerprints();
+      // Schedule delayed syncs to allow Twitch chat and Chatterino selection to complete
+      setTimeout(resetFingerprints, 1000);
+      setTimeout(resetFingerprints, 2000);
+      setTimeout(resetFingerprints, 5000);
+      console.log('[Chatterino Companion] Channel changed to:', channelName, '- Resetting fingerprints.');
+    }
+
     // Auto-claim channel points
     if (autoClaimEnabled) {
       const claimButton = document.querySelector('button[aria-label="Claim Bonus"]') || 
