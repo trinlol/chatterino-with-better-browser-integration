@@ -1,7 +1,7 @@
 ![chatterinoLogo](https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png)
 
 # Chatterino 2 - Browser Integration Fork 🚀
-=========================
+
 
 A fork of Chatterino 2 focused on making the browser integration actually feel native and complete. It adds quality-of-life features that integrate Twitch web features directly into your Chatterino splits.
 
