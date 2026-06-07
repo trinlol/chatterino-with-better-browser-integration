@@ -27,6 +27,11 @@
   // Periodically reset fingerprints to keep Chatterino in sync in case of restarts or new splits
   setInterval(resetFingerprints, 10000);
 
+  // Sync fingerprints on startup to handle race conditions during page load/F5 reload
+  setTimeout(resetFingerprints, 1000);
+  setTimeout(resetFingerprints, 2000);
+  setTimeout(resetFingerprints, 5000);
+
   const selectors = [
     '[data-test-selector="community-prediction-banner"]',
     '[data-test-selector="community-poll-banner"]',
