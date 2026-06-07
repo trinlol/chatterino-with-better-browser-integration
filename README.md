@@ -1,35 +1,34 @@
 ![chatterinoLogo](https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png)
 
-# Chatterino 2 - Enhanced Browser Integration Fork 🚀
+# Chatterino 2 - Browser Integration Fork 🚀
 =========================
 
-Welcome to the **Chatterino 2** fork with **Better Browser Integration**! This version extends the original Chatterino desktop chat client with powerful, quality-of-life enhancements that bridge the gap between Twitch's web player and Chatterino.
+A fork of Chatterino 2 focused on making the browser integration actually feel native and complete. It adds quality-of-life features that integrate Twitch web features directly into your Chatterino splits.
 
 ---
 
-## ✨ Custom Features in This Fork
+## ✨ Features
 
-### 📌 1. Embedded Pinned Messages
-Streamers and moderators' pinned messages are seamlessly integrated into the Chatterino window!
-- **Sleek Banner**: Displays pinned messages as a full-width purple header bar stuck to the top of the chat view.
-- **Twitch Overlay Cleanup**: Automatically hides the original HTML pinned message box on Twitch to prevent screen clutter.
-- **Easy Dismiss**: Features a close (`✕`) button to quickly dismiss the pinned message locally.
+### 📌 1. Pinned Messages in Chat
+Moderator and streamer pinned messages now show up directly in Chatterino:
+- Shows pinned messages as a purple banner at the top of the chat split.
+- Automatically hides Twitch's default web pinned message to save screen space.
+- Includes a close (`✕`) button to dismiss the pin.
 
 ### 🪙 2. Channel Points Auto-Claimer
-Never miss a chest bonus! 
-- **Auto-Collector**: Periodically checks for claimable channel points bonus chests in the background (every 500ms).
-- **Instant Claims**: Automatically clicks the green claim chest button immediately when it appears, with zero page reloads.
+Never miss claiming channel points:
+- Automatically clicks the green "Claim Bonus" chest as soon as it appears.
+- Zero page reloads or manual clicking needed.
 
-### ⚡ 3. Z-Order Flicker Fix
-Provides a buttery smooth viewing experience.
-- **Native Owner Windowing**: Binds the Chatterino integration window directly as an owned child of the browser window.
-- **Zero Flickering**: Prevents the Chatterino overlay window from disappearing or flickering when clicking anywhere on the Twitch stream page.
+### ⚡ 3. Fixed Window Flickering & Disappearing
+Fixes the annoying window bugs when clicking the browser:
+- The Chatterino overlay stays pinned in front of the browser without disappearing when you click on Twitch.
+- No flickering or rendering lag when clicking.
+- Properly hides behind other applications (like Discord or games) when you tab out.
 
-### 💬 4. Smart Input Field Emotes & Click-to-Type
-Enhanced chat typing and emote interactions:
-- **Click-to-Add**: Clicking on emotes in the chat view automatically inserts them into your input field.
-- **Inline Input Emotes**: Emotes render as actual inline images inside your text editor input box.
-- **Smart Completion**: Enhanced tab-completion strategies for emotes and usernames.
+### 💬 4. Emote Click-to-Type & Rich Input
+- Clicking an emote in chat automatically copies it to your text input.
+- Emotes are rendered as inline images inside the text input field.
 
 ---
 
@@ -40,7 +39,7 @@ Enhanced chat typing and emote interactions:
    - Open your browser and navigate to `chrome://extensions/` (or `edge://extensions/`).
    - Enable **Developer mode**.
    - Click **Load unpacked** and select the [`twitch-predictions-mover`](./twitch-predictions-mover/) directory in this repository.
-3. Run the compiled `chatterino.exe` and enjoy the enhanced browser integration!
+3. Run the compiled `chatterino.exe`!
 
 ---
 
@@ -61,7 +60,7 @@ For platform-specific compilation instructions:
 
 ---
 
-## 📜 Original Project Links
+## 📖 Original Project Links
 
 - **Wiki**: [https://wiki.chatterino.com](https://wiki.chatterino.com)
 - **Original Repo**: [https://github.com/Chatterino/chatterino2](https://github.com/Chatterino/chatterino2)
