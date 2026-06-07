@@ -11,6 +11,7 @@
 #include "widgets/splits/Split.hpp"
 
 #include <QTimer>
+#include <QWindow>
 #include <QVBoxLayout>
 
 #include <memory>
@@ -189,6 +190,15 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
 
     // Set the browser window as the owner of this window to prevent Z-order flickering
     ::SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(attached));
+    ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
+
+    if (auto *windowHandle = this->windowHandle())
+    {
+        if (auto *foreignParent = QWindow::fromWinId(reinterpret_cast<WId>(attached)))
+        {
+            windowHandle->setTransientParent(foreignParent);
+        }
+    }
 
     // FAST TIMER - used to resize/reorder windows
     this->timer_.setInterval(1);
@@ -276,13 +286,7 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
         return;
     }
 
-    // set the correct z-order
-    if (HWND next = ::GetNextWindow(attached, GW_HWNDPREV))
-    {
-        ::SetWindowPos(hwnd, next ? next : HWND_TOPMOST, 0, 0, 0, 0,
-                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
-
+    // set the correct z-order (handled natively by Windows parent-child relationship now)
     float scale = 1.f;
     float ourScale = 1.F;
     if (auto dpi = getWindowDpi(attached))
