@@ -9,7 +9,20 @@
   let isMinimized = false;
   let lastPinFingerprint = '';
 
+  let pollIntervalId = null;
+  let syncIntervalId = null;
+
+  function isContextInvalidated() {
+    if (!chrome?.runtime?.id) {
+      if (pollIntervalId) clearInterval(pollIntervalId);
+      if (syncIntervalId) clearInterval(syncIntervalId);
+      return true;
+    }
+    return false;
+  }
+
   function resetFingerprints() {
+    if (isContextInvalidated()) return;
     lastPinFingerprint = '';
     lastPredictionFingerprint = '';
   }
@@ -25,7 +38,7 @@
   });
 
   // Periodically reset fingerprints to keep Chatterino in sync in case of restarts or new splits
-  setInterval(resetFingerprints, 10000);
+  syncIntervalId = setInterval(resetFingerprints, 10000);
 
   // Sync fingerprints on startup to handle race conditions during page load/F5 reload
   setTimeout(resetFingerprints, 1000);
@@ -95,6 +108,7 @@
 
   // Check for prediction or poll banners and move them
   function checkAndMoveBanners() {
+    if (isContextInvalidated()) return;
     // Auto-claim channel points
     if (autoClaimEnabled) {
       const claimButton = document.querySelector('button[aria-label="Claim Bonus"]') || 
@@ -360,6 +374,6 @@
   }
 
   // Poll every 500ms
-  setInterval(checkAndMoveBanners, 500);
+  pollIntervalId = setInterval(checkAndMoveBanners, 500);
   console.log('[Chatterino Companion] Extension script active.');
 })();
