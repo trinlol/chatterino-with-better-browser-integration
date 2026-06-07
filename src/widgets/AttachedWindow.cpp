@@ -192,14 +192,6 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
     ::SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(attached));
     ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
 
-    if (auto *windowHandle = this->windowHandle())
-    {
-        if (auto *foreignParent = QWindow::fromWinId(reinterpret_cast<WId>(attached)))
-        {
-            windowHandle->setTransientParent(foreignParent);
-        }
-    }
-
     // FAST TIMER - used to resize/reorder windows
     this->timer_.setInterval(1);
     QObject::connect(&this->timer_, &QTimer::timeout, [this, attached] {
@@ -286,7 +278,36 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
         return;
     }
 
-    // set the correct z-order (handled natively by Windows parent-child relationship now)
+    // Update topmost state based on foreground window
+    HWND foreground = ::GetForegroundWindow();
+    HWND root = ::GetAncestor(foreground, GA_ROOTOWNER);
+    bool isBrowserActive = (root == attached || root == hwnd);
+
+    if (isBrowserActive != this->wasBrowserActive_)
+    {
+        this->wasBrowserActive_ = isBrowserActive;
+        if (isBrowserActive)
+        {
+            ::SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                           SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        else
+        {
+            ::SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                           SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            HWND prev = ::GetNextWindow(attached, GW_HWNDPREV);
+            if (prev && prev != hwnd)
+            {
+                ::SetWindowPos(hwnd, prev, 0, 0, 0, 0,
+                               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            else if (!prev)
+            {
+                ::SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+                               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+        }
+    }
     float scale = 1.f;
     float ourScale = 1.F;
     if (auto dpi = getWindowDpi(attached))

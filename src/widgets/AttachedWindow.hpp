@@ -73,6 +73,7 @@ private:
 #ifdef USEWINSDK
     bool validProcessName_ = false;
     bool attached_ = false;
+    bool wasBrowserActive_ = false;
 #endif
     QTimer timer_;
     QTimer slowTimer_;
