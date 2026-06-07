@@ -1,0 +1,79 @@
+/* Floating Mode Style */
+.chatterino-moved-banner-floating {
+  position: fixed !important;
+  top: 120px;
+  left: 20px;
+  z-index: 9999999 !important;
+  width: 340px !important;
+  background-color: #18181b !important;
+  border: 2px solid #a970ff !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+  padding: 12px !important;
+  display: block !important;
+  color: #efeff1 !important;
+}
+
+/* Ensure text is readable and inherits white color without forcing hidden elements visible */
+.chatterino-moved-banner-floating,
+.chatterino-moved-banner-floating * {
+  color: #efeff1 !important;
+}
+
+/* Minimize Button inside Banner */
+.chatterino-prediction-minimize-btn {
+  position: absolute !important;
+  top: 8px !important;
+  right: 8px !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+  border: none !important;
+  border-radius: 4px !important;
+  color: white !important;
+  font-weight: bold !important;
+  font-size: 14px !important;
+  padding: 2px 8px !important;
+  cursor: pointer !important;
+  z-index: 100001 !important;
+  line-height: 1 !important;
+}
+
+.chatterino-prediction-minimize-btn:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Minimized Floating Button (placed inline next to Follow Button) */
+.chatterino-prediction-minimized-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 30px !important;
+  height: 30px !important;
+  background-color: #9146ff !important;
+  color: white !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  margin-right: 6px !important;
+  vertical-align: middle !important;
+  border: none !important;
+  transition: background-color 0.2s ease !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+.chatterino-prediction-minimized-icon:hover {
+  background-color: #772ce8 !important;
+}
+
+.chatterino-prediction-minimized-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+  stroke: white !important;
+}
+
+/* Hide pinned messages since they are displayed in Chatterino */
+[data-a-target="chat-pinned-message"],
+.pinned-chat__highlight-card,
+.pinned-chat__container,
+.pinned-chat-list-item {
+  display: none !important;
+}

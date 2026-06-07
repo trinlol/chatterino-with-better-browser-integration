@@ -9,7 +9,15 @@
 #include <QKeyEvent>
 #include <QTextEdit>
 
+class QTimer;
+
 namespace chatterino {
+
+class Channel;
+struct Emote;
+using EmotePtr = std::shared_ptr<const Emote>;
+
+EmotePtr findEmoteByName(const QString &name, const Channel *channel);
 
 class ResizingTextEdit : public QTextEdit
 {
@@ -34,6 +42,13 @@ public:
      */
     void resetCompletion();
 
+    void insertEmote(const EmotePtr &emote);
+    void setScale(float scale);
+    QString toPlainText() const;
+    QString textUpToPosition(int pos) const;
+    std::function<std::shared_ptr<Channel>()> getChannel;
+    QString textUnderCursor(bool *hadSpace = nullptr) const;
+
 protected:
     int heightForWidth(int) const override;
     void keyPressEvent(QKeyEvent *event) override;
@@ -47,10 +62,6 @@ protected:
     void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
-    // hadSpace is set to true in case the "textUnderCursor" word was after a
-    // space
-    QString textUnderCursor(bool *hadSpace = nullptr) const;
-
     QCompleter *completer_ = nullptr;
     /**
      * This is true if a completion was done but the user didn't type yet,
@@ -74,8 +85,14 @@ private:
 
     bool eventFilter(QObject *obj, QEvent *event) override;
 
+    QTimer *loadingTimer_ = nullptr;
+    QList<std::pair<QString, std::shared_ptr<class Image>>> loadingEmotes_;
+    pajlada::Signals::ScopedConnection gifTimerConnection_;
+    float scale_ = 1.F;
+
 private Q_SLOTS:
     void insertCompletion(const QString &completion);
+    void checkLoadingEmotes();
 };
 
 }  // namespace chatterino

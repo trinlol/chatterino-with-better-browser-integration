@@ -36,6 +36,9 @@ void ClassicEmoteStrategy::apply(const std::vector<EmoteItem> &items,
         zeroWidthOnly = true;
     }
 
+    std::vector<EmoteItem> startsWithMatches;
+    std::vector<EmoteItem> containsMatches;
+
     // First pass: filter by zero-width only and contains match
     for (const auto &item : items)
     {
@@ -44,11 +47,18 @@ void ClassicEmoteStrategy::apply(const std::vector<EmoteItem> &items,
             continue;
         }
 
-        if (item.searchName.contains(normalizedQuery, Qt::CaseInsensitive))
+        if (item.searchName.startsWith(normalizedQuery, Qt::CaseInsensitive))
         {
-            output.push_back(item);
+            startsWithMatches.push_back(item);
+        }
+        else if (item.searchName.contains(normalizedQuery, Qt::CaseInsensitive))
+        {
+            containsMatches.push_back(item);
         }
     }
+
+    output.insert(output.end(), startsWithMatches.begin(), startsWithMatches.end());
+    output.insert(output.end(), containsMatches.begin(), containsMatches.end());
 
     // Second pass: if there is an exact match, put that emote first
     for (size_t i = 1; i < output.size(); i++)

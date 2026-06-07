@@ -52,6 +52,8 @@ AttachedWindow::AttachedWindow(void *_target)
     : QWidget(nullptr, Qt::FramelessWindowHint | Qt::Window)
     , target_(_target)
 {
+    this->setAttribute(Qt::WA_QuitOnClose, false);
+
     QLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     this->setLayout(layout);
@@ -85,6 +87,7 @@ AttachedWindow *AttachedWindow::get(void *target, const GetArgs &args)
         {
             if (item.hwnd == target)
             {
+                item.winId = args.winId;
                 return item.window;
             }
         }
@@ -147,11 +150,16 @@ AttachedWindow *AttachedWindow::getForeground(const GetArgs &args)
 
 void AttachedWindow::detach(const QString &winId)
 {
-    for (Item &item : items)
+    for (auto it = items.begin(); it != items.end(); )
     {
-        if (item.winId == winId)
+        if (it->winId == winId)
         {
-            item.window->deleteLater();
+            it->window->deleteLater();
+            it = items.erase(it);
+        }
+        else
+        {
+            ++it;
         }
     }
 }
@@ -174,10 +182,13 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
         return;
     }
 
+    auto hwnd = HWND(this->winId());
+    auto attached = HWND(_attachedPtr);
+
     this->attached_ = true;
 
-    //auto hwnd = HWND(this->winId());
-    auto attached = HWND(_attachedPtr);
+    // Set the browser window as the owner of this window to prevent Z-order flickering
+    ::SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(attached));
 
     // FAST TIMER - used to resize/reorder windows
     this->timer_.setInterval(1);

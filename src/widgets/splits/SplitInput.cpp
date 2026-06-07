@@ -79,6 +79,9 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
     auto *completer =
         new QCompleter(this->split_->getChannel()->completionModel);
     this->ui_.textEdit->setCompleter(completer);
+    this->ui_.textEdit->getChannel = [this] {
+        return this->split_->getChannel();
+    };
 
     // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
     auto *spellChecker = getApp()->getSpellChecker();
@@ -774,6 +777,24 @@ void SplitInput::installTextEditEvents()
                 }
             }
 
+            if (event->key() == Qt::Key_Tab && event->modifiers() == Qt::NoModifier)
+            {
+                QString word = this->ui_.textEdit->textUnderCursor();
+                if (word.length() >= 2)
+                {
+                    CompletionKind kind = CompletionKind::Emote;
+                    if (word.startsWith('@'))
+                    {
+                        kind = CompletionKind::User;
+                    }
+                    if (this->showCompletionPopup(word, kind))
+                    {
+                        event->accept();
+                        return;
+                    }
+                }
+            }
+
             // One of the last remaining of it's kind, the copy shortcut.
             // For some bizarre reason Qt doesn't want this key be rebound.
             // TODO(Mm2PL): Revisit in Qt6, maybe something changed?
@@ -934,7 +955,7 @@ void SplitInput::updateCompletionPopup()
     this->hideCompletionPopup();
 }
 
-void SplitInput::showCompletionPopup(const QString &text, CompletionKind kind)
+bool SplitInput::showCompletionPopup(const QString &text, CompletionKind kind)
 {
     if (this->inputCompletionPopup_.isNull())
     {
@@ -954,11 +975,18 @@ void SplitInput::showCompletionPopup(const QString &text, CompletionKind kind)
 
     popup->updateCompletion(text, kind, this->split_->getChannel());
 
+    if (!popup->hasEntries())
+    {
+        popup->hide();
+        return false;
+    }
+
     auto pos = this->mapToGlobal(QPoint{0, 0}) - QPoint(0, popup->height()) +
                QPoint((this->width() - popup->width()) / 2, 0);
 
     popup->move(pos);
     popup->show();
+    return true;
 }
 
 void SplitInput::hideCompletionPopup()
@@ -975,35 +1003,76 @@ void SplitInput::insertCompletionText(const QString &input_) const
     auto input = input_ + ' ';
 
     auto text = edit.toPlainText();
-    auto position = edit.textCursor().position() - 1;
+    auto originalPosition = edit.textCursor().position();
+    auto position = originalPosition - 1;
+
+    int replaceStart = -1;
+    bool prependAt = false;
 
     for (int i = std::clamp(position, 0, (int)text.length() - 1); i >= 0; i--)
     {
-        bool done = false;
+        if (text[i] == ' ')
+        {
+            break;
+        }
         if (text[i] == ':')
         {
-            done = true;
+            replaceStart = i;
+            break;
         }
-        else if (text[i] == '@')
+        if (text[i] == '@')
         {
-            const auto userMention =
-                formatUserMention(input_, edit.isFirstWord(),
-                                  getSettings()->mentionUsersWithComma);
-            input = "@" + userMention + " ";
-            done = true;
-        }
-
-        if (done)
-        {
-            auto cursor = edit.textCursor();
-            edit.setPlainText(
-                text.remove(i, position - i + 1).insert(i, input));
-
-            cursor.setPosition(i + input.size());
-            edit.setTextCursor(cursor);
+            replaceStart = i;
+            prependAt = true;
             break;
         }
     }
+
+    if (replaceStart == -1)
+    {
+        // No prefix found, find the start of the word
+        int i = std::clamp(position, 0, (int)text.length() - 1);
+        while (i >= 0 && text[i] != ' ')
+        {
+            i--;
+        }
+        replaceStart = i + 1;
+    }
+    else if (prependAt)
+    {
+        const auto userMention =
+            formatUserMention(input_, edit.isFirstWord(),
+                              getSettings()->mentionUsersWithComma);
+        input = "@" + userMention + " ";
+    }
+
+    auto cursor = edit.textCursor();
+    cursor.setPosition(replaceStart);
+    cursor.setPosition(originalPosition, QTextCursor::KeepAnchor);
+
+    EmotePtr emote = nullptr;
+    auto channel = this->split_->getChannel();
+    if (channel)
+    {
+        emote = findEmoteByName(input_, channel.get());
+    }
+
+    if (emote)
+    {
+        cursor.removeSelectedText();
+        edit.setTextCursor(cursor);
+        edit.insertEmote(emote);
+    }
+    else
+    {
+        cursor.insertText(input);
+        edit.setTextCursor(cursor);
+    }
+}
+
+void SplitInput::insertEmote(const EmotePtr &emote)
+{
+    this->ui_.textEdit->insertEmote(emote);
 }
 
 bool SplitInput::hasSelection() const
@@ -1455,6 +1524,7 @@ void SplitInput::checkSpellingChanged()
 void SplitInput::updateFonts()
 {
     auto *app = getApp();
+    this->ui_.textEdit->setScale(this->scale());
     this->ui_.textEdit->setFont(
         app->getFonts()->getFont(FontStyle::ChatMedium, this->scale()));
 

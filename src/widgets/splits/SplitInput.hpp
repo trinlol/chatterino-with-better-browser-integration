@@ -31,6 +31,8 @@ class ResizingTextEdit;
 class ChannelView;
 class SvgButton;
 class SpellCheckHighlighter;
+struct Emote;
+using EmotePtr = std::shared_ptr<const Emote>;
 enum class CompletionKind;
 
 class SplitInput : public BaseWidget
@@ -44,6 +46,7 @@ public:
 
     bool hasSelection() const;
     void clearSelection() const;
+    void insertEmote(const EmotePtr &emote);
 
     bool isEditFirstWord() const;
     QString getInputText() const;
@@ -123,7 +126,7 @@ protected:
     void onTextChanged();
     void updateEmoteButton();
     void updateCompletionPopup();
-    void showCompletionPopup(const QString &text, CompletionKind kind);
+    bool showCompletionPopup(const QString &text, CompletionKind kind);
     void hideCompletionPopup();
     void insertCompletionText(const QString &input_) const;
     void openEmotePopup();

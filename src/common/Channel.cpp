@@ -565,4 +565,18 @@ Channel::Type IndirectChannel::getType() const
     return this->data_->type;
 }
 
+void Channel::setPinnedMessageText(const QString &text)
+{
+    if (this->pinnedMessageText_ != text)
+    {
+        this->pinnedMessageText_ = text;
+        this->pinnedMessageChanged.invoke();
+    }
+}
+
+const QString &Channel::getPinnedMessageText() const
+{
+    return this->pinnedMessageText_;
+}
+
 }  // namespace chatterino

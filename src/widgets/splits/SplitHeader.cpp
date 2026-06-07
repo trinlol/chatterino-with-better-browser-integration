@@ -541,6 +541,22 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
                         &SplitHeader::reloadSubscriberEmotes);
     }
 
+    {
+        auto themes = getApp()->getThemes();
+        if (themes->isLightTheme())
+        {
+            menu->addAction("Switch to dark theme", this->split_, [themes] {
+                themes->themeName.setValue("Dark");
+            });
+        }
+        else
+        {
+            menu->addAction("Switch to light theme", this->split_, [themes] {
+                themes->themeName.setValue("Light");
+            });
+        }
+    }
+
     menu->addSeparator();
 
     {

@@ -187,6 +187,31 @@ void addImageContextMenuItems(QMenu *menu,
     }
 }
 
+std::optional<EmotePtr> getClickedEmote(const MessageLayoutElement *element)
+{
+    if (element == nullptr)
+    {
+        return std::nullopt;
+    }
+
+    if (const auto *emoteElement = dynamic_cast<const EmoteElement *>(&element->getCreator()))
+    {
+        return emoteElement->getEmote();
+    }
+
+    if (const auto *layeredElement =
+            dynamic_cast<const LayeredEmoteElement *>(&element->getCreator()))
+    {
+        auto emotes = layeredElement->getUniqueEmotes();
+        if (!emotes.empty())
+        {
+            return emotes.front().ptr;
+        }
+    }
+
+    return std::nullopt;
+}
+
 void addLinkContextMenuItems(QMenu *menu,
                              const MessageLayoutElement *hoveredElement)
 {
@@ -2430,6 +2455,15 @@ void ChannelView::handleMouseClick(QMouseEvent *event,
             if (hoveredElement == nullptr)
             {
                 return;
+            }
+
+            if (this->context_ == Context::None && this->split_ != nullptr)
+            {
+                if (auto emote = getClickedEmote(hoveredElement))
+                {
+                    this->split_->getInput().insertEmote(*emote);
+                    return;
+                }
             }
 
             const auto &link = hoveredElement->getLink();

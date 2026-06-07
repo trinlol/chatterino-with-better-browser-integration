@@ -32,6 +32,7 @@ public:
 
     void updateCompletion(const QString &text, CompletionKind kind,
                           ChannelPtr channel);
+    bool hasEntries() const;
 
     void setInputAction(ActionCallback callback);
 

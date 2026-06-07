@@ -863,6 +863,8 @@ set(SOURCE_FILES
         widgets/splits/SplitContainer.hpp
         widgets/splits/SplitHeader.cpp
         widgets/splits/SplitHeader.hpp
+        widgets/splits/PinnedMessageWidget.cpp
+        widgets/splits/PinnedMessageWidget.hpp
         widgets/splits/SplitInput.cpp
         widgets/splits/SplitInput.hpp
         widgets/splits/SplitOverlay.cpp

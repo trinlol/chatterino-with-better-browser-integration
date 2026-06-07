@@ -9,6 +9,8 @@
 
 #include <QString>
 #include <QThread>
+#include <QJsonArray>
+#include <QJsonObject>
 
 #include <optional>
 #include <vector>
@@ -41,6 +43,9 @@ class Paths;
 class Channel;
 
 using ChannelPtr = std::shared_ptr<Channel>;
+
+struct Message;
+using MessagePtr = std::shared_ptr<const Message>;
 
 void registerNmHost(const Paths &paths);
 std::string &getNmQueueName(const Paths &paths);
@@ -79,17 +84,36 @@ private:
         void handleSelect(const QJsonObject &root);
         void handleDetach(const QJsonObject &root);
         void handleSync(const QJsonObject &root);
+        void handlePrediction(const QJsonObject &root);
+        void handlePinnedMessage(const QJsonObject &root);
 
         NativeMessagingServer &parent_;
     };
 
     void syncChannels(const QJsonArray &twitchChannels);
+    void updatePredictionSticky(const QJsonObject &root);
+    void updatePinnedMessage(const QJsonObject &root);
 
     ReceiverThread *thread;
 
     /// This vector contains all channels that are open the user's browser.
     /// These channels are joined to be able to switch channels more quickly.
     std::vector<ChannelPtr> channelWarmer_;
+
+    MessagePtr activePredictionMessage_;
+    ChannelPtr activeChannel_;
+    class QTimer *predictionTimer_ = nullptr;
+    int remainingSeconds_ = 0;
+    QString predictionTitle_;
+    QJsonArray predictionOptions_;
+    QString predictionStatus_;
+    QString predictionWinner_;
+    pajlada::Signals::ScopedConnection messageAppendedConnection_;
+    bool recreateScheduled_ = false;
+
+    void onPredictionTimerTick();
+    void recreateStickyMessage();
+    void clearStickyMessage();
 
     friend ReceiverThread;
 };

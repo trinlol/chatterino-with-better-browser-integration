@@ -71,6 +71,7 @@ public:
     pajlada::Signals::Signal<const std::vector<MessagePtr> &> filledInMessages;
     pajlada::Signals::NoArgSignal displayNameChanged;
     pajlada::Signals::NoArgSignal messagesCleared;
+    pajlada::Signals::NoArgSignal pinnedMessageChanged;
 
     Type getType() const;
     const QString &getName() const;
@@ -149,6 +150,9 @@ public:
     TabCompletionModel *completionModel;
     QDate lastDate_;
 
+    void setPinnedMessageText(const QString &text);
+    const QString &getPinnedMessageText() const;
+
 protected:
     virtual void onConnected();
     virtual void messageRemovedFromStart(const MessagePtr &msg);
@@ -160,6 +164,7 @@ private:
     const QString name_;
     LimitedQueue<MessagePtr> messages_;
     Type type_;
+    QString pinnedMessageText_;
     bool anythingLogged_ = false;
 
     /// Recursion count for message signals.

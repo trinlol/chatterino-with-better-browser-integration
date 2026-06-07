@@ -5,16 +5,133 @@
 #include "widgets/helper/ResizingTextEdit.hpp"
 
 #include "common/Common.hpp"
+#include "singletons/helper/GifTimer.hpp"
 #include "common/QLogging.hpp"
 #include "controllers/completion/TabCompletionModel.hpp"
 #include "singletons/Settings.hpp"
+#include "Application.hpp"
+#include "common/Channel.hpp"
+#include "controllers/accounts/AccountController.hpp"
+#include "controllers/emotes/EmoteController.hpp"
+#include "messages/Emote.hpp"
+#include "messages/Image.hpp"
+#include "providers/bttv/BttvEmotes.hpp"
+#include "providers/ffz/FfzEmotes.hpp"
+#include "providers/seventv/SeventvEmotes.hpp"
+#include "providers/twitch/TwitchAccount.hpp"
+#include "providers/twitch/TwitchChannel.hpp"
 
 #include <QMenu>
 #include <QMimeData>
 #include <QMimeDatabase>
 #include <QObject>
+#include <QSizeF>
+#include <QTextBlock>
+#include <QAbstractTextDocumentLayout>
+#include <QTextDocument>
+#include <QTextFragment>
+#include <QTimer>
 
 namespace chatterino {
+
+EmotePtr findEmoteByName(const QString &name, const Channel *channel)
+{
+    if (name.isEmpty())
+    {
+        return nullptr;
+    }
+
+    const auto *tc = dynamic_cast<const TwitchChannel *>(channel);
+    if (channel && channel->isTwitchChannel() && tc)
+    {
+        // 1. Local twitch emotes
+        if (auto twitch = tc->localTwitchEmotes())
+        {
+            auto it = twitch->find(EmoteName{name});
+            if (it != twitch->end())
+            {
+                return it->second;
+            }
+        }
+
+        // 2. Access emotes (subscriber emotes for current account)
+        auto user = getApp()->getAccounts()->twitch.getCurrent();
+        if (user)
+        {
+            auto access = user->accessEmotes();
+            if (*access)
+            {
+                auto it = (*access)->find(EmoteName{name});
+                if (it != (*access)->end())
+                {
+                    return it->second;
+                }
+            }
+        }
+
+        // 3. Channel BetterTTV
+        if (auto bttv = tc->bttvEmotes())
+        {
+            auto it = bttv->find(EmoteName{name});
+            if (it != bttv->end())
+            {
+                return it->second;
+            }
+        }
+
+        // 4. Channel FrankerFaceZ
+        if (auto ffz = tc->ffzEmotes())
+        {
+            auto it = ffz->find(EmoteName{name});
+            if (it != ffz->end())
+            {
+                return it->second;
+            }
+        }
+
+        // 5. Channel 7TV
+        if (auto seventv = tc->seventvEmotes())
+        {
+            auto it = seventv->find(EmoteName{name});
+            if (it != seventv->end())
+            {
+                return it->second;
+            }
+        }
+    }
+
+    // 6. Global BetterTTV
+    if (auto bttvG = getApp()->getBttvEmotes()->emotes())
+    {
+        auto it = bttvG->find(EmoteName{name});
+        if (it != bttvG->end())
+        {
+            return it->second;
+        }
+    }
+
+    // 7. Global FrankerFaceZ
+    if (auto ffzG = getApp()->getFfzEmotes()->emotes())
+    {
+        auto it = ffzG->find(EmoteName{name});
+        if (it != ffzG->end())
+        {
+            return it->second;
+        }
+    }
+
+    // 8. Global 7TV
+    if (auto seventvG = getApp()->getSeventvEmotes()->globalEmotes())
+    {
+        auto it = seventvG->find(EmoteName{name});
+        if (it != seventvG->end())
+        {
+            return it->second;
+        }
+    }
+
+    return nullptr;
+}
 
 ResizingTextEdit::ResizingTextEdit()
 {
@@ -48,6 +165,42 @@ ResizingTextEdit::ResizingTextEdit()
 
     this->setFocusPolicy(Qt::ClickFocus);
     this->installEventFilter(this);
+
+    this->gifTimerConnection_ =
+        getApp()->getEmotes()->getGIFTimer()->signal.connect([this] {
+            bool anyAnimated = false;
+            for (QTextBlock block = this->document()->begin(); block.isValid(); block = block.next())
+            {
+                for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it)
+                {
+                    QTextFragment fragment = it.fragment();
+                    if (fragment.isValid() && fragment.charFormat().isImageFormat())
+                    {
+                        QTextImageFormat imageFormat = fragment.charFormat().toImageFormat();
+                        QString url = imageFormat.name();
+                        if (url.startsWith("emote://"))
+                        {
+                            QString emoteName = url.mid(8);
+                            auto emote = findEmoteByName(emoteName, this->getChannel ? this->getChannel().get() : nullptr);
+                            if (emote && emote->images.getImage1()->animated())
+                            {
+                                if (auto pixmap = emote->images.getImage1()->pixmapOrLoad())
+                                {
+                                    this->document()->addResource(QTextDocument::ImageResource, QUrl(url), *pixmap);
+                                    anyAnimated = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (anyAnimated)
+            {
+                this->document()->documentLayout()->update();
+                this->viewport()->update();
+            }
+        });
 }
 
 QSize ResizingTextEdit::sizeHint() const
@@ -62,8 +215,7 @@ bool ResizingTextEdit::hasHeightForWidth() const
 
 bool ResizingTextEdit::isFirstWord() const
 {
-    QString plainText = this->toPlainText();
-    QString portionBeforeCursor = plainText.left(this->textCursor().position());
+    QString portionBeforeCursor = this->textUpToPosition(this->textCursor().position());
     return !portionBeforeCursor.contains(' ');
 };
 
@@ -77,11 +229,7 @@ int ResizingTextEdit::heightForWidth(int) const
 
 QString ResizingTextEdit::textUnderCursor(bool *hadSpace) const
 {
-    auto currentText = this->toPlainText();
-
-    QTextCursor tc = this->textCursor();
-
-    auto textUpToCursor = currentText.left(tc.selectionStart());
+    auto textUpToCursor = this->textUpToPosition(this->textCursor().selectionStart());
 
     auto words = QStringView{textUpToCursor}.split(' ');
     if (words.size() == 0)
@@ -115,6 +263,228 @@ QString ResizingTextEdit::textUnderCursor(bool *hadSpace) const
     }
 
     return lastWord;
+}
+
+QString ResizingTextEdit::toPlainText() const
+{
+    QString result;
+    QTextDocument *doc = this->document();
+    for (QTextBlock block = doc->begin(); block != doc->end(); block = block.next())
+    {
+        if (!result.isEmpty())
+        {
+            result += "\n";
+        }
+        for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it)
+        {
+            QTextFragment fragment = it.fragment();
+            if (fragment.isValid())
+            {
+                QTextCharFormat format = fragment.charFormat();
+                if (format.isImageFormat())
+                {
+                    QTextImageFormat imgFormat = format.toImageFormat();
+                    QString name = imgFormat.name();
+                    if (name.startsWith("emote://"))
+                    {
+                        result += name.mid(8);
+                    }
+                    else
+                    {
+                        result += fragment.text();
+                    }
+                }
+                else
+                {
+                    result += fragment.text();
+                }
+            }
+        }
+    }
+    return result;
+}
+
+QString ResizingTextEdit::textUpToPosition(int pos) const
+{
+    QString result;
+    QTextDocument *doc = this->document();
+    int currentPos = 0;
+    for (QTextBlock block = doc->begin(); block != doc->end(); block = block.next())
+    {
+        if (currentPos >= pos)
+        {
+            break;
+        }
+        if (currentPos > 0)
+        {
+            result += "\n";
+            currentPos++; // for the newline character
+        }
+        for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it)
+        {
+            if (currentPos >= pos)
+            {
+                break;
+            }
+            QTextFragment fragment = it.fragment();
+            if (fragment.isValid())
+            {
+                int fragmentLength = fragment.length();
+                if (currentPos + fragmentLength > pos)
+                {
+                    int subLength = pos - currentPos;
+                    QTextCharFormat format = fragment.charFormat();
+                    if (format.isImageFormat())
+                    {
+                        QTextImageFormat imgFormat = format.toImageFormat();
+                        QString name = imgFormat.name();
+                        if (name.startsWith("emote://"))
+                        {
+                            result += name.mid(8);
+                        }
+                        else
+                        {
+                            result += fragment.text().left(subLength);
+                        }
+                    }
+                    else
+                    {
+                        result += fragment.text().left(subLength);
+                    }
+                    currentPos = pos;
+                    break;
+                }
+                else
+                {
+                    QTextCharFormat format = fragment.charFormat();
+                    if (format.isImageFormat())
+                    {
+                        QTextImageFormat imgFormat = format.toImageFormat();
+                        QString name = imgFormat.name();
+                        if (name.startsWith("emote://"))
+                        {
+                            result += name.mid(8);
+                        }
+                        else
+                        {
+                            result += fragment.text();
+                        }
+                    }
+                    else
+                    {
+                        result += fragment.text();
+                    }
+                    currentPos += fragmentLength;
+                }
+            }
+        }
+    }
+    return result;
+}
+
+void ResizingTextEdit::insertEmote(const EmotePtr &emote)
+{
+    if (!emote)
+    {
+        return;
+    }
+
+    auto image = emote->images.getImage(1);
+    if (!image)
+    {
+        return;
+    }
+
+    image->load();
+
+    QString emoteName = emote->name.string;
+    QString resourceUrl = "emote://" + emoteName;
+
+    auto pixmapOpt = image->pixmapOrLoad();
+    if (pixmapOpt.has_value())
+    {
+        this->document()->addResource(QTextDocument::ImageResource, QUrl(resourceUrl), *pixmapOpt);
+    }
+    else
+    {
+        QSize size = image->size().toSize();
+        if (size.isEmpty())
+        {
+            size = QSize(16, 16);
+        }
+        QPixmap placeholder(size);
+        placeholder.fill(Qt::transparent);
+        this->document()->addResource(QTextDocument::ImageResource, QUrl(resourceUrl), placeholder);
+
+        this->loadingEmotes_.append({emoteName, image});
+
+        if (!this->loadingTimer_)
+        {
+            this->loadingTimer_ = new QTimer(this);
+            QObject::connect(this->loadingTimer_, &QTimer::timeout, this, &ResizingTextEdit::checkLoadingEmotes);
+            this->loadingTimer_->setInterval(100);
+        }
+        if (!this->loadingTimer_->isActive())
+        {
+            this->loadingTimer_->start();
+        }
+    }
+
+    QTextCursor cursor = this->textCursor();
+    QTextImageFormat format;
+    format.setName(resourceUrl);
+
+    auto emoteScale = getSettings()->emoteScale.getValue();
+    auto emoteSize = image->size() * this->scale_ * emoteScale;
+    if (emoteSize.isEmpty())
+    {
+        emoteSize = QSizeF(16, 16) * this->scale_ * emoteScale;
+    }
+
+    format.setHeight(emoteSize.height());
+    format.setWidth(emoteSize.width());
+
+    cursor.insertImage(format);
+    cursor.insertText(" ");
+    this->setTextCursor(cursor);
+    this->updateGeometry();
+}
+
+void ResizingTextEdit::checkLoadingEmotes()
+{
+    bool anyLoaded = false;
+    for (auto it = this->loadingEmotes_.begin(); it != this->loadingEmotes_.end(); )
+    {
+        if (it->second->loaded())
+        {
+            if (auto pixmap = it->second->pixmapOrLoad())
+            {
+                this->document()->addResource(QTextDocument::ImageResource, QUrl("emote://" + it->first), *pixmap);
+                anyLoaded = true;
+            }
+            it = this->loadingEmotes_.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    if (this->loadingEmotes_.isEmpty())
+    {
+        this->loadingTimer_->stop();
+    }
+
+    if (anyLoaded)
+    {
+        this->document()->documentLayout()->update();
+        this->viewport()->update();
+    }
+}
+
+void ResizingTextEdit::setScale(float scale)
+{
+    this->scale_ = scale;
 }
 
 bool ResizingTextEdit::eventFilter(QObject *obj, QEvent *event)
@@ -295,8 +665,29 @@ void ResizingTextEdit::insertCompletion(const QString &completion)
     QTextCursor tc = this->textCursor();
     int completionStart = tc.position() - prefixSize;
     tc.setPosition(completionStart, QTextCursor::KeepAnchor);
-    tc.insertText(completion);
-    this->setTextCursor(tc);
+
+    QString emoteName = completion.trimmed();
+    EmotePtr emote = nullptr;
+    if (this->getChannel)
+    {
+        auto channel = this->getChannel();
+        if (channel)
+        {
+            emote = findEmoteByName(emoteName, channel.get());
+        }
+    }
+
+    if (emote && (emote->homePage.string.contains("7tv") || (emote->images.getImage1() && emote->images.getImage1()->url().string.contains("7tv"))))
+    {
+        tc.removeSelectedText();
+        this->setTextCursor(tc);
+        this->insertEmote(emote);
+    }
+    else
+    {
+        tc.insertText(completion);
+        this->setTextCursor(tc);
+    }
     this->updateGeometry();
 }
 

@@ -915,7 +915,7 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
     layout.addDescription(formatRichNamedLink(
         CHROME_EXTENSION_LINK,
-        "Download for Google Chrome and similar browsers."));
+        "Download for Google Chrome, Microsoft Edge, and similar browsers."));
     layout.addDescription(
         formatRichNamedLink(FIREFOX_EXTENSION_LINK, "Download for Firefox"));
 
@@ -932,7 +932,7 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
     {
         auto *note = layout.addDescription(
-            "A semicolon-separated list of Chrome or Firefox extension IDs "
+            "A semicolon-separated list of Chrome, Edge, or Firefox extension IDs "
             "allowed to interact with Chatterino's browser integration "
             "(requires restart).\n"
             "Using multiple extension IDs from different browsers may cause "

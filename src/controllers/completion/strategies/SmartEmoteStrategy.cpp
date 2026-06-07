@@ -157,6 +157,13 @@ void completeEmotes(
                       tempB = tempB.mid(1);
                   }
 
+                  bool aStartsWith = tempA.startsWith(query, Qt::CaseInsensitive);
+                  bool bStartsWith = tempB.startsWith(query, Qt::CaseInsensitive);
+                  if (aStartsWith != bStartsWith)
+                  {
+                      return aStartsWith;
+                  }
+
                   auto costA = costOfEmote(query, tempA, prioritizeUpper);
                   auto costB = costOfEmote(query, tempB, prioritizeUpper);
                   if (costA == costB)

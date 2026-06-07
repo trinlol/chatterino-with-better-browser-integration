@@ -231,6 +231,7 @@ EmoteElement::EmoteElement(const EmotePtr &emote, MessageElementFlags flags,
     , emote_(emote)
 {
     this->setTooltip(emote->tooltip.string);
+    this->setLink({Link::InsertText, emote->getCopyString()});
 }
 
 EmotePtr EmoteElement::getEmote() const
@@ -411,6 +412,7 @@ void LayeredEmoteElement::updateTooltips()
         this->textElement_.reset(new TextElement(
             copyStr, MessageElementFlag::Misc, this->textElementColor_));
         this->setTooltip(copyStr);
+        this->setLink({Link::InsertText, copyStr});
     }
 
     std::vector<QString> result;

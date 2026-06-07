@@ -311,6 +311,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Generate resource files
 include(cmake/resources/generate_resources.cmake)
 
+if (MSVC)
+    string(APPEND CMAKE_CXX_FLAGS_RELEASE " /Z7")
+    string(APPEND CMAKE_EXE_LINKER_FLAGS_RELEASE " /DEBUG")
+    string(APPEND CMAKE_SHARED_LINKER_FLAGS_RELEASE " /DEBUG")
+endif()
+
 add_subdirectory(src)
 
 if (BUILD_TESTS OR BUILD_BENCHMARKS)

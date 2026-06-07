@@ -25,6 +25,7 @@ class SplitContainer;
 class SplitOverlay;
 class SelectChannelDialog;
 class OverlayWindow;
+class PinnedMessageWidget;
 
 // Each ChatWidget consists of three sub-elements that handle their own part of
 // the chat widget: ChatWidgetHeader
@@ -163,6 +164,7 @@ private:
 
     QVBoxLayout *const vbox_;
     SplitHeader *const header_;
+    PinnedMessageWidget *const pinnedMessageWidget_;
     ChannelView *const view_;
     SplitInput *const input_;
     SplitOverlay *const overlay_;
