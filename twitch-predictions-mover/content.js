@@ -9,6 +9,24 @@
   let isMinimized = false;
   let lastPinFingerprint = '';
 
+  function resetFingerprints() {
+    lastPinFingerprint = '';
+    lastPredictionFingerprint = '';
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      resetFingerprints();
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    resetFingerprints();
+  });
+
+  // Periodically reset fingerprints to keep Chatterino in sync in case of restarts or new splits
+  setInterval(resetFingerprints, 10000);
+
   const selectors = [
     '[data-test-selector="community-prediction-banner"]',
     '[data-test-selector="community-poll-banner"]',
