@@ -1,62 +1,68 @@
 ![chatterinoLogo](https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png)
-Chatterino 2 [![GitHub Actions Build (Windows, Ubuntu, MacOS)](https://github.com/Chatterino/chatterino2/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/Chatterino/chatterino2/actions?query=workflow%3ABuild+branch%3Amaster) [![Cirrus CI Build (FreeBSD only)](https://api.cirrus-ci.com/github/Chatterino/chatterino2.svg?branch=master)](https://cirrus-ci.com/github/Chatterino/chatterino2/master) [![Chocolatey Package](https://img.shields.io/chocolatey/v/chatterino?include_prereleases)](https://chocolatey.org/packages/chatterino) [![Flatpak Package](https://img.shields.io/flathub/v/com.chatterino.chatterino)](https://flathub.org/apps/details/com.chatterino.chatterino)
-============
 
-Chatterino 2 is a chat client for [Twitch.tv](https://twitch.tv).
-The Chatterino 2 wiki can be found [here](https://wiki.chatterino.com).
-Contribution guidelines can be found [here](https://wiki.chatterino.com/Contributing%20for%20Developers).
+# Chatterino 2 - Enhanced Browser Integration Fork 🚀
+=========================
 
-## Download
+Welcome to the **Chatterino 2** fork with **Better Browser Integration**! This version extends the original Chatterino desktop chat client with powerful, quality-of-life enhancements that bridge the gap between Twitch's web player and Chatterino.
 
-Current releases are available at [https://chatterino.com](https://chatterino.com).
-Windows users can also install Chatterino [from Chocolatey](https://chocolatey.org/packages/chatterino).
+---
 
-## Nightly build
+## ✨ Custom Features in This Fork
 
-You can download the latest Chatterino 2 build over [here](https://github.com/Chatterino/chatterino2/releases/tag/nightly-build)
+### 📌 1. Embedded Pinned Messages
+Streamers and moderators' pinned messages are seamlessly integrated into the Chatterino window!
+- **Sleek Banner**: Displays pinned messages as a full-width purple header bar stuck to the top of the chat view.
+- **Twitch Overlay Cleanup**: Automatically hides the original HTML pinned message box on Twitch to prevent screen clutter.
+- **Easy Dismiss**: Features a close (`✕`) button to quickly dismiss the pinned message locally.
 
-You might also need to install the [VC++ Redistributables](https://aka.ms/vs/17/release/vc_redist.x64.exe) from Microsoft if you do not have it installed already.  
-If you still receive an error about `MSVCR120.dll missing`, then you should install the [VC++ 2013 Restributable](https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe).
+### 🪙 2. Channel Points Auto-Claimer
+Never miss a chest bonus! 
+- **Auto-Collector**: Periodically checks for claimable channel points bonus chests in the background (every 500ms).
+- **Instant Claims**: Automatically clicks the green claim chest button immediately when it appears, with zero page reloads.
 
-## Building
+### ⚡ 3. Z-Order Flicker Fix
+Provides a buttery smooth viewing experience.
+- **Native Owner Windowing**: Binds the Chatterino integration window directly as an owned child of the browser window.
+- **Zero Flickering**: Prevents the Chatterino overlay window from disappearing or flickering when clicking anywhere on the Twitch stream page.
 
-To get source code with required submodules run:
+### 💬 4. Smart Input Field Emotes & Click-to-Type
+Enhanced chat typing and emote interactions:
+- **Click-to-Add**: Clicking on emotes in the chat view automatically inserts them into your input field.
+- **Inline Input Emotes**: Emotes render as actual inline images inside your text editor input box.
+- **Smart Completion**: Enhanced tab-completion strategies for emotes and usernames.
+
+---
+
+## 🛠️ Installation & Setup
+
+1. **Build the Client**: Compile the C++ Chatterino project (see [Building on Windows](BUILDING_ON_WINDOWS.md)).
+2. **Install the Extension**: 
+   - Open your browser and navigate to `chrome://extensions/` (or `edge://extensions/`).
+   - Enable **Developer mode**.
+   - Click **Load unpacked** and select the [`twitch-predictions-mover`](./twitch-predictions-mover/) directory in this repository.
+3. Run the compiled `chatterino.exe` and enjoy the enhanced browser integration!
+
+---
+
+## 📖 Building & Contribution Guidelines
+
+The source code includes required submodules. Run the following to clone:
 
 ```shell
-git clone --recurse-submodules https://github.com/Chatterino/chatterino2.git
+git clone --recurse-submodules https://github.com/trinlol/chatterino-with-better-browser-integration.git
 ```
 
-or
+For platform-specific compilation instructions:
+- [Building on Windows](BUILDING_ON_WINDOWS.md)
+- [Building on Windows with vcpkg](BUILDING_ON_WINDOWS_WITH_VCPKG.md)
+- [Building on Linux](BUILDING_ON_LINUX.md)
+- [Building on macOS](BUILDING_ON_MAC.md)
+- [Building on FreeBSD](BUILDING_ON_FREEBSD.md)
 
-```shell
-git clone https://github.com/Chatterino/chatterino2.git
-cd chatterino2
-git submodule update --init --recursive
-```
+---
 
-- [Building on Windows](../master/BUILDING_ON_WINDOWS.md)
-- [Building on Windows with vcpkg](../master/BUILDING_ON_WINDOWS_WITH_VCPKG.md)
-- [Building on Linux](../master/BUILDING_ON_LINUX.md)
-- [Building on macOS](../master/BUILDING_ON_MAC.md)
-- [Building on FreeBSD](../master/BUILDING_ON_FREEBSD.md)
+## 📜 Original Project Links
 
-## Git blame
-
-This project has big commits in the history which touch most files while only doing stylistic changes. To improve the output of git-blame, consider setting:
-
-```shell
-git config blame.ignoreRevsFile .git-blame-ignore-revs
-```
-
-This will ignore all revisions mentioned in the [`.git-blame-ignore-revs`
-file](./.git-blame-ignore-revs). GitHub does this by default.
-
-## Code style
-
-The code is formatted using [clang-format](https://clang.llvm.org/docs/ClangFormat.html). Our configuration is found in the [.clang-format](.clang-format) file in the repository root directory.
-
-For more contribution guidelines, take a look at [the wiki](https://wiki.chatterino.com/Contributing%20for%20Developers/).
-
-## Doxygen
-
-Doxygen is used to generate project information daily and is available [here](https://doxygen.chatterino.com).
+- **Wiki**: [https://wiki.chatterino.com](https://wiki.chatterino.com)
+- **Original Repo**: [https://github.com/Chatterino/chatterino2](https://github.com/Chatterino/chatterino2)
+- **Doxygen Documentation**: [https://doxygen.chatterino.com](https://doxygen.chatterino.com)
