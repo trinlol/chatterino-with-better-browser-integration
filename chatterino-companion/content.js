@@ -93,11 +93,10 @@
     // Auto-claim channel points
     if (autoClaimEnabled) {
       const claimButton = document.querySelector('button[aria-label="Claim Bonus"]') || 
-                          document.querySelector('.claimable-bonus__icon')?.closest('button') ||
-                          document.querySelector('[data-test-selector="community-points-summary"] button');
+                          document.querySelector('.claimable-bonus__icon')?.closest('button');
       if (claimButton) {
         claimButton.click();
-        console.log('[Twitch Predictions Mover] Claimed channel points!');
+        console.log('[Chatterino Companion] Claimed channel points!');
       }
     }
 
@@ -142,7 +141,7 @@
         action: "pin",
         message: pinnedText
       });
-      console.log('[Twitch Predictions Mover] Sent pin message to background:', pinnedText);
+      console.log('[Chatterino Companion] Sent pin message to background:', pinnedText);
     }
 
     // Find any matching banner in the DOM
@@ -235,13 +234,13 @@
           duration: durationSeconds,
           winner: winner
         });
-        console.log('[Twitch Predictions Mover] Sent prediction message to background:', title, options, status, durationSeconds, winner);
+        console.log('[Chatterino Companion] Sent prediction message to background:', title, options, status, durationSeconds, winner);
       }
 
       // Position it as floating banner
       if (!banner.classList.contains('chatterino-moved-banner-floating')) {
         banner.classList.add('chatterino-moved-banner-floating');
-        console.log('[Twitch Predictions Mover] Positioned prediction banner as floating card.');
+        console.log('[Chatterino Companion] Positioned prediction banner as floating card.');
       }
 
       // Create/Update minimize button
@@ -357,5 +356,5 @@
 
   // Poll every 500ms
   setInterval(checkAndMoveBanners, 500);
-  console.log('[Twitch Predictions Mover] Extension script active.');
+  console.log('[Chatterino Companion] Extension script active.');
 })();
