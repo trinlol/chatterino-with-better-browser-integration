@@ -17,12 +17,12 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
     <td rowspan="2" valign="top" align="center" width="42%">
       <img src="./docs/showcase/chatterino-overlay.gif" width="300" alt="Full Chatterino chat overlay on Twitch with pinned banner, replies, and emotes">
       <br>
-      <sub><b>Full chat preview</b> — pinned messages, threaded replies, and inline emotes.</sub>
+      <sub><b>Full chat preview</b> — pinned messages, input field inline emotes, and ctrl+click to input emotes directly from user messages.</sub>
     </td>
     <td valign="top" align="center" width="58%">
       <img src="./docs/showcase/emote-picker.gif" width="300" alt="Emote favourites picker with channel, 7TV, and search tabs">
       <br>
-      <sub><b>Emote favourites</b> — channel, global, and 7TV emotes with search and Tab completion.</sub>
+      <sub><b>Emote favourites</b> — save per-channel, global, and 7TV emotes with search and Tab completion.</sub>
     </td>
   </tr>
   <tr>
