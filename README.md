@@ -8,6 +8,21 @@ A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes T
 
 ---
 
+## 📸 Showcase
+
+Chatterino Better Browser on a live Twitch channel — full chat in the overlay, synced pins, and toolbar integration beside the player.
+
+| Chatterino chat overlay | Twitch toolbar integration |
+|---|---|
+| ![Chatterino chat overlay on Twitch with pinned banner, replies, and emotes](./docs/showcase/chatterino-overlay.png) | ![Channel points and extension controls beside the Twitch player toolbar](./docs/showcase/twitch-toolbar.png) |
+| Full Chatterino chat over Twitch with pinned messages, threaded replies, and inline emotes. | Channel points balance beside the player controls while the extension keeps Twitch UI in sync. |
+
+**Emote picker** — channel, global, and 7TV emotes with Favourites, search, and Tab completion.
+
+![Emote picker with channel, 7TV, Favourites, and search tabs](./docs/showcase/emote-picker.png)
+
+---
+
 ## 🚀 Quick start (prebuilt)
 
 1. 📦 Download **Chatterino-Better-Browser-Windows-x64-v1.0.1.zip** from [Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest)
@@ -132,6 +147,7 @@ windeployqt "bin/Chatterino Better Browser.exe" --release --no-compiler-runtime 
 | [`chatterino-extension/`](./chatterino-extension/) | 🧩 Unified browser extension *(the only one you need)* |
 | [`lib/`](./lib/) | 📚 Vendored dependencies (git submodules) |
 | [`resources/`](./resources/) | 🎨 Icons, themes, assets |
+| [`docs/showcase/`](./docs/showcase/) | 📸 README screenshots |
 
 ---
 
