@@ -34,6 +34,10 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
   </tr>
 </table>
 
+<p align="center">
+  <sub>Showcase captured on <a href="https://www.twitch.tv/alveussanctuary">alveussanctuary</a> for demonstration only — this project has nothing to do with that channel.</sub>
+</p>
+
 ---
 
 ## 🚀 Quick start (prebuilt)
@@ -177,7 +181,3 @@ git clone --recurse-submodules https://github.com/trinlol/chatterino-with-better
 - [Chatterino 2](https://github.com/Chatterino/chatterino2)
 - [Chatterino Wiki](https://wiki.chatterino.com)
 - [Original browser extension](https://github.com/Chatterino/chatterino-browser-ext)
-
-<p align="center">
-  <sub>This project has nothing to do with <a href="https://www.twitch.tv/alveussanctuary">alveussanctuary</a>.</sub>
-</p>
