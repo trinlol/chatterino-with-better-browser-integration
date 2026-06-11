@@ -12,14 +12,14 @@ A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes T
 
 Chatterino Better Browser on a live Twitch channel — full chat in the overlay, synced pins, and toolbar integration beside the player.
 
-| Chatterino chat overlay | Twitch toolbar integration |
+| Full chat preview | Channel points menu |
 |---|---|
-| ![Chatterino chat overlay on Twitch with pinned banner, replies, and emotes](./docs/showcase/chatterino-overlay.png) | ![Channel points and extension controls beside the Twitch player toolbar](./docs/showcase/twitch-toolbar.png) |
-| Full Chatterino chat over Twitch with pinned messages, threaded replies, and inline emotes. | Channel points balance beside the player controls while the extension keeps Twitch UI in sync. |
+| ![Full Chatterino chat overlay on Twitch with pinned banner, replies, and emotes](./docs/showcase/chatterino-overlay.gif) | ![Channel points menu beside the Twitch player toolbar](./docs/showcase/twitch-toolbar.gif) |
+| Full Chatterino chat over Twitch with pinned messages, threaded replies, and inline emotes. | Channel points balance and rewards menu beside the player while the extension keeps Twitch UI in sync. |
 
-**Emote picker** — channel, global, and 7TV emotes with Favourites, search, and Tab completion.
+**Emote favourites** — channel, global, and 7TV emotes with Favourites, search, and Tab completion.
 
-![Emote picker with channel, 7TV, Favourites, and search tabs](./docs/showcase/emote-picker.png)
+![Emote picker with Favourites, channel, 7TV, and search tabs](./docs/showcase/emote-picker.gif)
 
 ---
 
