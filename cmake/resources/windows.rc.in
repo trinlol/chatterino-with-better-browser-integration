@@ -1,6 +1,6 @@
 #include <winver.h>
 
-IDI_ICON1   ICON    "@RES_DIR@/icon.ico"
+1           ICON    "@RES_DIR@/icon.ico"
 
 VS_VERSION_INFO VERSIONINFO
     FILEVERSION        @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,@PROJECT_VERSION_TWEAK@
@@ -15,14 +15,14 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "ProductName",      "Chatterino"
+            VALUE "ProductName",      "Chatterino Better Browser"
             VALUE "ProductVersion",   "@PROJECT_VERSION@"
             VALUE "CompanyName",      "Chatterino, @PROJECT_HOMEPAGE_URL@"
-            VALUE "FileDescription",  "Chatterino"
+            VALUE "FileDescription",  "Chatterino Better Browser"
             VALUE "FileVersion",      "@PROJECT_VERSION@"
             VALUE "SpecialBuild",     "@GIT_COMMIT@"
-            VALUE "InternalName",     "Chatterino"
-            VALUE "OriginalFilename", "Chatterino"
+            VALUE "InternalName",     "Chatterino Better Browser"
+            VALUE "OriginalFilename", "Chatterino Better Browser.exe"
             VALUE "LegalCopyright",   "Project contributors 2016-@CURRENT_YEAR@"
             VALUE "Licence",          "MIT"
         END

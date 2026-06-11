@@ -95,7 +95,7 @@ if (WIN32)
     endif()
     string(TIMESTAMP CURRENT_YEAR "%Y")
     configure_file(${CMAKE_CURRENT_LIST_DIR}/windows.rc.in ${CMAKE_BINARY_DIR}/autogen/windows.rc @ONLY)
-    list(APPEND RES_AUTOGEN_FILES "${CMAKE_BINARY_DIR}/autogen/windows.rc")
+    set(RES_WINDOWS_RC_FILE "${CMAKE_BINARY_DIR}/autogen/windows.rc")
 endif ()
 
 list(APPEND RES_AUTOGEN_FILES

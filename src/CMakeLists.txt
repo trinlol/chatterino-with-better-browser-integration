@@ -1017,6 +1017,10 @@ if (BUILD_APP)
         OUTPUT_NAME "Chatterino Better Browser"
     )
 
+    if (WIN32 AND RES_WINDOWS_RC_FILE)
+        target_sources(${EXECUTABLE_PROJECT} PRIVATE "${RES_WINDOWS_RC_FILE}")
+    endif()
+
     if(CHATTERINO_SANITIZER_SUPPORT)
         add_sanitizers(${EXECUTABLE_PROJECT})
     endif()

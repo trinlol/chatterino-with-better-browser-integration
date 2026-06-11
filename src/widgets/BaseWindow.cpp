@@ -9,6 +9,7 @@
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
+#include "util/ApplicationIcon.hpp"
 #include "util/DebugCount.hpp"
 #include "util/PostToThread.hpp"
 #include "util/WindowsHelper.hpp"
@@ -780,9 +781,12 @@ void BaseWindow::closeEvent(QCloseEvent *)
     this->closing.invoke();
 }
 
-void BaseWindow::showEvent(QShowEvent *)
+void BaseWindow::showEvent(QShowEvent *event)
 {
+    BaseWidget::showEvent(event);
 #ifdef Q_OS_WIN
+    applyApplicationIcon(this);
+
     if (this->flags_.has(BoundsCheckOnShow))
     {
         this->moveTo(this->pos(), widgets::BoundsChecking::CursorPosition);

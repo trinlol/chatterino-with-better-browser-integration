@@ -14,6 +14,7 @@
 #include "singletons/Resources.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Updates.hpp"
+#include "util/ApplicationIcon.hpp"
 #include "util/CombinePath.hpp"
 #include "util/SelfCheck.hpp"
 #include "util/UnixSignalHandler.hpp"
@@ -101,7 +102,7 @@ void initQt(const Args &args)
     QApplication::setStyle(QStyleFactory::create("Fusion"));
 
 #ifndef Q_OS_MAC
-    QApplication::setWindowIcon(QIcon(":/icon.ico"));
+    QApplication::setWindowIcon(applicationIcon());
 #endif
 
 #ifdef Q_OS_MAC

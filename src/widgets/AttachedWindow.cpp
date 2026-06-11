@@ -7,6 +7,7 @@
 #include "Application.hpp"
 #include "common/QLogging.hpp"
 #include "singletons/Settings.hpp"
+#include "util/ApplicationIcon.hpp"
 #include "util/DebugCount.hpp"
 #include "widgets/splits/Split.hpp"
 
@@ -170,8 +171,10 @@ void AttachedWindow::setChannel(ChannelPtr channel)
     this->ui_.split->setChannel(std::move(channel));
 }
 
-void AttachedWindow::showEvent(QShowEvent *)
+void AttachedWindow::showEvent(QShowEvent *event)
 {
+    QWidget::showEvent(event);
+    applyApplicationIcon(this);
     this->attachToHwnd(this->target_);
 }
 
