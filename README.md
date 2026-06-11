@@ -12,14 +12,27 @@ A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes T
 
 Chatterino Better Browser on a live Twitch channel — full chat in the overlay, synced pins, and toolbar integration beside the player.
 
-| Full chat preview | Channel points menu |
-|---|---|
-| ![Full Chatterino chat overlay on Twitch with pinned banner, replies, and emotes](./docs/showcase/chatterino-overlay.gif) | ![Channel points menu beside the Twitch player toolbar](./docs/showcase/twitch-toolbar.gif) |
-| Full Chatterino chat over Twitch with pinned messages, threaded replies, and inline emotes. | Channel points balance and rewards menu beside the player while the extension keeps Twitch UI in sync. |
-
-**Emote favourites** — channel, global, and 7TV emotes with Favourites, search, and Tab completion.
-
-![Emote picker with Favourites, channel, 7TV, and search tabs](./docs/showcase/emote-picker.gif)
+<table>
+  <tr>
+    <td rowspan="2" valign="top" align="center" width="42%">
+      <img src="./docs/showcase/chatterino-overlay.gif" width="300" alt="Full Chatterino chat overlay on Twitch with pinned banner, replies, and emotes">
+      <br>
+      <sub><b>Full chat preview</b> — pinned messages, threaded replies, and inline emotes.</sub>
+    </td>
+    <td valign="top" align="center" width="58%">
+      <img src="./docs/showcase/emote-picker.gif" width="300" alt="Emote favourites picker with channel, 7TV, and search tabs">
+      <br>
+      <sub><b>Emote favourites</b> — channel, global, and 7TV emotes with search and Tab completion.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top" align="center">
+      <img src="./docs/showcase/twitch-toolbar.gif" width="300" alt="Channel points menu beside the Twitch player toolbar">
+      <br>
+      <sub><b>Channel points menu</b> — balance and rewards beside the player toolbar.</sub>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -164,3 +177,7 @@ git clone --recurse-submodules https://github.com/trinlol/chatterino-with-better
 - [Chatterino 2](https://github.com/Chatterino/chatterino2)
 - [Chatterino Wiki](https://wiki.chatterino.com)
 - [Original browser extension](https://github.com/Chatterino/chatterino-browser-ext)
+
+<p align="center">
+  <sub>This project has nothing to do with <a href="https://www.twitch.tv/alveussanctuary">alveussanctuary</a>.</sub>
+</p>
