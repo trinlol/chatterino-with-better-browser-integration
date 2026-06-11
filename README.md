@@ -35,7 +35,7 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 </table>
 
 <p align="center">
-  <sub>Showcase captured on <a href="https://www.twitch.tv/alveussanctuary">alveussanctuary</a> for demonstration only — this project has nothing to do with that channel.</sub>
+  <sub>Showcase captured on <a href="https://www.twitch.tv/alveussanctuary">alveussanctuary</a> for demonstration only.</sub>
 </p>
 
 ---
