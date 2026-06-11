@@ -10,7 +10,7 @@ A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes T
 
 ## 🚀 Quick start (prebuilt)
 
-1. 📦 Download **Chatterino-Better-Browser-Windows-x64-v1.0.0.zip** from [Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases)
+1. 📦 Download **Chatterino-Better-Browser-Windows-x64-v1.0.1.zip** from [Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest)
 2. 🗑️ **Uninstall** the old Chatterino app from Windows if you have it *(your settings are safe — see below)*
 3. 📂 Extract the zip **anywhere you like** (e.g. `C:\Apps\Chatterino Better Browser\`)
 4. 🔗 Right-click **`Chatterino Better Browser.exe`** → **Send to** → **Desktop (create shortcut)** *(or pin to Start / taskbar)*
