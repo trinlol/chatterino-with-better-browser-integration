@@ -1,13 +1,24 @@
 {
+  "$schema": "https://json.schemastore.org/chrome-manifest",
   "manifest_version": 3,
-  "name": "Chatterino Companion",
-  "version": "1.4.1",
-  "description": "Claims channel points, handles pinned messages, and integrates Twitch web features with Chatterino.",
+  "name": "Chatterino Better Browser",
+  "version": "2.1.0",
+  "description": "Replaces Twitch chat with Chatterino Better Browser and syncs pinned messages, predictions, and channel points.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4D8JIc1Plb2P6BebXD3saQVqStgmKZpJNxa0O4VRzBUsPZSCe4Y1nxV++E6SxRx1WwzAW7AiZza4TcSqCAJLshLaqZRSFY5Q5x7cLzGF3w+XT73rVG4Qj6S1T0vFo59ZyUPrQ+/SS0fRYlq4DidfyYmi5+SNHMdXy7lAY+oFoUeACxLUDIql6bfIDUovzShBIEToBHwCn5zqHZOpKeCKwb010WlFcgm6omaTfLsRnRHCQ1oNfFhaJBid4KhVzpczpqPOZLmylZDy/35ek2vGjKH582YZHw1HHXLlXVXSXy1ZuWyHeT2BcWk2++loNXAXO7jAMozc0yU6fQyAcOHF6wIDAQAB",
+  "permissions": ["tabs", "nativeMessaging", "storage"],
+  "host_permissions": ["*://*.twitch.tv/*"],
+  "icons": {
+    "256": "icon.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "chatterino_native@chatterino.com",
+      "strict_min_version": "109.0"
+    }
+  },
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["storage", "nativeMessaging"],
   "action": {
     "default_popup": "popup.html"
   },
@@ -18,6 +29,11 @@
       "run_at": "document_start"
     },
     {
+      "matches": ["https://www.twitch.tv/*"],
+      "js": ["overlay.js"],
+      "run_at": "document_end"
+    },
+    {
       "matches": ["https://*.twitch.tv/*"],
       "js": ["content.js"],
       "css": ["styles.css"],
@@ -26,7 +42,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["inject.js", "twitch-api.js"],
+      "resources": ["page-inject.js", "twitch-api.js"],
       "matches": ["https://*.twitch.tv/*"]
     }
   ]

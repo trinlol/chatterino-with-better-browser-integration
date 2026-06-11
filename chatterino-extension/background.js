@@ -59,8 +59,6 @@ class AttachedWindows {
   }
 }
 
-const debugCalls = true;
-
 /**
  * @typedef {{
  *    replaceTwitchChat: boolean
@@ -180,8 +178,6 @@ function connectPort() {
     return;
   }
 
-  console.debug('port connected');
-
   port.onMessage.addListener(msg => {
     if (typeof msg === 'object' && msg.type === 'status') {
       switch (msg.status) {
@@ -191,16 +187,12 @@ function connectPort() {
           );
           break;
         default:
-          console.log(msg);
           break;
       }
-    } else {
-      console.log(msg);
     }
   });
   port.onDisconnect.addListener(() => {
     const lastError = chrome.runtime.lastError?.message ?? '';
-    console.debug('port disconnected', lastError || 'unknown');
 
     port = null;
 
@@ -220,8 +212,6 @@ function connectPort() {
 
 // disconnect from port
 function disconnectPort() {
-  if (debugCalls) console.log('disconnectPort');
-
   if (port) {
     port.disconnect();
     port = null;
@@ -236,8 +226,6 @@ chrome.tabs.onActivated.addListener(async activeInfo => {
   const window = await safeGetWindow(tab.windowId);
   if (!window?.focused) return;
 
-  if (debugCalls) console.log('onActivated');
-
   await onTabSelected(tab.url, tab);
 });
 
@@ -248,28 +236,21 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   const window = await safeGetWindow(tab.windowId);
   if (!window?.focused) return;
 
-  if (debugCalls) console.log('onUpdated');
-
   await onTabSelected(tab.url, tab);
 });
 
 // tab detached
 chrome.tabs.onDetached.addListener(async (tabId, detachInfo) => {
-  if (debugCalls) console.log('onDetached');
-
   await tryDetach(detachInfo.oldWindowId);
 });
 
 // tab closed
 chrome.windows.onRemoved.addListener(async windowId => {
-  if (debugCalls) console.log('onRemoved');
-
   await tryDetach(windowId);
 });
 
 // window selected
 chrome.windows.onFocusChanged.addListener(async windowId => {
-  console.log(windowId);
   if (windowId == -1) return;
 
   const window = await safeGetWindow(windowId);
@@ -282,8 +263,6 @@ chrome.windows.onFocusChanged.addListener(async windowId => {
   });
   if (tabs.length === 1) {
     let tab = tabs[0];
-
-    if (debugCalls) console.log('onFocusChanged');
 
     await onTabSelected(tab.url, tab);
   }
@@ -322,9 +301,29 @@ async function calcDisplayScaleFactor(tabId, dpr) {
   return scaleFactor;
 }
 
-// receiving messages from the inject script
+function forwardNativeMessage(message) {
+  const port = getPort();
+  if (port) {
+    port.postMessage(message);
+    return;
+  }
+
+  chrome.runtime.sendNativeMessage(appName, message, () => {
+    if (chrome.runtime.lastError) {
+      console.warn(
+        '[Chatterino] Native messaging error:',
+        chrome.runtime.lastError.message,
+      );
+    }
+  });
+}
+
+// receiving messages from content scripts and the popup
 chrome.runtime.onMessage.addListener((message, sender, callback) => {
-  console.log(message);
+  if (message.action === 'prediction' || message.action === 'pin') {
+    forwardNativeMessage(message);
+    return;
+  }
 
   switch (message.type) {
     case 'get-setting':
@@ -405,8 +404,6 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
 
 // attach chatterino to a chrome window
 async function tryAttach(windowId, fullscreen, data) {
-  console.log('tryAttach ' + windowId);
-
   data.action = 'select';
   if (await Settings.get('replaceTwitchChat')) {
     if (fullscreen) {
@@ -440,8 +437,6 @@ async function tryDetach(windowId) {
 }
 
 function sendDetach(winID) {
-  console.log('sendDetach', { winID });
-
   const port = getPort();
   if (port) {
     port.postMessage({ action: 'detach', version: 0, winId: winID.toString() });
@@ -489,7 +484,6 @@ async function syncTabs() {
     return;
   }
   previousTabs = currentTabs;
-  console.log('sending updated tabs:', currentTabs);
 
   const port = getPort();
   if (port) {

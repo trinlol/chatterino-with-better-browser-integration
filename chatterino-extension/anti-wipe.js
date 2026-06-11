@@ -26,7 +26,7 @@
     window.dispatchEvent(new CustomEvent('chatterino-companion-active', { detail: { reason } }));
   }
 
-  // The Chatterino Native Host extension wipes the chat with
+  // The overlay script wipes the chat with
   // `chatShell.children[0].innerHTML = '<placeholder>'` from its own isolated
   // world, which we cannot intercept. But the wiped React-managed nodes are
   // still alive inside the MutationRecord — restore them (hidden) into their
@@ -47,11 +47,10 @@
     }
     for (const child of target.children) {
       if (!child.classList.contains('chatterino-cc-restored')) {
-        // Chatterino's placeholder — overlay it so it doesn't affect layout.
         child.classList.add('chatterino-cc-placeholder');
       }
     }
-    console.log('[Chatterino Companion] Restored wiped chat nodes (hidden) — companion mode active');
+    console.log('[Chatterino] Restored wiped chat nodes (hidden) — companion mode active');
     return true;
   }
 
@@ -65,8 +64,6 @@
       ) {
         continue;
       }
-      // Only react to the wipe mutation itself (placeholder added in the same
-      // record) — never to React's own routine node removals.
       const addedWipe = [...mutation.addedNodes].some(
         (n) => n.nodeType === 1 && isChatterinoWipe(n.outerHTML || '')
       );
@@ -92,11 +89,11 @@
       script.onload = () => script.remove();
       (document.head || document.documentElement).appendChild(script);
     } catch (e) {
-      console.error('[Chatterino Companion] Failed to inject page script:', file, e);
+      console.error('[Chatterino] Failed to inject page script:', file, e);
     }
   }
 
-  injectPageScript('inject.js');
+  injectPageScript('page-inject.js');
   injectPageScript('twitch-api.js');
 
   const observer = new MutationObserver((mutations) => {
@@ -106,14 +103,4 @@
 
   observer.observe(document.documentElement, { childList: true, subtree: true });
   tryProtectChatShell();
-
-  // NOTE: The native points element is intentionally left in place. Moving it
-  // out of the React root detaches it from Twitch's delegated event handlers,
-  // which made the button unclickable. content.js renders a replica instead.
-
-  window.addEventListener('chatterino-companion-active', () => {
-    if (chrome?.runtime?.id) {
-      chrome.storage.local.set({ companionActive: true, lastWipeBlocked: Date.now() });
-    }
-  });
 })();

@@ -1,61 +1,98 @@
 ![chatterinoLogo](https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png)
 
-# Chatterino Better Browser
+# ✨ Chatterino Better Browser
 
-A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) focused on making Twitch browser integration feel native and complete. It overlays Chatterino chat on Twitch and adds companion features for pinned messages, predictions, channel points, and more.
+A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes Twitch browser integration feel native and complete — Chatterino chat overlaid on Twitch, plus pinned messages, predictions, channel points, and a richer emote input experience.
 
----
-
-## Quick start (prebuilt)
-
-1. Download **Chatterino-Better-Browser-Windows-x64-v1.0.0.zip** from [Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases).
-2. Extract the zip and run **`Chatterino Better Browser.exe`**.
-3. Install both browser extensions below (required for full integration).
-4. Restart the app after loading extensions so native messaging registers.
+> 🧩 **One extension only** — load [`chatterino-extension/`](./chatterino-extension/) in Chrome or Edge. No separate Native Host or Companion install.
 
 ---
 
-## Features
+## 🚀 Quick start (prebuilt)
 
-- **Pinned messages** — moderator pins show as a purple banner in Chatterino with a dismiss button
-- **Predictions & polls** — live prediction/poll UI integrated into the Twitch toolbar
-- **Channel points auto-claim** — claims bonus chests automatically
-- **Stable browser overlay** — fixes flicker, disappearing chat, and runaway CPU from native messaging
-- **Emote click-to-type** — click emotes in chat to insert them into your input
+1. 📦 Download **Chatterino-Better-Browser-Windows-x64-v1.0.0.zip** from [Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases)
+2. 🗑️ **Uninstall** the old Chatterino app from Windows if you have it *(your settings are safe — see below)*
+3. 📂 Extract the zip **anywhere you like** (e.g. `C:\Apps\Chatterino Better Browser\`)
+4. 🔗 Right-click **`Chatterino Better Browser.exe`** → **Send to** → **Desktop (create shortcut)** *(or pin to Start / taskbar)*
+5. ▶️ Launch from your new shortcut
+6. 🧩 Install the **one** browser extension below *(required)*
+7. 🔄 Restart the app after loading the extension so native messaging registers
 
----
-
-## Browser extensions (required)
-
-You need **both** extensions for full functionality:
-
-### 1. Chatterino Native Host
-
-Replaces Twitch chat with the Chatterino overlay and reports window geometry to the app.
-
-1. Open `chrome://extensions` or `edge://extensions`
-2. Enable **Developer mode**
-3. Click **Load unpacked**
-4. Select the [`chatterino-browser-ext/src`](./chatterino-browser-ext/src) folder
-
-See [`chatterino-browser-ext/README.md`](./chatterino-browser-ext/README.md) for Firefox build steps.
-
-### 2. Chatterino Companion
-
-Handles pinned messages, channel points, predictions, and anti-wipe restoration.
-
-1. On the same extensions page, click **Load unpacked** again
-2. Select the [`chatterino-companion`](./chatterino-companion/) folder
-
-See [`chatterino-companion/README.md`](./chatterino-companion/README.md) for details.
-
-> **Tip:** After loading extensions for the first time, restart **Chatterino Better Browser** so the native messaging host manifest is registered with your browser.
+> 💡 **Already use Chatterino?** Your existing settings, accounts, and window layout load automatically — uninstalling the old app does **not** delete them. See [Settings & migration](#-settings--migration) below.
 
 ---
 
-## Build from source (Windows)
+## 🎯 Features
 
-### Prerequisites
+### 🌐 Browser integration
+
+- 📌 **Pinned messages** — moderator pins show as a purple banner in Chatterino with a dismiss button
+- 🎲 **Predictions & polls** — live prediction/poll UI integrated into the Twitch toolbar
+- 🪙 **Channel points auto-claim** — claims bonus chests automatically; scrollable rewards menu
+- ⚡ **Stable browser overlay** — fixes flicker, disappearing chat, and runaway CPU from native messaging
+
+### 💬 Rich emote input (fork-exclusive)
+
+- 🖼️ **Inline emotes in the input field** — typed emotes render as images inside your message box, not just plain text
+- ⌨️ **Tab completion menu** — press **Tab** while typing to open an emote autocomplete popup with previews
+- ⭐ **Emote favourites tab** — **Ctrl+click** any emote in chat to add it to your Favourites; open the emote picker to find them quickly
+- 👆 **Click-to-type emotes** — click a single emote from another user's message to insert it straight into your input
+
+---
+
+## 📁 Settings & migration
+
+### ❓ Does this share config with regular Chatterino?
+
+**Yes.** Chatterino Better Browser uses the **same settings location** as the official Chatterino 2 installer and portable builds:
+
+| Mode | Config location |
+|------|-----------------|
+| **Installed / zip (default)** | `%APPDATA%\Chatterino2\` |
+| **Portable** (empty `portable` file next to the `.exe`) | Next to the executable |
+
+That folder contains everything: `Settings/settings.json`, accounts, window layout, favourite emotes, plugins, themes, and logs.
+
+### 🔄 Switching from official Chatterino (recommended)
+
+You do **not** need the official Chatterino installed to run this fork. Your settings live in `%APPDATA%\Chatterino2\` — **not** inside the old install folder — so uninstalling Chatterino is safe.
+
+1. ⏹️ **Close** Chatterino completely
+2. 🗑️ **Uninstall** the official Chatterino app from Windows *(Settings → Apps → Chatterino → Uninstall)*  
+   ✅ Your splits, accounts, favourite emotes, themes, and window layout **stay saved** in `%APPDATA%\Chatterino2\`
+3. 📥 Download and extract **Chatterino Better Browser** to **any folder** you want
+4. 🔗 **Create a shortcut** — Desktop, Start, or taskbar
+5. ▶️ Launch from your shortcut — everything loads from the same `settings.json` as before
+
+### 📦 Portable vs installed
+
+| | Portable zip | Installed (future) |
+|--|--------------|------------------|
+| Config | `%APPDATA%\Chatterino2\` (shared) | `%APPDATA%\Chatterino2\` (shared) |
+| Updates | Re-download zip | Installer overwrites `.exe` only |
+| Best for | Trying the fork, no admin rights | Daily driver, Start Menu shortcut |
+
+---
+
+## 🧩 Browser extension — one install
+
+Everything runs through a **single** extension. Chat overlay, pins, channel points, and predictions — no second extension needed.
+
+1. 🌐 Open `chrome://extensions` or `edge://extensions`
+2. 🔧 Enable **Developer mode**
+3. 📂 Click **Load unpacked**
+4. ✅ Select the [`chatterino-extension`](./chatterino-extension/) folder
+5. 🧹 Remove any old **Native Host** or **Companion** extensions if you still have them loaded
+
+See [`chatterino-extension/README.md`](./chatterino-extension/README.md) for popup settings and troubleshooting.
+
+> ⚠️ **Tip:** After loading the extension for the first time, restart **Chatterino Better Browser** so the native messaging host manifest is registered with your browser.
+
+---
+
+## 🛠️ Build from source (Windows)
+
+### 📋 Prerequisites
 
 - Visual Studio 2022 or later with **Desktop development with C++**
 - [Qt 6.8+](https://www.qt.io/download-open-source) (MSVC 64-bit kit)
@@ -63,7 +100,7 @@ See [`chatterino-companion/README.md`](./chatterino-companion/README.md) for det
 
 Full details: [BUILDING_ON_WINDOWS.md](BUILDING_ON_WINDOWS.md)
 
-### Build commands
+### 🔨 Build commands
 
 Open **x64 Native Tools Command Prompt for VS**, then:
 
@@ -87,19 +124,18 @@ windeployqt "bin/Chatterino Better Browser.exe" --release --no-compiler-runtime 
 
 ---
 
-## Repository layout
+## 📂 Repository layout
 
 | Path | Description |
 |------|-------------|
-| [`src/`](./src/) | Chatterino Better Browser C++ application |
-| [`chatterino-browser-ext/`](./chatterino-browser-ext/) | Native Host browser extension (chat overlay) |
-| [`chatterino-companion/`](./chatterino-companion/) | Companion extension (pins, points, predictions) |
-| [`lib/`](./lib/) | Vendored dependencies (git submodules) |
-| [`resources/`](./resources/) | Icons, themes, assets |
+| [`src/`](./src/) | 🖥️ Chatterino Better Browser C++ application |
+| [`chatterino-extension/`](./chatterino-extension/) | 🧩 Unified browser extension *(the only one you need)* |
+| [`lib/`](./lib/) | 📚 Vendored dependencies (git submodules) |
+| [`resources/`](./resources/) | 🎨 Icons, themes, assets |
 
 ---
 
-## Clone
+## 📥 Clone
 
 ```shell
 git clone --recurse-submodules https://github.com/trinlol/chatterino-with-better-browser-integration.git
@@ -107,7 +143,7 @@ git clone --recurse-submodules https://github.com/trinlol/chatterino-with-better
 
 ---
 
-## Upstream links
+## 🔗 Upstream links
 
 - [Chatterino 2](https://github.com/Chatterino/chatterino2)
 - [Chatterino Wiki](https://wiki.chatterino.com)

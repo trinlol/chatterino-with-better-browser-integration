@@ -1,6 +1,9 @@
-/* Hide native chat messages when Chatterino overlay is active (keep header/footer/pinned) */
+/* Hide native chat messages when Chatterino overlay is active (keep header/footer/pinned).
+   Exclude channel-points reward menu — its list uses scrollable class names too. */
 html.chatterino-companion-active .chat-room__content,
-html.chatterino-companion-active section.chat-room [class*="scrollable"],
+html.chatterino-companion-active
+  section.chat-room
+  [class*="scrollable"]:not(:is(.chatterino-native-reward-dialog *)),
 html.chatterino-companion-active .chat-scrollable-area__message-container,
 html.chatterino-companion-active [data-a-target="chat-line-message-container"] {
   visibility: hidden !important;
@@ -249,7 +252,9 @@ div[role="dialog"][aria-labelledby="channel-points-reward-center-header"] {
 /* Native Twitch reward dialog when repositioned beside toolbar.
    It stays inside the React tree (often inside chat containers that companion
    mode hides with visibility:hidden), so force it and its contents back to
-   visible and interactive. */
+   visible and interactive — including wheel/touch scrolling on the rewards list. */
+html.chatterino-companion-active section.chat-room .chatterino-native-reward-dialog,
+html.chatterino-companion-active section.chat-room .chatterino-native-reward-dialog *,
 .chatterino-native-reward-dialog,
 .chatterino-native-reward-dialog * {
   visibility: visible !important;
@@ -258,4 +263,25 @@ div[role="dialog"][aria-labelledby="channel-points-reward-center-header"] {
 
 .chatterino-native-reward-dialog {
   z-index: 2147483647 !important;
+}
+
+html.chatterino-companion-active
+  section.chat-room
+  .chatterino-native-reward-dialog
+  [class*="scrollable"],
+html.chatterino-companion-active
+  .chatterino-native-reward-dialog
+  [class*="scrollable"],
+html.chatterino-companion-active
+  .chatterino-native-reward-dialog
+  .reward-center__content,
+html.chatterino-companion-active
+  .chatterino-native-reward-dialog
+  .simplebar-content-wrapper,
+html.chatterino-companion-active
+  .chatterino-native-reward-dialog
+  .simplebar-scrollable-node {
+  pointer-events: auto !important;
+  overflow-y: auto !important;
+  touch-action: pan-y !important;
 }

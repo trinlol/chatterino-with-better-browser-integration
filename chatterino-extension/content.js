@@ -70,36 +70,6 @@
     syncTimer = setTimeout(flush, 0);
   }
 
-  let lastDebugStatusAt = 0;
-
-  function updateDebugStatus(extra = {}) {
-    if (!chrome?.runtime?.id) {
-      return;
-    }
-    const now = Date.now();
-    const force = Boolean(extra.lastNativeMessage);
-    if (!force && now - lastDebugStatusAt < 5000) {
-      return;
-    }
-    lastDebugStatusAt = now;
-    chrome.storage.local.set({
-      debugStatus: {
-        companionActive,
-        chatWiped: isChatShellWiped(),
-        toolbarMounted: !!document.getElementById('chatterino-toolbar-portal'),
-        followButtonFound: !!findTargetButton(),
-        domPointsFound: !!findPointsSummary(),
-        pointsReplicaMounted: !!document.getElementById('chatterino-points-replica'),
-        nativePointsButtonFound: !!findNativePointsButton(),
-        domPredictionFound: !!findBanner(),
-        gqlBalance: gqlState?.channelPoints?.balance ?? null,
-        gqlPrediction: gqlState?.prediction?.title ?? null,
-        lastNativeMessage: extra.lastNativeMessage ?? null,
-        updatedAt: Date.now()
-      }
-    });
-  }
-
   const findTargetButton = () => {
     const selectors = [
       '[data-a-target="follow-button"]',
@@ -269,6 +239,28 @@
     );
   }
 
+  function ensureRewardDialogScrollable(popover) {
+    const scrollSelectors = [
+      '[class*="scrollable"]',
+      '[class*="Scrollable"]',
+      '.reward-center__content',
+      '.simplebar-content-wrapper',
+      '.simplebar-scrollable-node',
+      '[data-simplebar-scrollable]'
+    ];
+    for (const selector of scrollSelectors) {
+      popover.querySelectorAll(selector).forEach((el) => {
+        el.style.setProperty('pointer-events', 'auto', 'important');
+        el.style.setProperty('visibility', 'visible', 'important');
+        el.style.setProperty('touch-action', 'pan-y', 'important');
+        const overflowY = getComputedStyle(el).overflowY;
+        if (overflowY === 'hidden' || overflowY === 'clip') {
+          el.style.setProperty('overflow-y', 'auto', 'important');
+        }
+      });
+    }
+  }
+
   function positionNativeRewardDialog(anchorEl) {
     const popover = findNativeRewardDialog();
     if (!popover || !anchorEl) {
@@ -277,6 +269,7 @@
 
     popover.classList.add('chatterino-native-reward-dialog');
     popover.style.setProperty('z-index', '2147483647', 'important');
+    ensureRewardDialogScrollable(popover);
 
     // The dialog lives inside ancestors with CSS transforms, so
     // `position: fixed` would resolve against them instead of the viewport.
@@ -598,7 +591,6 @@
         channel: channelName,
         message: pinnedText
       });
-      updateDebugStatus({ lastNativeMessage: `pin: ${pinnedText.slice(0, 40)}` });
     }
   }
 
@@ -698,7 +690,6 @@
       duration: details.durationSeconds,
       winner: details.winner
     });
-    updateDebugStatus({ lastNativeMessage: `prediction: ${details.title}` });
   }
 
   function ensureMinimizedIcon(banner) {
@@ -897,7 +888,6 @@
       }
     }
 
-    updateDebugStatus();
     positionToolbarPortal();
     } finally {
       syncInProgress = false;
