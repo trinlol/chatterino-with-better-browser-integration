@@ -865,6 +865,8 @@ set(SOURCE_FILES
         widgets/splits/SplitHeader.hpp
         widgets/splits/PinnedMessageWidget.cpp
         widgets/splits/PinnedMessageWidget.hpp
+        widgets/splits/PredictionBannerWidget.cpp
+        widgets/splits/PredictionBannerWidget.hpp
         widgets/splits/SplitInput.cpp
         widgets/splits/SplitInput.hpp
         widgets/splits/SplitOverlay.cpp
@@ -1010,6 +1012,10 @@ if (BUILD_APP)
     else()
         add_executable(${EXECUTABLE_PROJECT} main.cpp)
     endif()
+
+    set_target_properties(${EXECUTABLE_PROJECT} PROPERTIES
+        OUTPUT_NAME "Chatterino Better Browser"
+    )
 
     if(CHATTERINO_SANITIZER_SUPPORT)
         add_sanitizers(${EXECUTABLE_PROJECT})

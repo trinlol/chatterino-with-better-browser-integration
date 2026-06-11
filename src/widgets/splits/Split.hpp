@@ -26,6 +26,7 @@ class SplitOverlay;
 class SelectChannelDialog;
 class OverlayWindow;
 class PinnedMessageWidget;
+class PredictionBannerWidget;
 
 // Each ChatWidget consists of three sub-elements that handle their own part of
 // the chat widget: ChatWidgetHeader
@@ -166,6 +167,7 @@ private:
     SplitHeader *const header_;
     PinnedMessageWidget *const pinnedMessageWidget_;
     ChannelView *const view_;
+    PredictionBannerWidget *const predictionBannerWidget_;
     SplitInput *const input_;
     SplitOverlay *const overlay_;
 

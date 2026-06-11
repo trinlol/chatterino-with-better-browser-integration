@@ -567,6 +567,25 @@ Channel::Type IndirectChannel::getType() const
 
 void Channel::setPinnedMessageText(const QString &text)
 {
+    if (!text.isEmpty() && text == this->dismissedPinnedMessageText_)
+    {
+        if (!this->pinnedMessageText_.isEmpty())
+        {
+            this->pinnedMessageText_.clear();
+            this->pinnedMessageChanged.invoke();
+        }
+        return;
+    }
+
+    if (text.isEmpty())
+    {
+        this->dismissedPinnedMessageText_.clear();
+    }
+    else
+    {
+        this->dismissedPinnedMessageText_.clear();
+    }
+
     if (this->pinnedMessageText_ != text)
     {
         this->pinnedMessageText_ = text;
@@ -574,9 +593,41 @@ void Channel::setPinnedMessageText(const QString &text)
     }
 }
 
+void Channel::dismissPinnedMessage()
+{
+    if (this->pinnedMessageText_.isEmpty())
+    {
+        return;
+    }
+
+    this->dismissedPinnedMessageText_ = this->pinnedMessageText_;
+    this->pinnedMessageText_.clear();
+    this->pinnedMessageChanged.invoke();
+}
+
 const QString &Channel::getPinnedMessageText() const
 {
     return this->pinnedMessageText_;
+}
+
+void Channel::setPredictionState(const QString &text, const QString &status)
+{
+    if (this->predictionText_ != text || this->predictionStatus_ != status)
+    {
+        this->predictionText_ = text;
+        this->predictionStatus_ = status;
+        this->predictionChanged.invoke();
+    }
+}
+
+const QString &Channel::getPredictionText() const
+{
+    return this->predictionText_;
+}
+
+const QString &Channel::getPredictionStatus() const
+{
+    return this->predictionStatus_;
 }
 
 }  // namespace chatterino

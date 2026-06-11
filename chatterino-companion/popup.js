@@ -1,63 +1,45 @@
 document.addEventListener('DOMContentLoaded', () => {
   const autoClaimCheckbox = document.getElementById('autoClaimCheckbox');
-  const topRange = document.getElementById('topRange');
-  const leftRange = document.getElementById('leftRange');
-  const topVal = document.getElementById('topVal');
-  const leftVal = document.getElementById('leftVal');
-  const resetBtn = document.getElementById('resetBtn');
+  const debugPanel = document.getElementById('debugPanel');
 
-  // Load saved settings
+  function renderDebug(status) {
+    if (!status) {
+      debugPanel.textContent = 'No status yet. Open a Twitch channel tab.';
+      return;
+    }
+    debugPanel.textContent = [
+      `Companion active: ${status.companionActive ? 'yes' : 'no'}`,
+      `Chat wiped: ${status.chatWiped ? 'yes' : 'no'}`,
+      `Toolbar mounted: ${status.toolbarMounted ? 'yes' : 'no'}`,
+      `Follow button found: ${status.followButtonFound ? 'yes' : 'no'}`,
+      `Points replica mounted: ${status.pointsReplicaMounted ? 'yes' : 'no'}`,
+      `Native points button found: ${status.nativePointsButtonFound ? 'yes' : 'no'}`,
+      `DOM points found: ${status.domPointsFound ? 'yes' : 'no'}`,
+      `DOM prediction found: ${status.domPredictionFound ? 'yes' : 'no'}`,
+      `GQL balance: ${status.gqlBalance ?? 'n/a'}`,
+      `GQL prediction: ${status.gqlPrediction ?? 'n/a'}`,
+      `Last native msg: ${status.lastNativeMessage ?? 'none'}`,
+      `Updated: ${status.updatedAt ? new Date(status.updatedAt).toLocaleTimeString() : 'n/a'}`
+    ].join('\n');
+  }
+
   chrome.storage.local.get({
     autoClaimEnabled: true,
-    floatingTop: '120px',
-    floatingLeft: '20px'
+    debugStatus: null
   }, (items) => {
     autoClaimCheckbox.checked = items.autoClaimEnabled;
-
-    // Convert e.g. "120px" -> 120
-    const topInt = parseInt(items.floatingTop) || 120;
-    const leftInt = parseInt(items.floatingLeft) || 20;
-
-    topRange.value = topInt;
-    leftRange.value = leftInt;
-
-    topVal.textContent = topInt + 'px';
-    leftVal.textContent = leftInt + 'px';
+    renderDebug(items.debugStatus);
   });
 
-  // Save checkbox change
   autoClaimCheckbox.addEventListener('change', () => {
     chrome.storage.local.set({
       autoClaimEnabled: autoClaimCheckbox.checked
     });
   });
 
-  // Save range changes
-  topRange.addEventListener('input', () => {
-    const val = topRange.value + 'px';
-    topVal.textContent = val;
-    chrome.storage.local.set({ floatingTop: val });
-  });
-
-  leftRange.addEventListener('input', () => {
-    const val = leftRange.value + 'px';
-    leftVal.textContent = val;
-    chrome.storage.local.set({ floatingLeft: val });
-  });
-
-  // Reset button action
-  resetBtn.addEventListener('click', () => {
-    const defaultTop = '120px';
-    const defaultLeft = '20px';
-
-    topRange.value = 120;
-    leftRange.value = 20;
-    topVal.textContent = defaultTop;
-    leftVal.textContent = defaultLeft;
-
-    chrome.storage.local.set({
-      floatingTop: defaultTop,
-      floatingLeft: defaultLeft
-    });
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.debugStatus) {
+      renderDebug(changes.debugStatus.newValue);
+    }
   });
 });

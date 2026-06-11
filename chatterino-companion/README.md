@@ -1,14 +1,19 @@
 # Chatterino Companion Extension
 
-A browser extension that integrates Twitch web player features directly into Chatterino: handles pinned messages, claims channel points, and moves prediction and poll banners into a floating widget.
+A browser extension that integrates Twitch web player features directly into Chatterino Better Browser: handles pinned messages, claims channel points, and moves prediction and poll banners into the toolbar.
 
-## Installation Instructions
+## Installation
 
-1. Open your browser (Microsoft Edge or Google Chrome).
+1. Open your browser (Google Chrome or Microsoft Edge).
 2. Navigate to the extensions page:
-   - In Edge: Go to `edge://extensions/`
-   - In Chrome: Go to `chrome://extensions/`
-3. Turn on **Developer mode** (the toggle is usually in the bottom-left sidebar or top-right corner).
-4. Click **Load unpacked** (button at the top left).
-5. Select the folder where this extension is located in.
-6. Open or refresh Twitch. Any predictions or polls that start will now pop up in a clean, draggable floating window on the left!
+   - Chrome: `chrome://extensions`
+   - Edge: `edge://extensions`
+3. Turn on **Developer mode**.
+4. Click **Load unpacked**.
+5. Select this folder (`chatterino-companion` from the repository root).
+6. Open or refresh a Twitch channel.
+
+## Requirements
+
+- **Chatterino Better Browser** must be running.
+- **Chatterino Native Host** extension (`chatterino-browser-ext`) must also be loaded.

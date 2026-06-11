@@ -16,6 +16,15 @@
 #include <QPainter>
 #include <QPainterPath>
 
+#include "singletons/Settings.hpp"
+#include "widgets/dialogs/EmotePopup.hpp"
+#include "widgets/helper/ChannelView.hpp"
+#include "common/Channel.hpp"
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <cmath>
+
 namespace {
 
 const QChar RTL_EMBED(0x202B);
@@ -30,6 +39,115 @@ void alignRectBottomCenter(QRectF &rect, const QRectF &reference)
 }  // namespace
 
 namespace chatterino {
+
+namespace {
+
+void drawFavouriteStar(QPainter &painter, const QRectF &rect, MessageLayoutElement *element)
+{
+    auto *widget = dynamic_cast<QWidget *>(painter.device());
+    if (!widget)
+    {
+        return;
+    }
+
+    auto *channelView = dynamic_cast<ChannelView *>(widget);
+    if (!channelView)
+    {
+        return;
+    }
+
+    auto *popup = dynamic_cast<EmotePopup *>(channelView->window());
+    if (!popup)
+    {
+        return;
+    }
+
+    const auto *emoteElement = dynamic_cast<const EmoteElement *>(&element->getCreator());
+    if (!emoteElement)
+    {
+        return;
+    }
+
+    auto emote = emoteElement->getEmote();
+    if (!emote)
+    {
+        return;
+    }
+
+    auto activeChannel = popup->getChannel();
+    if (!activeChannel)
+    {
+        return;
+    }
+
+    QString channelName = activeChannel->getName().toLower();
+    auto favsStr = getSettings()->favouriteEmotes.getValue();
+    QJsonDocument doc = QJsonDocument::fromJson(favsStr.toUtf8());
+    QJsonObject root = doc.object();
+    QJsonArray favsArr = root[channelName].toArray();
+
+    bool isFavourited = false;
+    for (const auto &val : favsArr)
+    {
+        if (val.toString() == emote->name.string)
+        {
+            isFavourited = true;
+            break;
+        }
+    }
+
+    if (!isFavourited)
+    {
+        return;
+    }
+
+    // Paint the star
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    double R = rect.height() * 0.18;
+    if (R < 4.0) R = 4.0;
+    double r = R * 0.4;
+    double cx = rect.right() - R - 1.0;
+    double cy = rect.top() + R + 1.0;
+
+    // Draw background circle for contrast
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0, 0, 0, 150));
+    painter.drawEllipse(QPointF(cx, cy), R + 1.5, R + 1.5);
+
+    // Draw star path
+    QPainterPath starPath;
+    const double PI = 3.14159265358979323846;
+    for (int i = 0; i < 5; ++i)
+    {
+        double angleRad = -PI / 2.0 + i * 2.0 * PI / 5.0;
+        double x = cx + R * std::cos(angleRad);
+        double y = cy + R * std::sin(angleRad);
+        if (i == 0)
+        {
+            starPath.moveTo(x, y);
+        }
+        else
+        {
+            starPath.lineTo(x, y);
+        }
+
+        angleRad += PI / 5.0;
+        x = cx + r * std::cos(angleRad);
+        y = cy + r * std::sin(angleRad);
+        starPath.lineTo(x, y);
+    }
+    starPath.closeSubpath();
+
+    painter.setBrush(QColor(255, 215, 0)); // Gold
+    painter.setPen(QPen(QColor(218, 165, 32), 0.75)); // Darker gold outline
+    painter.drawPath(starPath);
+
+    painter.restore();
+}
+
+}  // namespace
 
 const QRectF &MessageLayoutElement::getRect() const
 {
@@ -167,6 +285,7 @@ void ImageLayoutElement::paint(QPainter &painter,
     {
         // fourtf: make it use qreal values
         painter.drawPixmap(QRectF(this->getRect()), *pixmap, QRectF());
+        drawFavouriteStar(painter, this->getRect(), this);
     }
 }
 
@@ -184,6 +303,7 @@ bool ImageLayoutElement::paintAnimated(QPainter &painter, qreal yOffset)
             auto rect = this->getRect();
             rect.moveTop(rect.y() + yOffset);
             painter.drawPixmap(QRectF(rect), *pixmap, QRectF());
+            drawFavouriteStar(painter, rect, this);
             return true;
         }
     }

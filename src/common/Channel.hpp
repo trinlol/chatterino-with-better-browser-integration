@@ -72,6 +72,7 @@ public:
     pajlada::Signals::NoArgSignal displayNameChanged;
     pajlada::Signals::NoArgSignal messagesCleared;
     pajlada::Signals::NoArgSignal pinnedMessageChanged;
+    pajlada::Signals::NoArgSignal predictionChanged;
 
     Type getType() const;
     const QString &getName() const;
@@ -152,6 +153,13 @@ public:
 
     void setPinnedMessageText(const QString &text);
     const QString &getPinnedMessageText() const;
+    void dismissPinnedMessage();
+
+    /// Prediction announcement state shown above the chat input.
+    /// `status` is one of "started", "locked", "ended" or "" (no prediction).
+    void setPredictionState(const QString &text, const QString &status);
+    const QString &getPredictionText() const;
+    const QString &getPredictionStatus() const;
 
 protected:
     virtual void onConnected();
@@ -165,6 +173,9 @@ private:
     LimitedQueue<MessagePtr> messages_;
     Type type_;
     QString pinnedMessageText_;
+    QString dismissedPinnedMessageText_;
+    QString predictionText_;
+    QString predictionStatus_;
     bool anythingLogged_ = false;
 
     /// Recursion count for message signals.

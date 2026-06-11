@@ -40,6 +40,7 @@
 #include "widgets/splits/SplitInput.hpp"
 #include "widgets/splits/SplitOverlay.hpp"
 #include "widgets/splits/PinnedMessageWidget.hpp"
+#include "widgets/splits/PredictionBannerWidget.hpp"
 #include "widgets/Window.hpp"
 
 #include <QApplication>
@@ -93,6 +94,7 @@ Split::Split(QWidget *parent)
     , pinnedMessageWidget_(new PinnedMessageWidget(this))
     , view_(new ChannelView(this, this, ChannelView::Context::None,
                             getSettings()->scrollbackSplitLimit))
+    , predictionBannerWidget_(new PredictionBannerWidget(this))
     , input_(new SplitInput(this))
     , overlay_(new SplitOverlay(this))
 {
@@ -107,6 +109,7 @@ Split::Split(QWidget *parent)
     this->vbox_->addWidget(this->header_);
     this->vbox_->addWidget(this->pinnedMessageWidget_);
     this->vbox_->addWidget(this->view_, 1);
+    this->vbox_->addWidget(this->predictionBannerWidget_);
     this->vbox_->addWidget(this->input_);
 
     this->input_->ui_.textEdit->installEventFilter(parent);
@@ -833,6 +836,7 @@ void Split::setChannel(IndirectChannel newChannel)
     this->channel_ = newChannel;
 
     this->pinnedMessageWidget_->setChannel(newChannel.get());
+    this->predictionBannerWidget_->setChannel(newChannel.get());
     this->view_->setChannel(newChannel.get());
 
     this->usermodeChangedConnection_.disconnect();

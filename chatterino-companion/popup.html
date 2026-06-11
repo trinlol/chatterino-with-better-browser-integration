@@ -218,23 +218,11 @@
   </div>
 
   <div class="card">
-    <div class="control-group">
-      <div class="control-header">
-        <span class="control-label">Floating Banner Top</span>
-        <span class="control-value" id="topVal">120px</span>
-      </div>
-      <input type="range" class="range-input" id="topRange" min="0" max="1000" value="120">
+    <div class="label-group" style="margin-bottom: 8px;">
+      <span class="title">Debug Status</span>
+      <span class="description">Live state from the active Twitch tab</span>
     </div>
-
-    <div class="control-group">
-      <div class="control-header">
-        <span class="control-label">Floating Banner Left</span>
-        <span class="control-value" id="leftVal">20px</span>
-      </div>
-      <input type="range" class="range-input" id="leftRange" min="0" max="2000" value="20">
-    </div>
-
-    <button class="btn" id="resetBtn">Reset Positions</button>
+    <div id="debugPanel" class="description" style="font-family: monospace; font-size: 10px; line-height: 1.5; white-space: pre-wrap;"></div>
   </div>
 
   <script src="popup.js"></script>

@@ -29,12 +29,19 @@ public:
 
     pajlada::Signals::Signal<Link> linkClicked;
 
+    void reloadEmotes();
+    ChannelPtr getChannel() const
+    {
+        return this->channel_;
+    }
+
 protected:
     void resizeEvent(QResizeEvent *event) override;
     void moveEvent(QMoveEvent *event) override;
     void themeChangedEvent() override;
 
 private:
+    ChannelView *favouritesView_{};
     ChannelView *globalEmotesView_{};
     ChannelView *channelEmotesView_{};
     ChannelView *subEmotesView_{};
@@ -56,8 +63,6 @@ private:
     void filterEmotes(const QString &text);
     void addShortcuts() override;
     bool eventFilter(QObject *object, QEvent *event) override;
-
-    void reloadEmotes();
 
     void saveBounds() const;
 };

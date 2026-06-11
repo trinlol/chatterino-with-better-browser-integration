@@ -100,7 +100,6 @@ private:
     /// These channels are joined to be able to switch channels more quickly.
     std::vector<ChannelPtr> channelWarmer_;
 
-    MessagePtr activePredictionMessage_;
     ChannelPtr activeChannel_;
     class QTimer *predictionTimer_ = nullptr;
     int remainingSeconds_ = 0;
@@ -108,12 +107,12 @@ private:
     QJsonArray predictionOptions_;
     QString predictionStatus_;
     QString predictionWinner_;
-    pajlada::Signals::ScopedConnection messageAppendedConnection_;
-    bool recreateScheduled_ = false;
 
     void onPredictionTimerTick();
-    void recreateStickyMessage();
-    void clearStickyMessage();
+    QString composePredictionText() const;
+    void updatePredictionBanner();
+    void announcePredictionInChat();
+    void clearPrediction();
 
     friend ReceiverThread;
 };

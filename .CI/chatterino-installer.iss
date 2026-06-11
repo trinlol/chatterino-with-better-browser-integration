@@ -5,7 +5,7 @@
 #define MyAppVersion "2.5.5"
 #define MyAppPublisher "Chatterino Team"
 #define MyAppURL "https://www.chatterino.com"
-#define MyAppExeName "chatterino.exe"
+#define MyAppExeName "Chatterino Better Browser.exe"
 
 ; used in build-installer.ps1
 ; if set, must end in a backslash

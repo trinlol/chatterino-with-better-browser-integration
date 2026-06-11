@@ -30,7 +30,7 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
     connect(this->closeButton_, &QPushButton::clicked, [this]() {
         if (this->channel_)
         {
-            this->channel_->setPinnedMessageText("");
+            this->channel_->dismissPinnedMessage();
         }
     });
 

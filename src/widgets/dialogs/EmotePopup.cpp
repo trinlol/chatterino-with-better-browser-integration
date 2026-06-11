@@ -4,6 +4,11 @@
 
 #include "widgets/dialogs/EmotePopup.hpp"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include "widgets/helper/ResizingTextEdit.hpp"
+
 #include "Application.hpp"
 #include "common/enums/MessageContext.hpp"
 #include "common/QLogging.hpp"
@@ -328,6 +333,7 @@ EmotePopup::EmotePopup(QWidget *parent)
     layout->addWidget(this->notebook_);
     layout->setContentsMargins(0, 0, 0, 0);
 
+    this->favouritesView_ = makeView("Favourites");
     this->subEmotesView_ = makeView("Subs");
     this->channelEmotesView_ = makeView("Channel");
     this->globalEmotesView_ = makeView("Global");
@@ -460,6 +466,8 @@ void EmotePopup::loadChannel(ChannelPtr channel)
 
     this->setWindowTitle("Emotes in #" + this->channel_->getName());
 
+    this->favouritesView_->setChannel(
+        std::make_shared<Channel>("", Channel::Type::None));
     this->globalEmotesView_->setChannel(
         std::make_shared<Channel>("", Channel::Type::None));
     this->subEmotesView_->setChannel(
@@ -474,13 +482,34 @@ void EmotePopup::loadChannel(ChannelPtr channel)
 
 void EmotePopup::reloadEmotes()
 {
+    auto favouritesChannel = this->favouritesView_->underlyingChannel();
     auto subChannel = this->subEmotesView_->underlyingChannel();
     auto globalChannel = this->globalEmotesView_->underlyingChannel();
     auto channelChannel = this->channelEmotesView_->underlyingChannel();
 
+    favouritesChannel->clearMessages();
     subChannel->clearMessages();
     globalChannel->clearMessages();
     channelChannel->clearMessages();
+
+    if (this->channel_)
+    {
+        auto favsStr = getSettings()->favouriteEmotes.getValue();
+        QJsonDocument doc = QJsonDocument::fromJson(favsStr.toUtf8());
+        QJsonObject root = doc.object();
+        QString channelName = this->channel_->getName().toLower();
+        QJsonArray favsArr = root[channelName].toArray();
+        std::vector<EmotePtr> favEmotes;
+        for (const auto &val : favsArr)
+        {
+            QString emoteName = val.toString();
+            if (auto emote = findEmoteByName(emoteName, this->channel_.get()))
+            {
+                favEmotes.push_back(emote);
+            }
+        }
+        addEmotes(*favouritesChannel, favEmotes, "Favourites");
+    }
 
     if (this->twitchChannel_)
     {

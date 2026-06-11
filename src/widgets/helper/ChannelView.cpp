@@ -4,6 +4,11 @@
 
 #include "widgets/helper/ChannelView.hpp"
 
+#include "widgets/dialogs/EmotePopup.hpp"
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+
 #include "Application.hpp"
 #include "common/Common.hpp"
 #include "common/QLogging.hpp"
@@ -2455,6 +2460,49 @@ void ChannelView::handleMouseClick(QMouseEvent *event,
             if (hoveredElement == nullptr)
             {
                 return;
+            }
+
+            auto *popup = dynamic_cast<EmotePopup *>(this->window());
+            if (popup && (event->modifiers() & Qt::ControlModifier))
+            {
+                if (auto emote = getClickedEmote(hoveredElement))
+                {
+                    auto emoteName = (*emote)->name.string;
+                    auto activeChannel = popup->getChannel();
+                    if (activeChannel)
+                    {
+                        QString channelName = activeChannel->getName().toLower();
+                        auto favsStr = getSettings()->favouriteEmotes.getValue();
+                        QJsonDocument doc = QJsonDocument::fromJson(favsStr.toUtf8());
+                        QJsonObject root = doc.object();
+                        QJsonArray favsArr = root[channelName].toArray();
+
+                        bool exists = false;
+                        QJsonArray newArr;
+                        for (const auto &val : favsArr)
+                        {
+                            if (val.toString() == emoteName)
+                            {
+                                exists = true;
+                            }
+                            else
+                            {
+                                newArr.append(val);
+                            }
+                        }
+                        if (!exists)
+                        {
+                            newArr.append(emoteName);
+                        }
+                        root[channelName] = newArr;
+                        doc.setObject(root);
+                        getSettings()->favouriteEmotes.setValue(
+                            QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
+
+                        popup->reloadEmotes();
+                    }
+                    return;
+                }
             }
 
             if (this->context_ == Context::None && this->split_ != nullptr)

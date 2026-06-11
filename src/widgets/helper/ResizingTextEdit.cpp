@@ -511,6 +511,42 @@ void ResizingTextEdit::keyPressEvent(QKeyEvent *event)
 
     this->keyPressed.invoke(event);
 
+    if (event->key() == Qt::Key_Space && (event->modifiers() & Qt::ControlModifier) == Qt::NoModifier)
+    {
+        QString word = this->textUnderCursor();
+        if (!word.isEmpty())
+        {
+            EmotePtr emote = nullptr;
+            if (this->getChannel)
+            {
+                auto channel = this->getChannel();
+                const auto *tc = dynamic_cast<const TwitchChannel *>(channel.get());
+                if (tc)
+                {
+                    if (auto seventv = tc->seventvEmotes())
+                    {
+                        auto it = seventv->find(EmoteName{word});
+                        if (it != seventv->end())
+                        {
+                            emote = it->second;
+                        }
+                    }
+                }
+            }
+
+            if (emote)
+            {
+                QTextCursor tc = this->textCursor();
+                tc.setPosition(tc.position() - word.size(), QTextCursor::KeepAnchor);
+                tc.removeSelectedText();
+                this->setTextCursor(tc);
+                this->insertEmote(emote);
+                event->accept();
+                return;
+            }
+        }
+    }
+
     bool doComplete =
         (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab) &&
         (event->modifiers() & Qt::ControlModifier) == Qt::NoModifier &&

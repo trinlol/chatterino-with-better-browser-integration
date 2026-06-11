@@ -192,8 +192,8 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
     ::SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(attached));
     ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
 
-    // FAST TIMER - used to resize/reorder windows
-    this->timer_.setInterval(1);
+    // FAST TIMER - used to resize/reorder windows (16ms ~= 60fps; 1ms pegged CPU)
+    this->timer_.setInterval(16);
     QObject::connect(&this->timer_, &QTimer::timeout, [this, attached] {
         // check process id
         if (!this->validProcessName_)

@@ -121,7 +121,7 @@ To build with plugins add `-DCHATTERINO_PLUGINS=ON` to `cmake` command.
 #### Deploying Qt libraries
 
 Once Chatterino has finished building, to ensure all .dll's are available you can run this from the build directory:  
-`windeployqt bin/chatterino.exe --release --no-compiler-runtime --no-translations --no-opengl-sw --dir bin/`
+`windeployqt "bin/Chatterino Better Browser.exe" --release --no-compiler-runtime --no-translations --no-opengl-sw --dir bin/`
 
 Can't find windeployqt? You forgot to add your Qt bin directory (e.g. `C:\Qt\6.5.3\msvc2019_64\bin`) to your `PATH`
 
@@ -144,7 +144,7 @@ Build results will be placed in a folder at the same level as the "chatterino2" 
 
 #### Producing standalone builds
 
-If you build Chatterino, the result directories will contain a `chatterino.exe` file in the `$OUTPUTDIR\release\` directory. This `.exe` file will not directly run on any given target system, because it will be lacking various Qt runtimes.
+If you build Chatterino Better Browser, the result directories will contain a `Chatterino Better Browser.exe` file in the `build/bin/` directory. This `.exe` file will not directly run on any given target system, because it will be lacking various Qt runtimes.
 
 To produce a standalone package, you need to generate all required files using the tool `windeployqt`. This tool can be found in the `bin` directory of your Qt installation, e.g. at `C:\Qt\6.5.3\msvc2019_64\bin\windeployqt.exe`.
 
@@ -152,7 +152,7 @@ To produce all supplement files for a standalone build, follow these steps (adju
 
 1. Navigate to your build output directory with Windows Explorer, e.g. `C:\Users\example\src\build-chatterino-Desktop_Qt_6.5.3_MSVC2019_64bit-Release`
 2. Enter the `release` directory
-3. Delete all files except the `chatterino.exe` file. You should be left with a directory only containing `chatterino.exe`.
+3. Delete all files except the `Chatterino Better Browser.exe` file. You should be left with a directory only containing `Chatterino Better Browser.exe`.
 4. Open a command prompt and execute:
    ```cmd
    cd C:\Users\example\src\build-chatterino-Desktop_Qt_6.5.3_MSVC2019_64bit-Release\release

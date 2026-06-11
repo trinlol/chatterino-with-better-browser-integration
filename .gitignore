@@ -125,3 +125,32 @@ aqtinstall.log
 
 # sccache (CI)
 .sccache
+
+# Local dev / AI tooling
+.cursor/
+.playwright-companion-profile/
+node_modules/
+
+# Conan generated at repo root
+conan_toolchain.cmake
+conan*.bat
+deactivate_conan*.bat
+conandeps_legacy.cmake
+*Config.cmake
+*ConfigVersion.cmake
+*Targets.cmake
+*-data.cmake
+*-Target-*.cmake
+cmakedeps_macros.cmake
+FindOpenSSL.cmake
+hunspell-config.cmake
+hunspell-config-version.cmake
+
+# Extension key generation scratch files
+chatterino-companion/key_temp*
+
+# Local debug scripts
+scripts/snippets/
+
+# Release build artifacts (uploaded to GitHub Releases, not committed)
+release/

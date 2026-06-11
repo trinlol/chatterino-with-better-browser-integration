@@ -1,3 +1,83 @@
+/* Hide native chat messages when Chatterino overlay is active (keep header/footer/pinned) */
+html.chatterino-companion-active .chat-room__content,
+html.chatterino-companion-active section.chat-room [class*="scrollable"],
+html.chatterino-companion-active .chat-scrollable-area__message-container,
+html.chatterino-companion-active [data-a-target="chat-line-message-container"] {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Chat nodes restored after a Chatterino Native Host wipe: kept mounted so
+   Twitch React (and the points button) stays alive, but never visible. */
+.chatterino-cc-restored {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Chatterino's placeholder overlays the restored chat instead of stacking
+   next to it, so the chat column geometry stays what Chatterino expects. */
+.chatterino-cc-placeholder {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 60 !important;
+}
+
+/* Fixed portal — sits above Twitch UI and receives pointer events */
+#chatterino-toolbar-portal {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  position: fixed !important;
+  pointer-events: auto !important;
+  z-index: 2147483646 !important;
+  isolation: isolate !important;
+}
+
+#chatterino-toolbar-portal,
+#chatterino-toolbar-portal * {
+  pointer-events: auto !important;
+}
+
+#chatterino-toolbar-portal svg {
+  pointer-events: none !important;
+}
+
+/* Toolbar slot inside portal */
+#chatterino-toolbar-slot {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  vertical-align: middle !important;
+  flex-shrink: 0 !important;
+}
+
+/* Channel points replica — a live visual clone of the native Twitch button.
+   Twitch's own stylesheets style the cloned markup, so it looks identical. */
+#chatterino-points-replica {
+  display: inline-flex !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+  cursor: pointer !important;
+}
+
+#chatterino-points-replica [data-test-selector="community-points-summary"],
+#chatterino-points-replica [data-a-target="community-points-summary"] {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+/* Visually hide the original points button while the replica is shown.
+   It must stay mounted (no display:none removal from React) so forwarded
+   clicks and auto-claim keep working. */
+html.chatterino-points-replica-active
+  [data-test-selector="community-points-summary"]:not(#chatterino-toolbar-portal *),
+html.chatterino-points-replica-active
+  [data-a-target="community-points-summary"]:not(#chatterino-toolbar-portal *) {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* Floating Mode Style */
 .chatterino-moved-banner-floating {
   position: fixed !important;
@@ -14,13 +94,11 @@
   color: #efeff1 !important;
 }
 
-/* Ensure text is readable and inherits white color without forcing hidden elements visible */
 .chatterino-moved-banner-floating,
 .chatterino-moved-banner-floating * {
   color: #efeff1 !important;
 }
 
-/* Minimize Button inside Banner */
 .chatterino-prediction-minimize-btn {
   position: absolute !important;
   top: 8px !important;
@@ -41,7 +119,6 @@
   background: rgba(255, 255, 255, 0.3) !important;
 }
 
-/* Minimized Floating Button (placed inline next to Follow Button) */
 .chatterino-prediction-minimized-icon {
   display: inline-flex !important;
   align-items: center !important;
@@ -52,8 +129,6 @@
   color: white !important;
   border-radius: 4px !important;
   cursor: pointer !important;
-  margin-right: 6px !important;
-  vertical-align: middle !important;
   border: none !important;
   transition: background-color 0.2s ease !important;
   padding: 0 !important;
@@ -70,13 +145,117 @@
   stroke: white !important;
 }
 
-/* Hide pinned messages since they are displayed in Chatterino */
-[data-a-target="chat-pinned-message"],
-.pinned-chat__highlight-card,
-.pinned-chat__container,
-.pinned-chat-list-item,
-.community-highlight-stack__card,
-.community-highlight-stack,
-.community-highlight {
+/* Hide plain pinned messages (not prediction/poll containers) */
+.pinned-chat__container:not(:has([data-test-selector="community-prediction-banner"])):not(:has(.prediction-banner)):not(:has([data-test-selector="community-poll-banner"])):not(:has(.gamba-prediction-status-banner)),
+.community-highlight-stack:not(:has([data-test-selector="community-prediction-banner"])):not(:has(.prediction-banner)):not(:has([data-test-selector="community-poll-banner"])):not(:has(.gamba-prediction-status-banner)),
+.community-highlight:not(:has([data-test-selector="community-prediction-banner"])):not(:has(.prediction-banner)):not(:has([data-test-selector="community-poll-banner"])):not(:has(.gamba-prediction-status-banner)) {
   display: none !important;
+}
+
+/* Inline Mode Style for predictions next to follow button */
+.chatterino-moved-banner-inline {
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  background-color: #18181b !important;
+  border: 1px solid #a970ff !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  color: #efeff1 !important;
+  font-size: 12px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+  max-width: 400px !important;
+  height: 30px !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+}
+
+.chatterino-moved-banner-inline,
+.chatterino-moved-banner-inline * {
+  color: #efeff1 !important;
+  font-size: 12px !important;
+}
+
+.chatterino-moved-banner-inline [class*="content"],
+.chatterino-moved-banner-inline [class*="body"],
+.chatterino-moved-banner-inline [class*="container"] {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.chatterino-moved-banner-inline h4 {
+  font-size: 12px !important;
+  margin: 0 !important;
+  font-weight: bold !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 150px !important;
+}
+
+.chatterino-moved-banner-inline button {
+  padding: 2px 6px !important;
+  font-size: 11px !important;
+  height: 22px !important;
+  line-height: 1 !important;
+}
+
+.chatterino-moved-banner-inline .chatterino-prediction-minimize-btn {
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  margin-left: 6px !important;
+  padding: 2px 6px !important;
+  font-size: 12px !important;
+  height: 20px !important;
+}
+
+.chatterino-prediction-fallback-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background-color: #18181b !important;
+  border: 1px solid #a970ff !important;
+  border-radius: 4px !important;
+  padding: 4px 10px !important;
+  height: 30px !important;
+  color: #efeff1 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: default !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
+.chatterino-prediction-fallback-pill .dot {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: #00f593 !important;
+  flex-shrink: 0 !important;
+}
+
+div[role="dialog"]:has(.reward-center__content),
+div.ReactModal__Content:has(.reward-center__content),
+div[role="dialog"][aria-labelledby="channel-points-reward-center-header"] {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+  border: 1px solid #303036 !important;
+  background-color: #1f1f23 !important;
+  border-radius: 8px !important;
+}
+
+/* Native Twitch reward dialog when repositioned beside toolbar.
+   It stays inside the React tree (often inside chat containers that companion
+   mode hides with visibility:hidden), so force it and its contents back to
+   visible and interactive. */
+.chatterino-native-reward-dialog,
+.chatterino-native-reward-dialog * {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+.chatterino-native-reward-dialog {
+  z-index: 2147483647 !important;
 }

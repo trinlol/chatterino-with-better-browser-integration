@@ -105,7 +105,7 @@ void registerNmManifest([[maybe_unused]] const Paths &paths,
         writeManifestTo(paths.miscDirectory, u"."_s, config.fileName, document);
 
     QSettings registry(config.registryKey, QSettings::NativeFormat);
-    registry.setValue("Default",
+    registry.setValue("",
                       QString(paths.miscDirectory % u'/' % config.fileName));
 #else
     std::ignore =
@@ -129,7 +129,8 @@ QJsonDocument buildChromeManifest(const QStringList &extensionIDs)
     auto obj = buildBaseDocument();
     QJsonArray allowedOriginsArr = {
         u"chrome-extension://%1/"_s.arg(EXTENSION_ID),
-        u"chrome-extension://bogfpdfoagkaebimmlcbgmfmanhbhhlm/"_s};
+        u"chrome-extension://bogfpdfoagkaebimmlcbgmfmanhbhhlm/"_s,
+        u"chrome-extension://ihmcbbdgnogenblkicmkhbmgglcepmfp/"_s};
 
     for (const auto &id : extensionIDs)
     {
@@ -536,13 +537,25 @@ void NativeMessagingServer::updatePinnedMessage(const QJsonObject &root)
     assertInGuiThread();
 
     QString text = root["message"_L1].toString();
+    QString channelName = root["channel"_L1].toString();
 
-    auto channel = getApp()->getTwitch()->getWatchingChannel().get();
+    ChannelPtr channel;
+    if (!channelName.isEmpty())
+    {
+        channel = getApp()->getTwitch()->getOrAddChannel(channelName);
+    }
+    else
+    {
+        channel = getApp()->getTwitch()->getWatchingChannel().get();
+    }
+
     if (!channel || channel->isEmpty())
     {
         return;
     }
 
+    // Pinned messages and predictions are independent now: the prediction has
+    // its own banner above the chat input, so it never hijacks the pin.
     channel->setPinnedMessageText(text);
 }
 
@@ -555,8 +568,18 @@ void NativeMessagingServer::updatePredictionSticky(const QJsonObject &root)
     QJsonArray options = root["options"_L1].toArray();
     int duration = root["duration"_L1].toInt(0);
     QString winner = root["winner"_L1].toString();
+    QString channelName = root["channel"_L1].toString();
 
-    auto channel = getApp()->getTwitch()->getWatchingChannel().get();
+    ChannelPtr channel;
+    if (!channelName.isEmpty())
+    {
+        channel = getApp()->getTwitch()->getOrAddChannel(channelName);
+    }
+    else
+    {
+        channel = getApp()->getTwitch()->getWatchingChannel().get();
+    }
+
     if (!channel || channel->isEmpty())
     {
         return;
@@ -564,8 +587,14 @@ void NativeMessagingServer::updatePredictionSticky(const QJsonObject &root)
 
     if (this->activeChannel_ && this->activeChannel_ != channel)
     {
-        this->clearStickyMessage();
+        this->clearPrediction();
     }
+
+    // A transition is a new prediction, a status change, or a new channel —
+    // periodic re-sends from the extension are not transitions.
+    const bool transition = status != this->predictionStatus_ ||
+                            title != this->predictionTitle_ ||
+                            channel != this->activeChannel_;
 
     this->predictionTitle_ = title;
     this->predictionOptions_ = options;
@@ -575,7 +604,15 @@ void NativeMessagingServer::updatePredictionSticky(const QJsonObject &root)
 
     if (status == "started")
     {
-        this->remainingSeconds_ = duration > 0 ? duration : 120;
+        if (duration > 0)
+        {
+            // Re-sync the countdown with what the page reports
+            this->remainingSeconds_ = duration;
+        }
+        else if (transition)
+        {
+            this->remainingSeconds_ = 120;
+        }
 
         if (!this->predictionTimer_)
         {
@@ -584,44 +621,36 @@ void NativeMessagingServer::updatePredictionSticky(const QJsonObject &root)
                 this->onPredictionTimerTick();
             });
         }
-        this->predictionTimer_->start(1000);
+        if (!this->predictionTimer_->isActive())
+        {
+            this->predictionTimer_->start(1000);
+        }
+    }
+    else
+    {
+        this->remainingSeconds_ = 0;
+        if (this->predictionTimer_)
+        {
+            this->predictionTimer_->stop();
+        }
+    }
 
-        this->recreateStickyMessage();
+    if (transition)
+    {
+        this->announcePredictionInChat();
+    }
+    this->updatePredictionBanner();
 
-        this->messageAppendedConnection_ = channel->messageAppended.connect([this](MessagePtr &msg, auto) {
-            if (msg != this->activePredictionMessage_)
+    if (status == "ended")
+    {
+        // Keep the result visible for a while, then clear — unless a newer
+        // prediction has replaced it in the meantime.
+        QTimer::singleShot(30000, [this, title] {
+            if (this->predictionStatus_ == "ended" &&
+                this->predictionTitle_ == title)
             {
-                if (!this->recreateScheduled_)
-                {
-                    this->recreateScheduled_ = true;
-                    QTimer::singleShot(0, [this] {
-                        this->recreateScheduled_ = false;
-                        this->recreateStickyMessage();
-                    });
-                }
+                this->clearPrediction();
             }
-        });
-    }
-    else if (status == "locked")
-    {
-        this->remainingSeconds_ = 0;
-        if (this->predictionTimer_)
-        {
-            this->predictionTimer_->stop();
-        }
-        this->recreateStickyMessage();
-    }
-    else if (status == "ended")
-    {
-        this->remainingSeconds_ = 0;
-        if (this->predictionTimer_)
-        {
-            this->predictionTimer_->stop();
-        }
-        this->recreateStickyMessage();
-
-        QTimer::singleShot(30000, [this] {
-            this->clearStickyMessage();
         });
     }
 }
@@ -632,7 +661,7 @@ void NativeMessagingServer::onPredictionTimerTick()
     if (this->remainingSeconds_ > 0)
     {
         this->remainingSeconds_--;
-        this->recreateStickyMessage();
+        this->updatePredictionBanner();
     }
     else
     {
@@ -640,29 +669,12 @@ void NativeMessagingServer::onPredictionTimerTick()
         {
             this->predictionTimer_->stop();
         }
+        this->updatePredictionBanner();
     }
 }
 
-void NativeMessagingServer::recreateStickyMessage()
+QString NativeMessagingServer::composePredictionText() const
 {
-    assertInGuiThread();
-    if (!this->activeChannel_)
-    {
-        return;
-    }
-
-    if (this->activePredictionMessage_)
-    {
-        auto emptyMsg = std::make_shared<Message>();
-        this->activeChannel_->replaceMessage(this->activePredictionMessage_, emptyMsg);
-        this->activePredictionMessage_.reset();
-    }
-
-    if (this->predictionStatus_ == "expired")
-    {
-        return;
-    }
-
     QStringList optionTexts;
     for (const auto &val : this->predictionOptions_)
     {
@@ -670,58 +682,96 @@ void NativeMessagingServer::recreateStickyMessage()
     }
     QString optionsStr = optionTexts.join(", ");
 
-    QString text;
     if (this->predictionStatus_ == "started")
     {
         if (this->remainingSeconds_ > 0)
         {
             int mins = this->remainingSeconds_ / 60;
             int secs = this->remainingSeconds_ % 60;
-            text = QString("Prediction: %1 | Options: %2 (%3:%4 remaining)")
-                       .arg(this->predictionTitle_, optionsStr)
-                       .arg(mins)
-                       .arg(secs, 2, 10, QChar('0'));
+            return QString("Prediction: %1 | %2 — %3:%4 left")
+                .arg(this->predictionTitle_, optionsStr)
+                .arg(mins)
+                .arg(secs, 2, 10, QChar('0'));
         }
-        else
-        {
-            text = QString("Prediction: %1 | Options: %2 (Locking...)").arg(this->predictionTitle_, optionsStr);
-        }
+        return QString("Prediction: %1 | %2 — locking…")
+            .arg(this->predictionTitle_, optionsStr);
     }
-    else if (this->predictionStatus_ == "locked")
+    if (this->predictionStatus_ == "locked")
     {
-        text = QString("Prediction Locked: %1 | Options: %2").arg(this->predictionTitle_, optionsStr);
+        return QString("Prediction locked: %1 | %2")
+            .arg(this->predictionTitle_, optionsStr);
     }
-    else if (this->predictionStatus_ == "ended")
+    if (this->predictionStatus_ == "ended")
     {
         if (!this->predictionWinner_.isEmpty())
         {
-            text = QString("Prediction Ended: %1 | Outcome: %2").arg(this->predictionTitle_, this->predictionWinner_);
+            return QString("Prediction ended: %1 | Outcome: %2")
+                .arg(this->predictionTitle_, this->predictionWinner_);
         }
-        else
-        {
-            text = QString("Prediction Ended: %1").arg(this->predictionTitle_);
-        }
+        return QString("Prediction ended: %1").arg(this->predictionTitle_);
+    }
+    return {};
+}
+
+void NativeMessagingServer::updatePredictionBanner()
+{
+    assertInGuiThread();
+    if (!this->activeChannel_)
+    {
+        return;
+    }
+    this->activeChannel_->setPredictionState(this->composePredictionText(),
+                                             this->predictionStatus_);
+}
+
+void NativeMessagingServer::announcePredictionInChat()
+{
+    assertInGuiThread();
+    if (!this->activeChannel_)
+    {
+        return;
+    }
+
+    QString text = this->composePredictionText();
+    if (text.isEmpty())
+    {
+        return;
+    }
+
+    QColor highlight(26, 105, 255, 70);  // started — prediction blue
+    if (this->predictionStatus_ == "locked")
+    {
+        highlight = QColor(193, 125, 17, 70);  // amber
+    }
+    else if (this->predictionStatus_ == "ended")
+    {
+        highlight = QColor(0, 158, 96, 70);  // green
     }
 
     auto builder = MessageBuilder(systemMessage, text);
-    builder->highlightColor = std::make_shared<QColor>(0, 150, 0, 80);
+    builder->highlightColor = std::make_shared<QColor>(highlight);
     builder->flags.set(MessageFlag::Highlighted);
 
-    this->activePredictionMessage_ = builder.release();
-    this->activeChannel_->addMessage(this->activePredictionMessage_, MessageContext::Original);
+    this->activeChannel_->addMessage(builder.release(),
+                                     MessageContext::Original);
 }
 
-void NativeMessagingServer::clearStickyMessage()
+void NativeMessagingServer::clearPrediction()
 {
     assertInGuiThread();
-    this->predictionStatus_ = "expired";
-    if (this->activeChannel_ && this->activePredictionMessage_)
+    if (this->activeChannel_)
     {
-        auto emptyMsg = std::make_shared<Message>();
-        this->activeChannel_->replaceMessage(this->activePredictionMessage_, emptyMsg);
-        this->activePredictionMessage_.reset();
+        this->activeChannel_->setPredictionState("", "");
     }
-    this->messageAppendedConnection_ = pajlada::Signals::ScopedConnection();
+    if (this->predictionTimer_)
+    {
+        this->predictionTimer_->stop();
+    }
+    this->predictionStatus_.clear();
+    this->predictionTitle_.clear();
+    this->predictionWinner_.clear();
+    this->predictionOptions_ = QJsonArray();
+    this->remainingSeconds_ = 0;
     this->activeChannel_.reset();
 }
 
