@@ -15,9 +15,6 @@
 #include <QWindow>
 #include <QVBoxLayout>
 
-#include <atomic>
-#include <chrono>
-#include <fstream>
 #include <memory>
 
 #ifdef USEWINSDK
@@ -32,49 +29,6 @@
 #endif
 
 namespace chatterino {
-
-#ifdef USEWINSDK
-namespace {
-
-std::atomic<uint64_t> debugAttachedWindowTickCount{0};
-std::chrono::steady_clock::time_point debugAttachedWindowRateAt =
-    std::chrono::steady_clock::now();
-
-void debugLogAttachedWindowTickRate()
-{
-    const auto now = std::chrono::steady_clock::now();
-    const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                               now - debugAttachedWindowRateAt)
-                               .count();
-    if (elapsedMs < 5000)
-    {
-        return;
-    }
-
-    const auto ticks = debugAttachedWindowTickCount.exchange(0);
-    const auto ticksPerSec =
-        elapsedMs > 0 ? static_cast<int>((ticks * 1000) / elapsedMs) : 0;
-    debugAttachedWindowRateAt = now;
-
-    std::ofstream log(
-        "C:/Users/danie/Documents/antigravity/adventurous-rutherford/.cursor/debug-45a79b.log",
-        std::ios::app);
-    if (!log.is_open())
-    {
-        return;
-    }
-
-    const auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::system_clock::now().time_since_epoch())
-                        .count();
-    log << "{\"sessionId\":\"45a79b\",\"runId\":\"post-fix\",\"hypothesisId\":\"E\","
-           "\"location\":\"AttachedWindow.cpp:timer\",\"message\":\"attached window "
-           "tick rate sample\",\"data\":{\"ticksPerSec\":"
-        << ticksPerSec << ",\"intervalMs\":16},\"timestamp\":" << ts << "}\n";
-}
-
-}  // namespace
-#endif
 
 #ifdef USEWINSDK
 static thread_local std::vector<HWND> taskbarHwnds;
@@ -244,10 +198,6 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
     // FAST TIMER - used to resize/reorder windows (16ms ~= 60fps; 1ms pegged CPU)
     this->timer_.setInterval(16);
     QObject::connect(&this->timer_, &QTimer::timeout, [this, attached] {
-        // #region agent log
-        debugAttachedWindowTickCount.fetch_add(1);
-        debugLogAttachedWindowTickRate();
-        // #endregion
         // check process id
         if (!this->validProcessName_)
         {

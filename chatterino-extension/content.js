@@ -634,6 +634,128 @@
     return match ? match[1] : '';
   }
 
+  const PINNED_MESSAGE_BODY_SELECTORS = [
+    '[data-a-target="chat-line-message-body"]',
+    '[data-test-selector="message-text"]',
+    '[data-test-selector="chat-message-text"]',
+    '[class*="chat-line__message"]',
+    '[class*="message-body"]'
+  ];
+
+  const PINNED_BLOCK_TAGS = new Set([
+    'p',
+    'div',
+    'li',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'blockquote'
+  ]);
+
+  function findPinnedMessageBody(root) {
+    if (!root) {
+      return null;
+    }
+    for (const selector of PINNED_MESSAGE_BODY_SELECTORS) {
+      const el = root.querySelector(selector);
+      if (el) {
+        return el;
+      }
+    }
+    return (
+      root.querySelector('[class*="message"]') ||
+      root.querySelector('[class*="text"]') ||
+      root.querySelector('[class*="body"]') ||
+      root
+    );
+  }
+
+  function scrapeTextWithNewlines(node) {
+    if (!node) {
+      return '';
+    }
+    const parts = [];
+    const walk = (el) => {
+      if (el.nodeType === Node.TEXT_NODE) {
+        parts.push(el.textContent);
+        return;
+      }
+      if (el.nodeType !== Node.ELEMENT_NODE) {
+        return;
+      }
+      const tag = el.tagName?.toLowerCase();
+      if (tag === 'br') {
+        parts.push('\n');
+        return;
+      }
+      if (PINNED_BLOCK_TAGS.has(tag) && parts.length > 0 && !parts[parts.length - 1].endsWith('\n')) {
+        parts.push('\n');
+      }
+      for (const child of el.childNodes) {
+        walk(child);
+      }
+      if (PINNED_BLOCK_TAGS.has(tag)) {
+        parts.push('\n');
+      }
+    };
+    walk(node);
+    return parts.join('');
+  }
+
+  function formatPinnedAnnouncementText(raw) {
+    const lines = String(raw || '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/✕/g, '')
+      .replace(/\b(dismiss|unpin|pinned message)\b/gi, '')
+      .split('\n')
+      .map((line) => line.replace(/[^\S\n]+/g, ' ').trim());
+
+    const compacted = [];
+    let lastWasEmpty = false;
+    for (const line of lines) {
+      const empty = line.length === 0;
+      if (empty && lastWasEmpty) {
+        continue;
+      }
+      compacted.push(line);
+      lastWasEmpty = empty;
+    }
+    while (compacted.length > 0 && compacted[0] === '') {
+      compacted.shift();
+    }
+    while (compacted.length > 0 && compacted[compacted.length - 1] === '') {
+      compacted.pop();
+    }
+
+    return compacted
+      .join('\n')
+      .replace(/([.!?])([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1 $2')
+      .replace(/([,;:])([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1 $2')
+      .trim();
+  }
+
+  function scrapePinnedMessageText(root) {
+    const messageBody = findPinnedMessageBody(root);
+    if (!messageBody) {
+      return '';
+    }
+
+    let raw = '';
+    try {
+      const rect = messageBody.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0 && messageBody.innerText) {
+        raw = messageBody.innerText;
+      }
+    } catch (_) {
+      // innerText unavailable — fall back to DOM walk
+    }
+    if (!raw) {
+      raw = scrapeTextWithNewlines(messageBody);
+    }
+    return formatPinnedAnnouncementText(raw);
+  }
+
   function handlePinnedMessages(channelName) {
     let pinnedBanner = null;
     for (const selector of PINNED_SELECTORS) {
@@ -643,18 +765,7 @@
       }
     }
 
-    let pinnedText = '';
-    if (pinnedBanner) {
-      const textEl =
-        pinnedBanner.querySelector('[class*="message"]') ||
-        pinnedBanner.querySelector('[class*="text"]') ||
-        pinnedBanner.querySelector('[class*="body"]');
-      pinnedText = (textEl ? textEl.textContent : pinnedBanner.textContent)
-        .replace(/✕/g, '')
-        .replace(/\b(dismiss|unpin|pinned message)\b/gi, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
+    const pinnedText = pinnedBanner ? scrapePinnedMessageText(pinnedBanner) : '';
 
     if (!channelName) {
       return;

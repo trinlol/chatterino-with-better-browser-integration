@@ -3,8 +3,52 @@
 #include "common/Channel.hpp"
 
 #include <QPainter>
+#include <QRegularExpression>
 
 namespace chatterino {
+
+namespace {
+
+QString formatPinnedAnnouncementText(QString text)
+{
+    text.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    text.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+
+    static const QRegularExpression sentenceSpace(
+        QStringLiteral(R"((?<=[.!?])(?=[A-Za-z]))"));
+    text.replace(sentenceSpace, QStringLiteral(" "));
+
+    static const QRegularExpression clauseSpace(
+        QStringLiteral(R"((?<=[,;:])(?=[A-Za-z]))"));
+    text.replace(clauseSpace, QStringLiteral(" "));
+
+    QStringList compacted;
+    bool lastWasEmpty = false;
+    for (QString line : text.split(QLatin1Char('\n'), Qt::KeepEmptyParts))
+    {
+        line = line.simplified();
+        const bool empty = line.isEmpty();
+        if (empty && lastWasEmpty)
+        {
+            continue;
+        }
+        compacted.append(line);
+        lastWasEmpty = empty;
+    }
+
+    while (!compacted.isEmpty() && compacted.first().isEmpty())
+    {
+        compacted.removeFirst();
+    }
+    while (!compacted.isEmpty() && compacted.last().isEmpty())
+    {
+        compacted.removeLast();
+    }
+
+    return compacted.join(QStringLiteral("\n"));
+}
+
+}  // namespace
 
 PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
     : BaseWidget(parent)
@@ -15,6 +59,7 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
 
     this->textLabel_ = new QLabel(this);
     this->textLabel_->setWordWrap(true);
+    this->textLabel_->setTextFormat(Qt::PlainText);
     this->textLabel_->setStyleSheet("color: #ffffff; font-weight: 600; font-size: 12px;");
 
     this->closeButton_ = new QPushButton(this);
@@ -70,7 +115,7 @@ void PinnedMessageWidget::updateState()
     }
     else
     {
-        this->textLabel_->setText(text);
+        this->textLabel_->setText(formatPinnedAnnouncementText(text));
         this->show();
     }
 }
