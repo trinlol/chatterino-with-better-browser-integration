@@ -1,0 +1,26 @@
+{
+  "name": "adventurous-rutherford",
+  "version": "1.0.0",
+  "description": "![chatterinoLogo](https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png)",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trinlol/chatterino-with-better-browser-integration.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/trinlol/chatterino-with-better-browser-integration/issues"
+  },
+  "homepage": "https://github.com/trinlol/chatterino-with-better-browser-integration#readme"
+}

@@ -136,6 +136,14 @@
     if (!nativeBtn) {
       return;
     }
+    intentionalRewardDialogOpen = true;
+    const clearIntentional = setInterval(() => {
+      if (!findNativeRewardDialog()) {
+        intentionalRewardDialogOpen = false;
+        clearInterval(clearIntentional);
+      }
+    }, 250);
+    setTimeout(() => clearInterval(clearIntentional), 120000);
     // Programmatic click bubbles through the React root, so Twitch's own
     // handler opens/closes the reward center even if the button is hidden.
     nativeBtn.click();
@@ -228,6 +236,9 @@
   }
 
   let rewardDialogWatchId = null;
+  let intentionalRewardDialogOpen = false;
+  let lastAutoClaimAt = 0;
+  const AUTO_CLAIM_MIN_INTERVAL_MS = 3000;
 
   function findNativeRewardDialog() {
     return (
@@ -314,8 +325,55 @@
     }
   }
 
+  function dismissNativeRewardDialog() {
+    const dialog = findNativeRewardDialog();
+    if (!dialog) {
+      return false;
+    }
+    stopRewardDialogWatcher();
+    dialog.classList.remove('chatterino-native-reward-dialog');
+    const closeBtn =
+      dialog.querySelector('button[aria-label="Close"]') ||
+      dialog.querySelector('button[aria-label="Back"]') ||
+      dialog.querySelector('[data-a-target="close-button"]') ||
+      dialog.querySelector('[data-a-target="cancel-button"]');
+    if (closeBtn) {
+      closeBtn.click();
+      return true;
+    }
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })
+    );
+    return true;
+  }
+
+  function scheduleDismissUnintendedRewardDialog() {
+    if (intentionalRewardDialogOpen) {
+      return;
+    }
+    const attempt = (triesLeft) => {
+      if (intentionalRewardDialogOpen || !findNativeRewardDialog()) {
+        return;
+      }
+      dismissNativeRewardDialog();
+      if (triesLeft > 0 && findNativeRewardDialog()) {
+        requestAnimationFrame(() => attempt(triesLeft - 1));
+      }
+    };
+    requestAnimationFrame(() => attempt(3));
+  }
+
+  function findClaimBonusButton() {
+    return (
+      document.querySelector('button[aria-label="Claim Bonus"]') ||
+      document.querySelector('.claimable-bonus__icon')?.closest('button')
+    );
+  }
+
   function resetChannelScopedUi() {
     gqlState = null;
+    intentionalRewardDialogOpen = false;
+    lastAutoClaimAt = 0;
     stopRewardDialogWatcher();
     removePointsReplica();
     document.getElementById('chatterino-points-fallback')?.remove();
@@ -536,13 +594,32 @@
     if (!autoClaimEnabled) {
       return;
     }
-    const claimButton =
-      document.querySelector('button[aria-label="Claim Bonus"]') ||
-      document.querySelector('.claimable-bonus__icon')?.closest('button');
+    // GQL is authoritative once we have it — stale DOM can keep a claim
+    // button around briefly and re-trigger clicks every sync cycle.
+    if (gqlState?.channelPoints?.claimAvailable === false) {
+      return;
+    }
+
+    const claimAvailable = Boolean(gqlState?.channelPoints?.claimAvailable);
+    const claimButton = findClaimBonusButton();
+    if (!claimButton && !claimAvailable) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastAutoClaimAt < AUTO_CLAIM_MIN_INTERVAL_MS) {
+      return;
+    }
+    lastAutoClaimAt = now;
+
     if (claimButton) {
+      // Claim bonus lives on the channel-points control; programmatic
+      // .click() often toggles the reward menu open as a side effect.
       claimButton.click();
-    } else if (gqlState?.channelPoints?.claimAvailable) {
+      scheduleDismissUnintendedRewardDialog();
+    } else if (claimAvailable) {
       window.dispatchEvent(new CustomEvent('chatterino-companion-claim-request'));
+      scheduleDismissUnintendedRewardDialog();
     }
   }
 

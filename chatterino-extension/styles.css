@@ -62,12 +62,13 @@ html.chatterino-companion-active [data-a-target="chat-line-message-container"] {
   align-items: center !important;
   flex-shrink: 0 !important;
   cursor: pointer !important;
+  pointer-events: auto !important;
 }
 
 #chatterino-points-replica [data-test-selector="community-points-summary"],
 #chatterino-points-replica [data-a-target="community-points-summary"] {
   visibility: visible !important;
-  pointer-events: auto !important;
+  pointer-events: none !important;
 }
 
 /* Visually hide the original points button while the replica is shown.
