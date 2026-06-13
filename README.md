@@ -74,7 +74,7 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 
 ## 📋 Todo
 
-- [✅] Fix text spacing on pinned announcements
+- [ ] Fix text spacing on pinned announcements
 - [ ] Add in-chat channel point messages (for message-based redemptions)
 - [ ] Theme presets
 - [ ] Usercard — show user's badges, chat message amount *(TBD)*
