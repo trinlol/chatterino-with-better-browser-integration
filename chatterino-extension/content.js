@@ -237,6 +237,7 @@
 
   let rewardDialogWatchId = null;
   let intentionalRewardDialogOpen = false;
+  let unintendedDismissTimer = null;
   let lastAutoClaimAt = 0;
   const AUTO_CLAIM_MIN_INTERVAL_MS = 3000;
 
@@ -347,27 +348,39 @@
     return true;
   }
 
+  function stopUnintendedDismissWatcher() {
+    if (unintendedDismissTimer) {
+      clearInterval(unintendedDismissTimer);
+      unintendedDismissTimer = null;
+    }
+  }
+
   function scheduleDismissUnintendedRewardDialog() {
     if (intentionalRewardDialogOpen) {
       return;
     }
-    const attempt = (triesLeft) => {
-      if (intentionalRewardDialogOpen || !findNativeRewardDialog()) {
+    stopUnintendedDismissWatcher();
+
+    let attempts = 0;
+    const maxAttempts = 40;
+    unintendedDismissTimer = setInterval(() => {
+      attempts += 1;
+      if (intentionalRewardDialogOpen) {
+        stopUnintendedDismissWatcher();
+        return;
+      }
+      const dialog = findNativeRewardDialog();
+      if (!dialog) {
+        if (attempts >= maxAttempts) {
+          stopUnintendedDismissWatcher();
+        }
         return;
       }
       dismissNativeRewardDialog();
-      if (triesLeft > 0 && findNativeRewardDialog()) {
-        requestAnimationFrame(() => attempt(triesLeft - 1));
+      if (!findNativeRewardDialog() || attempts >= maxAttempts) {
+        stopUnintendedDismissWatcher();
       }
-    };
-    requestAnimationFrame(() => attempt(3));
-  }
-
-  function findClaimBonusButton() {
-    return (
-      document.querySelector('button[aria-label="Claim Bonus"]') ||
-      document.querySelector('.claimable-bonus__icon')?.closest('button')
-    );
+    }, 100);
   }
 
   function resetChannelScopedUi() {
@@ -375,6 +388,7 @@
     intentionalRewardDialogOpen = false;
     lastAutoClaimAt = 0;
     stopRewardDialogWatcher();
+    stopUnintendedDismissWatcher();
     removePointsReplica();
     document.getElementById('chatterino-points-fallback')?.remove();
     findNativeRewardDialog()?.classList.remove('chatterino-native-reward-dialog');
@@ -594,15 +608,10 @@
     if (!autoClaimEnabled) {
       return;
     }
-    // GQL is authoritative once we have it — stale DOM can keep a claim
-    // button around briefly and re-trigger clicks every sync cycle.
-    if (gqlState?.channelPoints?.claimAvailable === false) {
-      return;
-    }
-
-    const claimAvailable = Boolean(gqlState?.channelPoints?.claimAvailable);
-    const claimButton = findClaimBonusButton();
-    if (!claimButton && !claimAvailable) {
+    // Only claim when GQL confirms a bonus is available. Stale DOM buttons or
+    // missing GQL state must not trigger programmatic clicks — those toggle
+    // the reward menu open as a side effect.
+    if (gqlState?.channelPoints?.claimAvailable !== true) {
       return;
     }
 
@@ -612,15 +621,7 @@
     }
     lastAutoClaimAt = now;
 
-    if (claimButton) {
-      // Claim bonus lives on the channel-points control; programmatic
-      // .click() often toggles the reward menu open as a side effect.
-      claimButton.click();
-      scheduleDismissUnintendedRewardDialog();
-    } else if (claimAvailable) {
-      window.dispatchEvent(new CustomEvent('chatterino-companion-claim-request'));
-      scheduleDismissUnintendedRewardDialog();
-    }
+    window.dispatchEvent(new CustomEvent('chatterino-companion-claim-request'));
   }
 
   function scrapePointsText(pointsSummary) {
@@ -1116,6 +1117,10 @@
   window.addEventListener('chatterino-companion-gql', (event) => {
     gqlState = event.detail;
     scheduleSync();
+  });
+
+  window.addEventListener('chatterino-companion-dismiss-reward-dialog', () => {
+    scheduleDismissUnintendedRewardDialog();
   });
 
   syncIntervalId = setInterval(resetFingerprints, 10000);

@@ -1,10 +1,24 @@
 (function () {
   'use strict';
 
+  const CLAIM_COMMUNITY_POINTS = {
+    operationName: 'ClaimCommunityPoints',
+    extensions: {
+      persistedQuery: {
+        version: 1,
+        sha256Hash: '46aaeebe02c99afdf4fc97c7c0cba964124bf6b0af229395f1f6d1feed05b3d0'
+      }
+    }
+  };
+
+  let gqlClientId = 'kimne78zx3cx6dzkoethbq4z55auq1';
+  let claimInFlight = false;
+
   const state = {
     channelPoints: {
       balance: null,
       claimAvailable: false,
+      claimId: null,
       channelId: null,
       channelLogin: null
     },
@@ -36,6 +50,7 @@
     state.channelPoints = {
       balance: null,
       claimAvailable: false,
+      claimId: null,
       channelId: null,
       channelLogin: channelLogin || null
     };
@@ -52,6 +67,25 @@
       return !state.channelPoints.channelLogin || state.channelPoints.channelLogin === current;
     }
     return channelLogin.toLowerCase() === current;
+  }
+
+  function applyAvailableClaim(availableClaim, channelLogin) {
+    if (!shouldApplyPointsForChannel(channelLogin)) {
+      return;
+    }
+    if (availableClaim == null) {
+      state.channelPoints.claimAvailable = false;
+      state.channelPoints.claimId = null;
+      return;
+    }
+    if (typeof availableClaim === 'object') {
+      state.channelPoints.claimAvailable = true;
+      if (availableClaim.id) {
+        state.channelPoints.claimId = availableClaim.id;
+      }
+      return;
+    }
+    state.channelPoints.claimAvailable = Boolean(availableClaim);
   }
 
   function formatBalance(value) {
@@ -138,8 +172,10 @@
           if (cp.balance != null) {
             state.channelPoints.balance = formatBalance(cp.balance);
           }
-          if (cp.availableClaim != null || cp.claimAvailable != null) {
-            state.channelPoints.claimAvailable = Boolean(cp.availableClaim ?? cp.claimAvailable);
+          if (cp.availableClaim != null) {
+            applyAvailableClaim(cp.availableClaim, responseChannelLogin || state.channelPoints.channelLogin);
+          } else if (cp.claimAvailable != null) {
+            applyAvailableClaim(cp.claimAvailable, responseChannelLogin || state.channelPoints.channelLogin);
           }
         }
       }
@@ -150,7 +186,7 @@
         shouldApplyPointsForChannel(responseChannelLogin || state.channelPoints.channelLogin)
       ) {
         state.channelPoints.balance = formatBalance(obj.balance);
-        state.channelPoints.claimAvailable = Boolean(obj.claimAvailable ?? obj.availableClaim);
+        applyAvailableClaim(obj.availableClaim ?? obj.claimAvailable, responseChannelLogin || state.channelPoints.channelLogin);
       }
 
       if (obj.channel != null && typeof obj.channel === 'object') {
@@ -166,6 +202,12 @@
         }
         if (obj.channel.communityPoints?.balance != null) {
           state.channelPoints.balance = formatBalance(obj.channel.communityPoints.balance);
+        }
+        if (obj.channel.communityPoints?.availableClaim != null) {
+          applyAvailableClaim(
+            obj.channel.communityPoints.availableClaim,
+            obj.channel.login?.toLowerCase?.() || channelLogin
+          );
         }
       }
 
@@ -196,6 +238,7 @@
           state.channelPoints.balance = formatBalance(claim.balance);
         }
         state.channelPoints.claimAvailable = false;
+        state.channelPoints.claimId = null;
       }
 
       if (Array.isArray(obj.customRewards)) {
@@ -246,8 +289,89 @@
     }
   }
 
+  function captureGqlClientId(headers) {
+    if (!headers) {
+      return;
+    }
+    if (headers instanceof Headers) {
+      const clientId = headers.get('Client-Id') || headers.get('client-id');
+      if (clientId) {
+        gqlClientId = clientId;
+      }
+      return;
+    }
+    const clientId = headers['Client-Id'] || headers['client-id'];
+    if (clientId) {
+      gqlClientId = clientId;
+    }
+  }
+
+  async function claimViaGql(channelId, claimId) {
+    if (!channelId || !claimId || claimInFlight) {
+      return false;
+    }
+    claimInFlight = true;
+    try {
+      const response = await fetch('https://gql.twitch.tv/gql', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'text/plain;charset=UTF-8',
+          'Client-Id': gqlClientId
+        },
+        body: JSON.stringify({
+          ...CLAIM_COMMUNITY_POINTS,
+          variables: {
+            input: {
+              channelID: String(channelId),
+              claimID: claimId
+            }
+          }
+        })
+      });
+      if (!response.ok) {
+        return false;
+      }
+      const body = await response.json();
+      handleGqlPayload(body);
+      const entries = Array.isArray(body) ? body : [body];
+      const claimFailed = entries.some(
+        (entry) => entry?.errors?.length || entry?.data?.claimCommunityPoints?.error
+      );
+      if (claimFailed) {
+        return false;
+      }
+      state.channelPoints.claimAvailable = false;
+      state.channelPoints.claimId = null;
+      emitUpdate();
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      claimInFlight = false;
+    }
+  }
+
+  function claimViaDomClick() {
+    const claimBtn =
+      document.querySelector('button[aria-label="Claim Bonus"]') ||
+      document.querySelector('.claimable-bonus__icon')?.closest('button');
+    if (!claimBtn) {
+      return false;
+    }
+    // DOM click toggles the reward menu open — only use when GQL claim is unavailable.
+    claimBtn.click();
+    window.dispatchEvent(new CustomEvent('chatterino-companion-dismiss-reward-dialog'));
+    return true;
+  }
+
   const originalFetch = window.fetch;
   window.fetch = async function (...args) {
+    try {
+      captureGqlClientId(args[1]?.headers);
+    } catch (_) {
+      // ignore header capture errors
+    }
     const response = await originalFetch.apply(this, args);
     try {
       const url = typeof args[0] === 'string' ? args[0] : args[0]?.url;
@@ -286,13 +410,16 @@
     getState() {
       return structuredClone(state);
     },
-    claimChannelPoints() {
-      const claimBtn =
-        document.querySelector('button[aria-label="Claim Bonus"]') ||
-        document.querySelector('.claimable-bonus__icon')?.closest('button');
-      if (claimBtn) {
-        claimBtn.click();
-        return true;
+    async claimChannelPoints() {
+      const { channelId, claimId, claimAvailable } = state.channelPoints;
+      if (claimAvailable && channelId && claimId) {
+        const claimed = await claimViaGql(channelId, claimId);
+        if (claimed) {
+          return true;
+        }
+      }
+      if (claimAvailable) {
+        return claimViaDomClick();
       }
       return false;
     },
@@ -304,7 +431,7 @@
   };
 
   window.addEventListener('chatterino-companion-claim-request', () => {
-    window.__chatterinoCompanionGql.claimChannelPoints();
+    void window.__chatterinoCompanionGql.claimChannelPoints();
   });
 
   window.addEventListener('chatterino-companion-channel-change', (event) => {
