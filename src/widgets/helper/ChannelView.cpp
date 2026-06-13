@@ -1654,6 +1654,7 @@ void ChannelView::drawMessages(QPainter &painter, const QRect &area)
             (fmod(this->scrollBar_->getRelativeCurrentValue(), 1))),
         .messageIndex = start,
         .isLastReadMessage = false,
+        .hostWidget = this,
 
     };
     bool showLastMessageIndicator = getSettings()->showLastMessageIndicator;

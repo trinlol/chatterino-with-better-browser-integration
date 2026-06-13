@@ -3,8 +3,8 @@
 #include "widgets/BaseWidget.hpp"
 
 #include <QHBoxLayout>
-#include <QLabel>
 #include <QPushButton>
+#include <QTextBrowser>
 
 #include <memory>
 
@@ -24,13 +24,15 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
     void themeChangedEvent() override;
 
 private:
     void updateState();
+    void updateTextLayout();
 
     ChannelPtr channel_;
-    QLabel *textLabel_ = nullptr;
+    QTextBrowser *textBrowser_ = nullptr;
     QPushButton *closeButton_ = nullptr;
     pajlada::Signals::ScopedConnection channelConnection_;
 };

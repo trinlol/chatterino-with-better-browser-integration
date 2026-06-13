@@ -12,9 +12,54 @@
 #include "singletons/Settings.hpp"
 #include "util/ChannelHelpers.hpp"
 
+#include <QRegularExpression>
+
 namespace {
 
 constexpr uint8_t MAX_RECURSION = 64;
+
+bool looksLikeSubscriptionSystemMessage(const QString &text)
+{
+    static const QRegularExpression patterns[] = {
+        QRegularExpression(
+            QStringLiteral(
+                R"(\bgifted\s+(?:\d+\s+months?\s+of\s+(?:a\s+)?)?tier\s+\d)"),
+            QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(
+            QStringLiteral(R"(\bgifted\s+a\s+tier\s+\d)"),
+            QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(
+            QStringLiteral(R"(\bis\s+gifting\s+\d+)"),
+            QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(
+            QStringLiteral(R"(\banonymous\s+user\s+gifted)"),
+            QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(
+            QStringLiteral(R"(\bjust\s+subscribed\b)"),
+            QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(
+            QStringLiteral(R"(\bhas\s+subscribed\b)"),
+            QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(
+            QStringLiteral(R"(\bsubscribed\s+at\s+tier\b)"),
+            QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(
+            QStringLiteral(R"(\bsubscribed\s+with\s+a\s+tier\b)"),
+            QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(
+            QStringLiteral(R"(\bgift\s+sub\b)"),
+            QRegularExpression::CaseInsensitiveOption),
+    };
+
+    for (const auto &pattern : patterns)
+    {
+        if (pattern.match(text).hasMatch())
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 struct RecursionGuard {
     constexpr RecursionGuard(uint8_t *count) noexcept
@@ -567,7 +612,13 @@ Channel::Type IndirectChannel::getType() const
 
 void Channel::setPinnedMessageText(const QString &text)
 {
-    if (!text.isEmpty() && text == this->dismissedPinnedMessageText_)
+    QString pinnedText = text;
+    if (!pinnedText.isEmpty() && looksLikeSubscriptionSystemMessage(pinnedText))
+    {
+        pinnedText.clear();
+    }
+
+    if (!pinnedText.isEmpty() && pinnedText == this->dismissedPinnedMessageText_)
     {
         if (!this->pinnedMessageText_.isEmpty())
         {
@@ -577,7 +628,7 @@ void Channel::setPinnedMessageText(const QString &text)
         return;
     }
 
-    if (text.isEmpty())
+    if (pinnedText.isEmpty())
     {
         this->dismissedPinnedMessageText_.clear();
     }
@@ -586,9 +637,9 @@ void Channel::setPinnedMessageText(const QString &text)
         this->dismissedPinnedMessageText_.clear();
     }
 
-    if (this->pinnedMessageText_ != text)
+    if (this->pinnedMessageText_ != pinnedText)
     {
-        this->pinnedMessageText_ = text;
+        this->pinnedMessageText_ = pinnedText;
         this->pinnedMessageChanged.invoke();
     }
 }

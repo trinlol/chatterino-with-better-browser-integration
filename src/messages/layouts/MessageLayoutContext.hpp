@@ -8,6 +8,7 @@
 
 #include <QColor>
 #include <QPainter>
+#include <QWidget>
 
 namespace pajlada::Signals {
 class SignalHolder;
@@ -19,6 +20,24 @@ class ColorProvider;
 class Theme;
 class Settings;
 struct Selection;
+
+/// Tracks the widget hosting the current message paint pass so overlay
+/// decorations (e.g. emote-popup favourite stars) can resolve popup context
+/// even when emotes are rasterized into an off-screen buffer.
+class PaintHostScope
+{
+public:
+    explicit PaintHostScope(QWidget *host);
+    ~PaintHostScope();
+
+    PaintHostScope(const PaintHostScope &) = delete;
+    PaintHostScope &operator=(const PaintHostScope &) = delete;
+
+    static QWidget *current();
+
+private:
+    QWidget *previousHost_ = nullptr;
+};
 
 // TODO: Figure out if this could be a subset of Theme instead (e.g. Theme::MessageColors)
 struct MessageColors {
@@ -90,6 +109,9 @@ struct MessagePaintContext {
     size_t messageIndex{};
 
     bool isLastReadMessage{};
+
+    /// ChannelView (or similar) driving this paint pass; used for emote-popup UI.
+    QWidget *hostWidget{};
 };
 
 struct MessageLayoutContext {

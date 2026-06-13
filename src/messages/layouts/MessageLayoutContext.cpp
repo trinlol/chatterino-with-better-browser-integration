@@ -7,9 +7,33 @@
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 
+#include <QWidget>
+
 #include <algorithm>
 
+namespace {
+
+thread_local QWidget *currentPaintHost = nullptr;
+
+}  // namespace
+
 namespace chatterino {
+
+PaintHostScope::PaintHostScope(QWidget *host)
+    : previousHost_(currentPaintHost)
+{
+    currentPaintHost = host;
+}
+
+PaintHostScope::~PaintHostScope()
+{
+    currentPaintHost = this->previousHost_;
+}
+
+QWidget *PaintHostScope::current()
+{
+    return currentPaintHost;
+}
 
 void MessageColors::applyTheme(Theme *theme, bool isOverlay,
                                int backgroundOpacity)

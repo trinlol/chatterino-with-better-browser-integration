@@ -226,6 +226,7 @@ void MessageLayout::actuallyLayout(const MessageLayoutContext &ctx)
 MessagePaintResult MessageLayout::paint(const MessagePaintContext &ctx)
 {
     MessagePaintResult result;
+    PaintHostScope paintHostScope(ctx.hostWidget);
 
     QPixmap *pixmap = this->ensureBuffer(ctx.painter, ctx.canvasWidth,
                                          ctx.messageColors.hasTransparency);

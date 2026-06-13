@@ -18,6 +18,27 @@
     '.community-highlight'
   ];
 
+  // Twitch community highlights include gift subs/resubs — those already arrive
+  // in Chatterino via IRC USERNOTICE and must not fill the announcement banner.
+  const SUBSCRIPTION_HIGHLIGHT_PATTERNS = [
+    /\bgifted\s+(?:\d+\s+months?\s+of\s+(?:a\s+)?)?tier\s+\d/i,
+    /\bgifted\s+a\s+tier\s+\d/i,
+    /\bgifted\s+\d+\s+tier\s+\d/i,
+    /\bis\s+gifting\s+\d+/i,
+    /\banonymous\s+user\s+gifted/i,
+    /\ban\s+anonymous\s+user\s+gifted/i,
+    /\bjust\s+subscribed\b/i,
+    /\bhas\s+subscribed\b/i,
+    /\bsubscribed\s+at\s+tier\b/i,
+    /\bsubscribed\s+with\s+a\s+tier\b/i,
+    /\bsubscribed\s+for\s+\d+\s+months/i,
+    /\bresubscribed\b/i,
+    /\bgift\s+sub\b/i,
+    /\bprime\s+sub\b/i,
+    /\bcommunity\s+gift\b/i,
+    /\bsub\s+mystery\s+gift\b/i
+  ];
+
   const DOM_FAIL_THRESHOLD_MS = 2000;
   const SAFETY_POLL_MS = 2000;
 
@@ -736,6 +757,58 @@
       .trim();
   }
 
+  function isSubscriptionHighlight(element, text) {
+    if (!element) {
+      return false;
+    }
+
+    const sample = String(text || element.textContent || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (sample && SUBSCRIPTION_HIGHLIGHT_PATTERNS.some((re) => re.test(sample))) {
+      return true;
+    }
+
+    const classHint = element.className?.toString?.() || '';
+    if (/sub-?gift|subscription/i.test(classHint)) {
+      return true;
+    }
+
+    if (
+      element.querySelector(
+        '[data-a-target="sub-gift-chat-message"], [class*="sub-gift"], [class*="SubGift"]'
+      )
+    ) {
+      return true;
+    }
+
+    const aria = element.getAttribute('aria-label') || '';
+    if (
+      aria &&
+      /\b(subscription|gifted|resub)\b/i.test(aria) &&
+      !/\bannouncement\b/i.test(aria)
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function findPinnedAnnouncementElement() {
+    for (const selector of PINNED_SELECTORS) {
+      for (const el of document.querySelectorAll(selector)) {
+        if (el.closest('#chatterino-toolbar-portal')) {
+          continue;
+        }
+        if (isSubscriptionHighlight(el)) {
+          continue;
+        }
+        return el;
+      }
+    }
+    return null;
+  }
+
   function scrapePinnedMessageText(root) {
     const messageBody = findPinnedMessageBody(root);
     if (!messageBody) {
@@ -754,18 +827,15 @@
     if (!raw) {
       raw = scrapeTextWithNewlines(messageBody);
     }
-    return formatPinnedAnnouncementText(raw);
+    const formatted = formatPinnedAnnouncementText(raw);
+    if (isSubscriptionHighlight(root, formatted)) {
+      return '';
+    }
+    return formatted;
   }
 
   function handlePinnedMessages(channelName) {
-    let pinnedBanner = null;
-    for (const selector of PINNED_SELECTORS) {
-      pinnedBanner = document.querySelector(selector);
-      if (pinnedBanner) {
-        break;
-      }
-    }
-
+    const pinnedBanner = findPinnedAnnouncementElement();
     const pinnedText = pinnedBanner ? scrapePinnedMessageText(pinnedBanner) : '';
 
     if (!channelName) {

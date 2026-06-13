@@ -23,7 +23,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QWidget>
 #include <cmath>
+#include <optional>
 
 namespace {
 
@@ -42,33 +44,53 @@ namespace chatterino {
 
 namespace {
 
-void drawFavouriteStar(QPainter &painter, const QRectF &rect, MessageLayoutElement *element)
+std::optional<EmotePtr> emoteFromLayoutElement(MessageLayoutElement *element)
 {
-    auto *widget = dynamic_cast<QWidget *>(painter.device());
-    if (!widget)
+    if (element == nullptr)
+    {
+        return std::nullopt;
+    }
+
+    if (const auto *emoteElement =
+            dynamic_cast<const EmoteElement *>(&element->getCreator()))
+    {
+        return emoteElement->getEmote();
+    }
+
+    if (const auto *layeredElement =
+            dynamic_cast<const LayeredEmoteElement *>(&element->getCreator()))
+    {
+        auto emotes = layeredElement->getUniqueEmotes();
+        if (!emotes.empty())
+        {
+            return emotes.front().ptr;
+        }
+    }
+
+    return std::nullopt;
+}
+
+void drawFavouriteStar(QPainter &painter, const QRectF &rect,
+                       MessageLayoutElement *element, QWidget *hostWidget)
+{
+    if (hostWidget == nullptr)
     {
         return;
     }
 
-    auto *channelView = dynamic_cast<ChannelView *>(widget);
-    if (!channelView)
+    auto *channelView = dynamic_cast<ChannelView *>(hostWidget);
+    if (channelView == nullptr)
     {
         return;
     }
 
     auto *popup = dynamic_cast<EmotePopup *>(channelView->window());
-    if (!popup)
+    if (popup == nullptr)
     {
         return;
     }
 
-    const auto *emoteElement = dynamic_cast<const EmoteElement *>(&element->getCreator());
-    if (!emoteElement)
-    {
-        return;
-    }
-
-    auto emote = emoteElement->getEmote();
+    auto emote = emoteFromLayoutElement(element);
     if (!emote)
     {
         return;
@@ -89,7 +111,7 @@ void drawFavouriteStar(QPainter &painter, const QRectF &rect, MessageLayoutEleme
     bool isFavourited = false;
     for (const auto &val : favsArr)
     {
-        if (val.toString() == emote->name.string)
+        if (val.toString() == (*emote)->name.string)
         {
             isFavourited = true;
             break;
@@ -285,7 +307,8 @@ void ImageLayoutElement::paint(QPainter &painter,
     {
         // fourtf: make it use qreal values
         painter.drawPixmap(QRectF(this->getRect()), *pixmap, QRectF());
-        drawFavouriteStar(painter, this->getRect(), this);
+        drawFavouriteStar(painter, this->getRect(), this,
+                          PaintHostScope::current());
     }
 }
 
@@ -296,16 +319,19 @@ bool ImageLayoutElement::paintAnimated(QPainter &painter, qreal yOffset)
         return false;
     }
 
-    if (this->image_->animated())
+    if (!this->image_->animated())
     {
-        if (auto pixmap = this->image_->pixmapOrLoad())
-        {
-            auto rect = this->getRect();
-            rect.moveTop(rect.y() + yOffset);
-            painter.drawPixmap(QRectF(rect), *pixmap, QRectF());
-            drawFavouriteStar(painter, rect, this);
-            return true;
-        }
+        return false;
+    }
+
+    auto rect = this->getRect();
+    rect.moveTop(rect.y() + yOffset);
+
+    if (auto pixmap = this->image_->pixmapOrLoad())
+    {
+        painter.drawPixmap(QRectF(rect), *pixmap, QRectF());
+        drawFavouriteStar(painter, rect, this, PaintHostScope::current());
+        return true;
     }
     return false;
 }
@@ -402,6 +428,8 @@ void LayeredImageLayoutElement::paint(QPainter &painter,
             painter.drawPixmap(destRect, *pixmap, QRectF());
         }
     }
+
+    drawFavouriteStar(painter, fullRect, this, PaintHostScope::current());
 }
 
 bool LayeredImageLayoutElement::paintAnimated(QPainter &painter, qreal yOffset)
@@ -435,6 +463,11 @@ bool LayeredImageLayoutElement::paintAnimated(QPainter &painter, qreal yOffset)
                 animatedFlag = true;
             }
         }
+    }
+
+    if (animatedFlag)
+    {
+        drawFavouriteStar(painter, fullRect, this, PaintHostScope::current());
     }
     return animatedFlag;
 }
