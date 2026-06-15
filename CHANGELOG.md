@@ -2,6 +2,18 @@
 
 ## Chatterino Better Browser
 
+### v1.0.5 (2026-06-15)
+
+#### Fixed
+- User card badges moved under the profile avatar for a cleaner header layout
+- User card message history shows `dd/MM/yy` date prefixes for non-today messages
+- Older-day history loads anchor to the last message of that day
+- Log API fallbacks when `logs.zonian.dev` is unavailable (`logs.ivr.fi`)
+- Windows taskbar icon now matches the pinned shortcut when the app is running
+
+#### Also
+- Native Twitch polls appear in the extension toolbar ahead of channel points
+
 ### v1.0.4 (2026-06-14)
 
 #### Added
