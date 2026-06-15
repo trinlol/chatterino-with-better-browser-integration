@@ -11,6 +11,7 @@
 #include <QJsonObject>
 #include <QString>
 #include <QUrl>
+#include <QDate>
 
 #include <chrono>
 #include <memory>
@@ -21,6 +22,10 @@ namespace chatterino::recentmessages::detail {
 
 // Parse the IRC messages returned in JSON form into Communi messages
 std::vector<Communi::IrcMessage *> parseRecentMessages(
+    const QJsonObject &jsonRoot);
+
+// Parse user log messages from logs.zonian.dev / logs.ivr.fi JSON responses
+std::vector<Communi::IrcMessage *> parseUserLogMessages(
     const QJsonObject &jsonRoot);
 
 // Build Communi messages retrieved from the recent messages API into

@@ -59,6 +59,9 @@ void writeToCout(const QByteArray &array);
 
 }  // namespace nm::client
 
+/// Outbound messages from Chatterino GUI to the browser extension host.
+void sendToBrowserExtension(const QJsonObject &obj);
+
 class NativeMessagingServer final
 {
 public:
@@ -70,6 +73,9 @@ public:
     ~NativeMessagingServer();
 
     void start();
+
+    static NativeMessagingServer *instance();
+    static bool isBrowserAttached();
 
 private:
     class ReceiverThread : public QThread
@@ -86,6 +92,8 @@ private:
         void handleSync(const QJsonObject &root);
         void handlePrediction(const QJsonObject &root);
         void handlePinnedMessage(const QJsonObject &root);
+        void handleRewardPending(const QJsonObject &root);
+        void handleRewardClear(const QJsonObject &root);
 
         NativeMessagingServer &parent_;
     };
@@ -93,8 +101,12 @@ private:
     void syncChannels(const QJsonArray &twitchChannels);
     void updatePredictionSticky(const QJsonObject &root);
     void updatePinnedMessage(const QJsonObject &root);
+    void updateRewardPending(const QJsonObject &root);
+    void clearRewardPending(const QJsonObject &root);
 
     ReceiverThread *thread;
+    static NativeMessagingServer *instance_;
+    bool browserAttached_ = false;
 
     /// This vector contains all channels that are open the user's browser.
     /// These channels are joined to be able to switch channels more quickly.

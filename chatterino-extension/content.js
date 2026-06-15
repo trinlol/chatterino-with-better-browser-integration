@@ -49,6 +49,11 @@
     'button[aria-label*="Channel Points" i]'
   ];
 
+  const CLAIM_BONUS_SELECTORS = [
+    'button[aria-label="Claim Bonus"]',
+    'button[aria-label*="Claim Bonus" i]'
+  ];
+
   let autoClaimEnabled = true;
   let lastPredictionFingerprint = '';
   let lastPredictionTitle = '';
@@ -68,6 +73,153 @@
   let lastSyncAt = 0;
   let syncInProgress = false;
   const MIN_SYNC_INTERVAL_MS = 250;
+
+  let rewardPendingActive = false;
+
+  const NATIVE_CHAT_INPUT_SELECTORS = [
+    '[data-a-target="chat-input"]',
+    'textarea[data-a-target="chat-input"]',
+    '[data-test-selector="chat-input"]',
+    'div[data-a-target="chat-input"] [contenteditable="true"]',
+    '[contenteditable="true"][data-slate-editor="true"]',
+    'textarea[placeholder*="chat" i]'
+  ];
+
+  const NATIVE_CHAT_SEND_SELECTORS = [
+    '[data-a-target="chat-send-button"]',
+    'button[aria-label="Send Message"]',
+    'button[aria-label*="Send" i]'
+  ];
+
+  function setRewardPendingUi(active) {
+    rewardPendingActive = active;
+    document.documentElement.classList.toggle('chatterino-reward-pending', active);
+    if (active) {
+      unrestoreNativeChatInput();
+    }
+  }
+
+  function unrestoreNativeChatInput() {
+    for (const selector of NATIVE_CHAT_INPUT_SELECTORS) {
+      const input = document.querySelector(selector);
+      if (!input) {
+        continue;
+      }
+      let node = input;
+      while (node && node !== document.documentElement) {
+        node.classList.remove('chatterino-cc-restored');
+        node = node.parentElement;
+      }
+    }
+  }
+
+  function findNativeChatInput() {
+    for (const selector of NATIVE_CHAT_INPUT_SELECTORS) {
+      const el = document.querySelector(selector);
+      if (el) {
+        return el;
+      }
+    }
+    const footer = document.querySelector('[class*="chat-input"]');
+    if (footer) {
+      return footer.querySelector('[contenteditable="true"], textarea');
+    }
+    return null;
+  }
+
+  function findNativeChatSendButton() {
+    for (const selector of NATIVE_CHAT_SEND_SELECTORS) {
+      const el = document.querySelector(selector);
+      if (el && !el.disabled) {
+        return el;
+      }
+    }
+    return null;
+  }
+
+  function setNativeInputValue(input, text) {
+    if (!input) {
+      return false;
+    }
+    if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {
+      const proto =
+        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value') ||
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+      if (proto?.set) {
+        proto.set.call(input, text);
+      } else {
+        input.value = text;
+      }
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    if (input.isContentEditable) {
+      input.focus();
+      input.textContent = text;
+      input.dispatchEvent(
+        new InputEvent('input', { bubbles: true, data: text, inputType: 'insertText' })
+      );
+      return true;
+    }
+    return false;
+  }
+
+  function sendNativeChatMessage(message) {
+    const text = String(message || '').trim();
+    if (!text) {
+      return { ok: false, error: 'empty message' };
+    }
+    unrestoreNativeChatInput();
+    const input = findNativeChatInput();
+    if (!input) {
+      return { ok: false, error: 'chat input not found' };
+    }
+    input.focus();
+    if (!setNativeInputValue(input, text)) {
+      return { ok: false, error: 'failed to set input value' };
+    }
+    const sendBtn = findNativeChatSendButton();
+    if (sendBtn) {
+      sendBtn.click();
+      return { ok: true };
+    }
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })
+    );
+    input.dispatchEvent(
+      new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })
+    );
+    return { ok: true };
+  }
+
+  function forwardRewardPending(detail) {
+    const channelName = getTwitchChannelName();
+    if (!channelName) {
+      return;
+    }
+    setRewardPendingUi(true);
+    chrome.runtime.sendMessage({
+      action: 'rewardPending',
+      channel: channelName,
+      rewardId: detail?.rewardId || '',
+      title: detail?.title || '',
+      prompt: detail?.prompt || ''
+    });
+  }
+
+  function forwardRewardClear(reason) {
+    setRewardPendingUi(false);
+    const channelName = getTwitchChannelName();
+    if (!channelName) {
+      return;
+    }
+    chrome.runtime.sendMessage({
+      action: 'rewardClear',
+      channel: channelName,
+      reason: reason || ''
+    });
+  }
 
   function scheduleSync() {
     syncPending = true;
@@ -259,8 +411,11 @@
   let rewardDialogWatchId = null;
   let intentionalRewardDialogOpen = false;
   let unintendedDismissTimer = null;
-  let lastAutoClaimAt = 0;
-  const AUTO_CLAIM_MIN_INTERVAL_MS = 3000;
+  let lastSuccessfulClaimAt = 0;
+  let claimAttemptTimer = null;
+  let claimBootstrapTimers = [];
+  const AUTO_CLAIM_MIN_INTERVAL_MS = 30000;
+  const CLAIM_BOOTSTRAP_DELAYS_MS = [0, 300, 750, 1500, 3000, 6000, 12000];
 
   function findNativeRewardDialog() {
     return (
@@ -407,12 +562,16 @@
   function resetChannelScopedUi() {
     gqlState = null;
     intentionalRewardDialogOpen = false;
-    lastAutoClaimAt = 0;
+    lastSuccessfulClaimAt = 0;
+    stopClaimBootstrap();
     stopRewardDialogWatcher();
     stopUnintendedDismissWatcher();
     removePointsReplica();
     document.getElementById('chatterino-points-fallback')?.remove();
     findNativeRewardDialog()?.classList.remove('chatterino-native-reward-dialog');
+    if (rewardPendingActive) {
+      forwardRewardClear('channel-reset');
+    }
   }
 
   function startRewardDialogWatcher(anchorEl) {
@@ -445,22 +604,22 @@
     const root = document.documentElement;
     const balance = root.getAttribute('data-cc-gql-balance');
     const claim = root.getAttribute('data-cc-gql-claim');
+    const claimId = root.getAttribute('data-cc-gql-claim-id');
     const predRaw = root.getAttribute('data-cc-gql-prediction');
     const rewardsRaw = root.getAttribute('data-cc-gql-rewards');
 
-    if (!balance && !predRaw && !rewardsRaw) {
+    if (!balance && claim == null && !claimId && !predRaw && !rewardsRaw) {
       return;
     }
 
     gqlState = gqlState || { channelPoints: {}, prediction: null, rewards: [] };
 
-    if (balance) {
-      gqlState.channelPoints = {
-        ...gqlState.channelPoints,
-        balance,
-        claimAvailable: claim === '1'
-      };
-    }
+    gqlState.channelPoints = {
+      ...gqlState.channelPoints,
+      ...(balance ? { balance } : {}),
+      ...(claim != null ? { claimAvailable: claim === '1' } : {}),
+      ...(claimId ? { claimId } : {})
+    };
 
     if (predRaw) {
       try {
@@ -625,22 +784,132 @@
     }
   }
 
+  function isClaimBonusButtonClaimable(btn) {
+    if (!btn || !btn.isConnected) {
+      return false;
+    }
+    if (btn.closest('#chatterino-toolbar-portal, #chatterino-points-replica')) {
+      return false;
+    }
+    if (btn.closest('[aria-hidden="true"]')) {
+      return false;
+    }
+    return true;
+  }
+
+  function findClaimBonusButton() {
+    const candidates = [];
+
+    for (const selector of CLAIM_BONUS_SELECTORS) {
+      for (const btn of document.querySelectorAll(selector)) {
+        if (isClaimBonusButtonClaimable(btn)) {
+          candidates.push(btn);
+        }
+      }
+    }
+
+    for (const icon of document.querySelectorAll('.claimable-bonus__icon')) {
+      const btn = icon.closest('button');
+      if (isClaimBonusButtonClaimable(btn)) {
+        candidates.push(btn);
+      }
+    }
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const rewardDialog = findNativeRewardDialog();
+    const outsideDialog = candidates.find((btn) => !rewardDialog?.contains(btn));
+    return outsideDialog || candidates[0];
+  }
+
+  function dispatchClaimClick(btn, includeSynthetic = false) {
+    btn.click();
+    if (includeSynthetic) {
+      btn.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, view: window })
+      );
+    }
+  }
+
+  function markClaimSucceeded() {
+    lastSuccessfulClaimAt = Date.now();
+  }
+
+  function verifyClaimClick(clickedButton, attempt) {
+    const stillClaimable =
+      clickedButton.isConnected && isClaimBonusButtonClaimable(clickedButton);
+    if (!stillClaimable) {
+      markClaimSucceeded();
+      return;
+    }
+    if (attempt >= 10) {
+      return;
+    }
+    const delayMs = attempt < 4 ? 250 : attempt < 7 ? 750 : 1500;
+    setTimeout(() => {
+      if (!clickedButton.isConnected || !isClaimBonusButtonClaimable(clickedButton)) {
+        markClaimSucceeded();
+        return;
+      }
+      dispatchClaimClick(clickedButton, true);
+      verifyClaimClick(clickedButton, attempt + 1);
+    }, delayMs);
+  }
+
+  function stopClaimBootstrap() {
+    for (const timerId of claimBootstrapTimers) {
+      clearTimeout(timerId);
+    }
+    claimBootstrapTimers = [];
+  }
+
+  function scheduleClaimBootstrap() {
+    stopClaimBootstrap();
+    for (const delay of CLAIM_BOOTSTRAP_DELAYS_MS) {
+      claimBootstrapTimers.push(setTimeout(() => scheduleAutoClaimAttempt(), delay));
+    }
+  }
+
+  function scheduleAutoClaimAttempt() {
+    if (claimAttemptTimer !== null) {
+      return;
+    }
+    claimAttemptTimer = setTimeout(() => {
+      claimAttemptTimer = null;
+      tryAutoClaim();
+    }, 100);
+  }
+
   function tryAutoClaim() {
     if (!autoClaimEnabled) {
       return;
     }
-    // Only claim when GQL confirms a bonus is available. Stale DOM buttons or
-    // missing GQL state must not trigger programmatic clicks — those toggle
-    // the reward menu open as a side effect.
-    if (gqlState?.channelPoints?.claimAvailable !== true) {
+
+    const claimButton = findClaimBonusButton();
+    const now = Date.now();
+    const recentlyClaimed = now - lastSuccessfulClaimAt < AUTO_CLAIM_MIN_INTERVAL_MS;
+
+    if (claimButton) {
+      if (recentlyClaimed) {
+        return;
+      }
+      dispatchClaimClick(claimButton);
+      verifyClaimClick(claimButton, 0);
       return;
     }
 
-    const now = Date.now();
-    if (now - lastAutoClaimAt < AUTO_CLAIM_MIN_INTERVAL_MS) {
+    // Fallback: GQL claim when bonus is confirmed but the button is not mounted yet.
+    if (recentlyClaimed || gqlState?.channelPoints?.claimAvailable !== true) {
       return;
     }
-    lastAutoClaimAt = now;
+    const claimId =
+      gqlState?.channelPoints?.claimId ||
+      document.documentElement.getAttribute('data-cc-gql-claim-id');
+    if (!claimId) {
+      return;
+    }
 
     window.dispatchEvent(new CustomEvent('chatterino-companion-claim-request'));
   }
@@ -707,6 +976,12 @@
         return;
       }
       const tag = el.tagName?.toLowerCase();
+      if (tag === 'a') {
+        const href = el.getAttribute('href')?.trim() || '';
+        const label = el.textContent.replace(/\s+/g, ' ').trim();
+        parts.push(href || label);
+        return;
+      }
       if (tag === 'br') {
         parts.push('\n');
         return;
@@ -725,8 +1000,30 @@
     return parts.join('');
   }
 
+  function joinWrappedUrls(text) {
+    return String(text || '')
+      .replace(/(https?:\/\/)\s*\n\s*/gi, '$1')
+      .replace(/(www\.)\s*\n\s*/gi, '$1')
+      .replace(/(https?:\/\/[^\s\n]*)\n([^\s\n]+)/gi, '$1$2');
+  }
+
+  function applySentenceSpacingOutsideUrls(text) {
+    const urlRx = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+    let result = '';
+    let last = 0;
+    let match;
+    while ((match = urlRx.exec(text)) !== null) {
+      const before = text.slice(last, match.index);
+      result += before.replace(/([.!?])([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1 $2');
+      result += match[0];
+      last = match.index + match[0].length;
+    }
+    result += text.slice(last).replace(/([.!?])([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1 $2');
+    return result;
+  }
+
   function formatPinnedAnnouncementText(raw) {
-    const lines = String(raw || '')
+    const lines = joinWrappedUrls(raw)
       .replace(/\r\n?/g, '\n')
       .replace(/✕/g, '')
       .replace(/\b(dismiss|unpin|pinned message)\b/gi, '')
@@ -750,11 +1047,7 @@
       compacted.pop();
     }
 
-    return compacted
-      .join('\n')
-      .replace(/([.!?])([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1 $2')
-      .replace(/([,;:])([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1 $2')
-      .trim();
+    return applySentenceSpacingOutsideUrls(compacted.join(' ').replace(/\s+/g, ' ')).trim();
   }
 
   function isSubscriptionHighlight(element, text) {
@@ -815,17 +1108,11 @@
       return '';
     }
 
-    let raw = '';
-    try {
-      const rect = messageBody.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0 && messageBody.innerText) {
-        raw = messageBody.innerText;
-      }
-    } catch (_) {
-      // innerText unavailable — fall back to DOM walk
-    }
+    // textContent avoids layout-wrapped line breaks inside URLs (innerText
+    // splits "https://starforgepc.com/foo" across lines when the banner is narrow).
+    let raw = messageBody.textContent.replace(/\s+/g, ' ').trim();
     if (!raw) {
-      raw = scrapeTextWithNewlines(messageBody);
+      raw = joinWrappedUrls(scrapeTextWithNewlines(messageBody));
     }
     const formatted = formatPinnedAnnouncementText(raw);
     if (isSubscriptionHighlight(root, formatted)) {
@@ -1113,12 +1400,13 @@
       window.dispatchEvent(
         new CustomEvent('chatterino-companion-channel-change', { detail: { channel: channelName } })
       );
+      scheduleClaimBootstrap();
       setTimeout(resetFingerprints, 1000);
       setTimeout(resetFingerprints, 2000);
       setTimeout(resetFingerprints, 5000);
     }
 
-    tryAutoClaim();
+    scheduleAutoClaimAttempt();
     handlePinnedMessages(channelName);
 
     const pointsSummary = findPointsSummary();
@@ -1185,12 +1473,38 @@
   });
 
   window.addEventListener('chatterino-companion-gql', (event) => {
+    const prevClaimAvailable = gqlState?.channelPoints?.claimAvailable;
     gqlState = event.detail;
+    if (gqlState?.channelPoints?.claimAvailable) {
+      scheduleAutoClaimAttempt();
+    } else if (prevClaimAvailable) {
+      markClaimSucceeded();
+    }
     scheduleSync();
   });
 
   window.addEventListener('chatterino-companion-dismiss-reward-dialog', () => {
     scheduleDismissUnintendedRewardDialog();
+  });
+
+  window.addEventListener('chatterino-companion-reward-pending', (event) => {
+    forwardRewardPending(event.detail);
+  });
+
+  window.addEventListener('chatterino-companion-reward-cancelled', (event) => {
+    forwardRewardClear(event.detail?.reason || 'cancelled');
+  });
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.action === 'sendNativeChat') {
+      const result = sendNativeChatMessage(message.message);
+      if (result.ok) {
+        forwardRewardClear('sent');
+      }
+      sendResponse(result);
+      return true;
+    }
+    return false;
   });
 
   syncIntervalId = setInterval(resetFingerprints, 10000);
@@ -1235,6 +1549,14 @@
   });
   bootstrapObserver.observe(document.documentElement, { childList: true, subtree: true });
 
+  const claimBonusObserver = new MutationObserver(() => {
+    if (findClaimBonusButton()) {
+      scheduleAutoClaimAttempt();
+    }
+  });
+  claimBonusObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+  scheduleClaimBootstrap();
   scheduleSync();
   console.log('[Chatterino Companion] Extension script active.');
 })();

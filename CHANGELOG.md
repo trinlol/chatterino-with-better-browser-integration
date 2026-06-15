@@ -1,5 +1,31 @@
 # Changelog
 
+## Chatterino Better Browser
+
+### v1.0.4 (2026-06-14)
+
+#### Added
+- User card badges shown inline above message history (Twitch, FFZ, BTTV, 7TV, Chatterino)
+- User card message history loaded from logs.zonian.dev by day (today first)
+- "Load messages from {date}" button to paginate older days, auto-skipping days with no messages
+- Live session messages merged into user card history (deduped by message ID)
+
+#### Fixed
+- Pinned announcement banner now sizes to its content instead of leaving a large empty area
+- Pinned announcement links are clickable; URLs no longer break across line wraps
+- Pinned announcement text spacing after sentence punctuation
+- Subscription and gift highlights no longer fill the pinned announcement banner
+- Favourite star overlay on static channel emotes in the input field
+- Channel points reward menu no longer opens randomly during auto-claim (extension)
+
+### v1.0.3 (2026-06-12)
+
+#### Fixed
+- Pinned announcements preserve line breaks and paragraph spacing
+- Missing spaces after sentence punctuation restored (e.g. `Hello.World` → `Hello. World`)
+- Channel points reward menu no longer opens randomly during auto-claim
+- Removed temporary overlay debug logging from release builds
+
 ## Unversioned
 
 ## 2.5.5

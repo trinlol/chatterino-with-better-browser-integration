@@ -595,6 +595,58 @@ std::optional<ChannelPointReward> TwitchChannel::channelPointReward(
     return it->second;
 }
 
+void TwitchChannel::setPendingRewardRedemption(const QString &rewardId,
+                                              const QString &title,
+                                              const QString &prompt,
+                                              int timeoutSeconds)
+{
+    assertInGuiThread();
+
+    PendingRewardRedemption pending{
+        .rewardId = rewardId,
+        .title = title,
+        .prompt = prompt,
+        .expiresAt = QDateTime::currentDateTimeUtc().addSecs(timeoutSeconds),
+    };
+    this->pendingRewardRedemption_ = std::move(pending);
+    this->pendingRewardChanged.invoke();
+}
+
+void TwitchChannel::clearPendingRewardRedemption()
+{
+    assertInGuiThread();
+
+    if (!this->pendingRewardRedemption_.has_value())
+    {
+        return;
+    }
+
+    this->pendingRewardRedemption_.reset();
+    this->pendingRewardChanged.invoke();
+}
+
+bool TwitchChannel::hasPendingRewardRedemption() const
+{
+    if (!this->pendingRewardRedemption_.has_value())
+    {
+        return false;
+    }
+
+    if (this->pendingRewardRedemption_->expiresAt <
+        QDateTime::currentDateTimeUtc())
+    {
+        return false;
+    }
+
+    return true;
+}
+
+const std::optional<TwitchChannel::PendingRewardRedemption> &
+TwitchChannel::pendingRewardRedemption() const
+{
+    return this->pendingRewardRedemption_;
+}
+
 void TwitchChannel::updateStreamStatus(
     const std::optional<HelixStream> &helixStream, bool isInitialUpdate)
 {

@@ -1,25 +1,73 @@
 #include "widgets/splits/PinnedMessageWidget.hpp"
-#include "singletons/Theme.hpp"
 #include "common/Channel.hpp"
 
-#include <QDesktopServices>
+#include <QFontMetrics>
 #include <QPainter>
 #include <QRegularExpression>
 #include <QResizeEvent>
-#include <QUrl>
+#include <QTimer>
 
 namespace chatterino {
 
 namespace {
 
+QString joinWrappedUrls(QString text)
+{
+    text.replace(
+        QRegularExpression(QStringLiteral(R"((https?://)\s*\n\s*)")),
+        QStringLiteral(R"(\1)"));
+    text.replace(
+        QRegularExpression(QStringLiteral(R"((www\.)\s*\n\s*)")),
+        QStringLiteral(R"(\1)"));
+
+    const QRegularExpression splitUrlContinuation(
+        QStringLiteral(R"((https?://[^\s\n]*)\n([^\s\n]+))"));
+    for (int i = 0; i < 8; ++i)
+    {
+        const QString before = text;
+        text.replace(splitUrlContinuation, QStringLiteral(R"(\1\2)"));
+        if (text == before)
+        {
+            break;
+        }
+    }
+
+    return text;
+}
+
+QString applySentenceSpacingOutsideUrls(QString text)
+{
+    static const QRegularExpression urlRx(
+        QStringLiteral(R"((https?://[^\s]+|www\.[^\s]+))"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression sentenceSpace(
+        QStringLiteral(R"((?<=[.!?])(?=[A-Za-z]))"));
+
+    QString result;
+    int last = 0;
+    QRegularExpressionMatchIterator it = urlRx.globalMatch(text);
+    while (it.hasNext())
+    {
+        const QRegularExpressionMatch match = it.next();
+        QString before = text.mid(last, match.capturedStart() - last);
+        before.replace(sentenceSpace, QStringLiteral(" "));
+        result += before;
+        result += match.captured();
+        last = match.capturedEnd();
+    }
+
+    QString tail = text.mid(last);
+    tail.replace(sentenceSpace, QStringLiteral(" "));
+    result += tail;
+    return result;
+}
+
 QString formatPinnedAnnouncementText(QString text)
 {
     text.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
     text.replace(QLatin1Char('\r'), QLatin1Char('\n'));
-
-    static const QRegularExpression sentenceSpace(
-        QStringLiteral(R"((?<=[.!?])(?=[A-Za-z]))"));
-    text.replace(sentenceSpace, QStringLiteral(" "));
+    text = joinWrappedUrls(text);
+    text = applySentenceSpacingOutsideUrls(text);
 
     QStringList compacted;
     bool lastWasEmpty = false;
@@ -44,7 +92,7 @@ QString formatPinnedAnnouncementText(QString text)
         compacted.removeLast();
     }
 
-    return compacted.join(QStringLiteral("\n"));
+    return compacted.join(QStringLiteral(" ")).simplified();
 }
 
 QString trimTrailingUrlPunctuation(QString *url)
@@ -105,15 +153,7 @@ QString linkifyPlainLine(const QString &line)
 QString formatPinnedAnnouncementHtml(QString text)
 {
     text = formatPinnedAnnouncementText(text);
-
-    QStringList htmlLines;
-    htmlLines.reserve(text.count(QLatin1Char('\n')) + 1);
-    for (const QString &line :
-         text.split(QLatin1Char('\n'), Qt::KeepEmptyParts))
-    {
-        htmlLines.append(linkifyPlainLine(line));
-    }
-    return htmlLines.join(QStringLiteral("<br>"));
+    return linkifyPlainLine(text);
 }
 
 }  // namespace
@@ -122,29 +162,23 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
     : BaseWidget(parent)
 {
     auto *layout = new QHBoxLayout(this);
-    layout->setContentsMargins(12, 6, 12, 6);
-    layout->setSpacing(8);
+    layout->setContentsMargins(10, 4, 8, 4);
+    layout->setSpacing(6);
+    layout->setAlignment(Qt::AlignTop);
 
-    this->textBrowser_ = new QTextBrowser(this);
-    this->textBrowser_->setOpenExternalLinks(false);
-    this->textBrowser_->setFrameShape(QFrame::NoFrame);
-    this->textBrowser_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    this->textBrowser_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    this->textBrowser_->setFocusPolicy(Qt::NoFocus);
-    this->textBrowser_->setTextInteractionFlags(Qt::TextBrowserInteraction);
-    this->textBrowser_->document()->setDocumentMargin(0);
-    this->textBrowser_->setStyleSheet(
-        "QTextBrowser { color: #ffffff; font-weight: 600; font-size: 12px; "
-        "background: transparent; border: none; }"
-        "QTextBrowser a { color: #e0c3ff; text-decoration: underline; }");
-
-    connect(this->textBrowser_, &QTextBrowser::anchorClicked, this,
-            [](const QUrl &url) {
-                if (url.isValid())
-                {
-                    QDesktopServices::openUrl(url);
-                }
-            });
+    this->textLabel_ = new QLabel(this);
+    this->textLabel_->setWordWrap(true);
+    this->textLabel_->setTextFormat(Qt::RichText);
+    this->textLabel_->setOpenExternalLinks(true);
+    this->textLabel_->setFocusPolicy(Qt::NoFocus);
+    this->textLabel_->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    this->textLabel_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    this->textLabel_->setSizePolicy(QSizePolicy::Expanding,
+                                     QSizePolicy::Preferred);
+    this->textLabel_->setStyleSheet(
+        "QLabel { color: #ffffff; font-weight: 600; font-size: 12px; "
+        "background: transparent; margin: 0; padding: 0; }"
+        "a { color: #e0c3ff; text-decoration: underline; }");
 
     this->closeButton_ = new QPushButton(this);
     this->closeButton_->setText("✕");
@@ -163,9 +197,10 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
         }
     });
 
-    layout->addWidget(this->textBrowser_, 1);
-    layout->addWidget(this->closeButton_);
+    layout->addWidget(this->textLabel_, 1, Qt::AlignTop);
+    layout->addWidget(this->closeButton_, 0, Qt::AlignTop);
     this->setLayout(layout);
+    this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
 
     this->hide();
 }
@@ -186,21 +221,47 @@ void PinnedMessageWidget::setChannel(const ChannelPtr &channel)
 
 void PinnedMessageWidget::updateTextLayout()
 {
-    if (!this->textBrowser_)
+    if (!this->textLabel_)
     {
         return;
     }
 
-    const int width = this->textBrowser_->viewport()->width();
+    const auto *boxLayout = qobject_cast<QHBoxLayout *>(this->layout());
+    const int horizontalMargins =
+        boxLayout ? boxLayout->contentsMargins().left() +
+                        boxLayout->contentsMargins().right()
+                  : 18;
+    const int verticalMargins =
+        boxLayout ? boxLayout->contentsMargins().top() +
+                        boxLayout->contentsMargins().bottom()
+                  : 8;
+    const int spacing = boxLayout ? boxLayout->spacing() : 6;
+    const int closeWidth = this->closeButton_ ? this->closeButton_->width() : 20;
+
+    int width = this->width() - horizontalMargins - spacing - closeWidth;
     if (width <= 0)
     {
+        QTimer::singleShot(0, this, [this]() {
+            this->updateTextLayout();
+        });
         return;
     }
 
-    this->textBrowser_->document()->setTextWidth(width);
-    const int height =
-        int(std::ceil(this->textBrowser_->document()->size().height()));
-    this->textBrowser_->setFixedHeight(std::max(1, height));
+    this->textLabel_->setFixedWidth(width);
+
+    const QFontMetrics fm(this->textLabel_->font());
+    const int lineHeight = fm.height();
+    const QRect bounds = fm.boundingRect(
+        QRect(0, 0, width, lineHeight * 12),
+        Qt::AlignLeft | Qt::TextWordWrap, this->plainText_);
+    this->contentHeight_ =
+        qBound(lineHeight, bounds.height(), lineHeight * 8);
+
+    this->textLabel_->setFixedHeight(this->contentHeight_);
+    const int totalHeight = this->contentHeight_ + verticalMargins;
+    this->setMinimumHeight(totalHeight);
+    this->setMaximumHeight(totalHeight);
+    this->updateGeometry();
 }
 
 void PinnedMessageWidget::updateState()
@@ -214,11 +275,17 @@ void PinnedMessageWidget::updateState()
     QString text = this->channel_->getPinnedMessageText();
     if (text.isEmpty())
     {
+        this->plainText_.clear();
+        this->contentHeight_ = 0;
+        this->setMinimumHeight(0);
+        this->setMaximumHeight(QWIDGETSIZE_MAX);
         this->hide();
     }
     else
     {
-        this->textBrowser_->setHtml(formatPinnedAnnouncementHtml(text));
+        this->plainText_ = formatPinnedAnnouncementText(text);
+        this->textLabel_->setText(
+            formatPinnedAnnouncementHtml(this->plainText_));
         this->updateTextLayout();
         this->show();
     }
@@ -230,15 +297,14 @@ void PinnedMessageWidget::resizeEvent(QResizeEvent *event)
     this->updateTextLayout();
 }
 
-void PinnedMessageWidget::paintEvent(QPaintEvent *event)
+void PinnedMessageWidget::paintEvent(QPaintEvent * /*event*/)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    // Draw the purple background (#9146ff)
     painter.fillRect(this->rect(), QColor(145, 70, 255));
-    // Draw bottom border (#772ce8)
-    painter.fillRect(QRect(0, this->height() - 1, this->width(), 1), QColor(119, 44, 232));
+    painter.fillRect(QRect(0, this->height() - 1, this->width(), 1),
+                     QColor(119, 44, 232));
 }
 
 void PinnedMessageWidget::themeChangedEvent()

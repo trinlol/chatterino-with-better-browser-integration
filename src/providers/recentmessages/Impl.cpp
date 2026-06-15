@@ -41,6 +41,37 @@ std::vector<Communi::IrcMessage *> parseRecentMessages(
     return messages;
 }
 
+std::vector<Communi::IrcMessage *> parseUserLogMessages(
+    const QJsonObject &jsonRoot)
+{
+    const auto jsonMessages = jsonRoot.value("messages").toArray();
+    std::vector<Communi::IrcMessage *> messages;
+
+    for (const auto &jsonMessage : jsonMessages)
+    {
+        QString content;
+        if (jsonMessage.isString())
+        {
+            content = jsonMessage.toString();
+        }
+        else
+        {
+            content = jsonMessage.toObject().value("raw").toString();
+        }
+
+        if (content.isEmpty())
+        {
+            continue;
+        }
+
+        content = unescapeZeroWidthJoiner(content);
+        messages.emplace_back(
+            Communi::IrcMessage::fromData(content.toUtf8(), nullptr));
+    }
+
+    return messages;
+}
+
 // Build Communi messages retrieved from the recent messages API into
 // proper chatterino messages.
 std::vector<MessagePtr> buildRecentMessages(

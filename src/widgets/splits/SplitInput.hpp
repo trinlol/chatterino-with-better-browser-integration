@@ -148,6 +148,8 @@ protected:
 
     int replyMessageWidth() const;
 
+    void updatePendingRewardPlaceholder();
+
     Split *const split_;
     ChannelView *const channelView_;
     QPointer<EmotePopup> emotePopup_;

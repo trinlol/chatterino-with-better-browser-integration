@@ -8,14 +8,20 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QDate>
 
 #include <functional>
+#include <memory>
+#include <vector>
 
 namespace chatterino {
 
 using IvrFailureCallback = std::function<void()>;
 template <typename... T>
 using ResultCallback = std::function<void(T...)>;
+
+struct Message;
+using MessagePtr = std::shared_ptr<const Message>;
 
 struct IvrSubage {
     const bool isSubHidden;
@@ -35,6 +41,34 @@ struct IvrSubage {
     }
 };
 
+struct IvrUserBadge {
+    QString setID;
+    QString version;
+    QString title;
+    QString description;
+
+    IvrUserBadge(const QJsonObject &root)
+        : setID(root.value("setID").toString())
+        , version(root.value("version").toString())
+        , title(root.value("title").toString())
+        , description(root.value("description").toString())
+    {
+    }
+};
+
+struct IvrChannelUserStats {
+    QString userId;
+    QString userLogin;
+    int messageCount = 0;
+
+    IvrChannelUserStats(const QJsonObject &root)
+        : userId(root.value("userId").toString())
+        , userLogin(root.value("userLogin").toString())
+        , messageCount(root.value("messageCount").toInt())
+    {
+    }
+};
+
 class IvrApi final
 {
 public:
@@ -42,6 +76,22 @@ public:
     void getSubage(QString userName, QString channelName,
                    ResultCallback<IvrSubage> resultCallback,
                    IvrFailureCallback failureCallback);
+
+    // https://api.ivr.fi/v2/twitch/user?login=<user>
+    void getUserBadges(QString userName,
+                       ResultCallback<std::vector<IvrUserBadge>> resultCallback,
+                       IvrFailureCallback failureCallback);
+
+    // https://logs.ivr.fi/docs (mirrored at https://logs.zonian.dev)
+    void getChannelUserStats(QString channelName, QString userName,
+                             ResultCallback<IvrChannelUserStats> resultCallback,
+                             IvrFailureCallback failureCallback);
+
+    // https://logs.zonian.dev/channel/{channel}/user/{user}?json=true
+    void loadUserLogsForDay(QString channelName, QString userName, QDate day,
+                            int limit,
+                            ResultCallback<std::vector<MessagePtr>> successCallback,
+                            IvrFailureCallback failureCallback);
 
     static void initialize();
 

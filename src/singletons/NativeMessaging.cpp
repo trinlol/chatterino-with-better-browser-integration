@@ -298,6 +298,10 @@ std::string &getNmQueueName(const Paths &paths)
     return name;
 }
 
+const char *BROWSER_IPC_QUEUE_NAME = "chatterino_browser";
+
+NativeMessagingServer *NativeMessagingServer::instance_ = nullptr;
+
 // CLIENT
 
 namespace nm::client {
@@ -321,11 +325,40 @@ void writeToCout(const QByteArray &array)
 
 }  // namespace nm::client
 
+void sendToBrowserExtension(const QJsonObject &obj)
+{
+    auto *app = tryGetApp();
+    if (!app)
+    {
+        return;
+    }
+
+    const auto &paths = app->getPaths();
+    (void)paths;
+    ipc::sendMessage(BROWSER_IPC_QUEUE_NAME,
+                     QJsonDocument(obj).toJson(QJsonDocument::Compact));
+}
+
 // SERVER
 NativeMessagingServer::NativeMessagingServer()
     : thread(new ReceiverThread(*this))
 {
+    instance_ = this;
     this->thread->setObjectName("C2NMReceiver");
+}
+
+NativeMessagingServer *NativeMessagingServer::instance()
+{
+    return instance_;
+}
+
+bool NativeMessagingServer::isBrowserAttached()
+{
+    if (!instance_)
+    {
+        return false;
+    }
+    return instance_->browserAttached_;
 }
 
 NativeMessagingServer::~NativeMessagingServer()
@@ -423,6 +456,16 @@ void NativeMessagingServer::ReceiverThread::handleMessage(
         this->handlePinnedMessage(root);
         return;
     }
+    if (action == "rewardPending")
+    {
+        this->handleRewardPending(root);
+        return;
+    }
+    if (action == "rewardClear")
+    {
+        this->handleRewardClear(root);
+        return;
+    }
 
     qCDebug(chatterinoNativeMessage) << "NM unknown action" << action;
 }
@@ -464,7 +507,7 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
         return;
     }
 
-    postToThread([=] {
+    postToThread([=, &parent = this->parent_] {
         if (!name.isEmpty())
         {
             auto channel = getApp()->getTwitch()->getOrAddChannel(name);
@@ -476,6 +519,7 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
 
         if (attach || attachFullscreen)
         {
+            parent.browserAttached_ = true;
 #ifdef USEWINSDK
             auto *window = AttachedWindow::getForeground(args);
             if (!name.isEmpty())
@@ -500,8 +544,9 @@ void NativeMessagingServer::ReceiverThread::handleDetach(
     }
 
 #ifdef USEWINSDK
-    postToThread([winId] {
+    postToThread([winId, &parent = this->parent_] {
         qCDebug(chatterinoNativeMessage) << "NW detach";
+        parent.browserAttached_ = false;
         AttachedWindow::detach(winId);
     });
 #endif
@@ -773,6 +818,91 @@ void NativeMessagingServer::clearPrediction()
     this->predictionOptions_ = QJsonArray();
     this->remainingSeconds_ = 0;
     this->activeChannel_.reset();
+}
+
+void NativeMessagingServer::ReceiverThread::handleRewardPending(
+    const QJsonObject &root)
+{
+    postToThread([&parent = this->parent_, root] {
+        parent.updateRewardPending(root);
+    });
+}
+
+void NativeMessagingServer::ReceiverThread::handleRewardClear(
+    const QJsonObject &root)
+{
+    postToThread([&parent = this->parent_, root] {
+        parent.clearRewardPending(root);
+    });
+}
+
+void NativeMessagingServer::updateRewardPending(const QJsonObject &root)
+{
+    assertInGuiThread();
+
+    QString channelName = root["channel"_L1].toString();
+    QString rewardId = root["rewardId"_L1].toString();
+    QString title = root["title"_L1].toString();
+    QString prompt = root["prompt"_L1].toString();
+
+    ChannelPtr channel;
+    if (!channelName.isEmpty())
+    {
+        channel = getApp()->getTwitch()->getOrAddChannel(channelName);
+    }
+    else
+    {
+        channel = getApp()->getTwitch()->getWatchingChannel().get();
+    }
+
+    if (!channel)
+    {
+        return;
+    }
+
+    auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
+    if (!twitchChannel)
+    {
+        return;
+    }
+
+    twitchChannel->setPendingRewardRedemption(rewardId, title, prompt, 90);
+
+    QString hint = title;
+    if (hint.isEmpty())
+    {
+        hint = u"channel point reward"_s;
+    }
+    twitchChannel->addSystemMessage(
+        QString("Send a message in chat to complete your redemption: %1")
+            .arg(hint));
+}
+
+void NativeMessagingServer::clearRewardPending(const QJsonObject &root)
+{
+    assertInGuiThread();
+
+    QString channelName = root["channel"_L1].toString();
+
+    ChannelPtr channel;
+    if (!channelName.isEmpty())
+    {
+        channel = getApp()->getTwitch()->getOrAddChannel(channelName);
+    }
+    else
+    {
+        channel = getApp()->getTwitch()->getWatchingChannel().get();
+    }
+
+    if (!channel)
+    {
+        return;
+    }
+
+    if (auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get()))
+    {
+        twitchChannel->clearPendingRewardRedemption();
+    }
 }
 
 void NativeMessagingServer::syncChannels(const QJsonArray &twitchChannels)

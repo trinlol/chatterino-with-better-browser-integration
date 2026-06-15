@@ -1313,6 +1313,22 @@ void IrcMessageHandler::addMessage(Communi::IrcMessage *message,
 
         sink.addMessage(msg, MessageContext::Original);
         chan->addRecentChatter(msg->displayName);
+
+        if (chan->hasPendingRewardRedemption())
+        {
+            const auto &currentUserId =
+                getApp()->getAccounts()->twitch.getCurrent()->getUserId();
+            const auto senderId = tags.value("user-id").toString();
+            const bool isHighlightedMessage =
+                tags.contains("msg-id") &&
+                tags["msg-id"].toString().split(u';').contains(
+                    u"highlighted-message"_s);
+            if (senderId == currentUserId &&
+                (!rewardId.isEmpty() || isHighlightedMessage))
+            {
+                chan->clearPendingRewardRedemption();
+            }
+        }
     }
 }
 

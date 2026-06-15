@@ -16,6 +16,7 @@
 #include "providers/twitch/TwitchCommon.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
+#include "singletons/NativeMessaging.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "util/Helpers.hpp"
@@ -36,6 +37,7 @@
 
 #include <QCompleter>
 #include <QPainter>
+#include <QJsonObject>
 #include <QSignalBlocker>
 
 #include <functional>
@@ -55,6 +57,34 @@ qreal highlightEasingFunction(qreal progress)
         return 1.0 - pow(10.0 * progress, 3.0);
     }
     return 1.0 + pow((20.0 / 9.0) * (0.5 * progress - 0.5), 3.0);
+}
+
+bool trySendPendingRewardViaBrowser(TwitchChannel *channel,
+                                    const QString &message)
+{
+    if (!NativeMessagingServer::isBrowserAttached())
+    {
+        return false;
+    }
+
+    if (!channel->hasPendingRewardRedemption())
+    {
+        return false;
+    }
+
+    if (getApp()->getTwitch()->getWatchingChannel().get() !=
+        channel->sharedFromThis())
+    {
+        return false;
+    }
+
+    QJsonObject payload{
+        {u"action"_s, u"sendNativeChat"_s},
+        {u"message"_s, message},
+        {u"channel"_s, channel->getName()},
+    };
+    sendToBrowserExtension(payload);
+    return true;
 }
 
 }  // namespace
@@ -210,6 +240,14 @@ void SplitInput::initLayout()
             }
         },
         this->managedConnections_);
+
+    if (auto *tc = dynamic_cast<TwitchChannel *>(this->split_->getChannel().get()))
+    {
+        tc->pendingRewardChanged.connect([this] {
+            this->updatePendingRewardPlaceholder();
+        });
+    }
+    this->updatePendingRewardPlaceholder();
 
     // right box
     auto box = hboxLayout.emplace<QVBoxLayout>().withoutMargin();
@@ -418,6 +456,13 @@ QString SplitInput::handleSendMessage(const std::vector<QString> &arguments)
         message = message.replace('\n', ' ');
         QString sendMessage =
             getApp()->getCommands()->execCommand(message, c, false);
+
+        if (auto *tc = dynamic_cast<TwitchChannel *>(c.get());
+            tc && trySendPendingRewardViaBrowser(tc, sendMessage))
+        {
+            this->postMessageSend(message, arguments);
+            return "";
+        }
 
         c->sendMessage(sendMessage);
 
@@ -1382,6 +1427,26 @@ void SplitInput::setReply(MessagePtr target)
 void SplitInput::setPlaceholderText(const QString &text)
 {
     this->ui_.textEdit->setPlaceholderText(text);
+}
+
+void SplitInput::updatePendingRewardPlaceholder()
+{
+    auto c = this->split_->getChannel();
+    auto *tc = dynamic_cast<TwitchChannel *>(c.get());
+    if (tc && tc->hasPendingRewardRedemption())
+    {
+        const auto &pending = tc->pendingRewardRedemption();
+        QString hint = pending->title;
+        if (hint.isEmpty())
+        {
+            hint = u"channel point reward"_s;
+        }
+        this->setPlaceholderText(
+            QString("Send a message to complete: %1").arg(hint));
+        return;
+    }
+
+    this->setPlaceholderText("");
 }
 
 void SplitInput::clearInput()

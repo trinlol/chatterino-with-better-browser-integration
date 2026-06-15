@@ -5,10 +5,12 @@
 #include "BrowserExtension.hpp"
 
 #include "singletons/NativeMessaging.hpp"
+#include "util/IpcQueue.hpp"
 #include "util/RenameThread.hpp"
 
 #include <iostream>
 #include <memory>
+#include <atomic>
 #include <thread>
 
 #ifdef Q_OS_WIN
@@ -57,9 +59,35 @@ QByteArray receiveFromBrowser()
     return buffer;
 }
 
+void runBrowserOutboundLoop()
+{
+    auto [messageQueue, error] =
+        ipc::IpcQueue::tryReplaceOrCreate("chatterino_browser", 100, 1024);
+
+    if (!error.isEmpty() || !messageQueue)
+    {
+        return;
+    }
+
+    while (true)
+    {
+        auto buf = messageQueue->receive();
+        if (buf.isEmpty())
+        {
+            continue;
+        }
+        sendToBrowser(QLatin1String(buf.constData(), buf.size()));
+    }
+}
+
 void runLoop()
 {
     auto receivedMessage = std::make_shared<std::atomic_bool>(true);
+
+    auto outboundThread = std::thread([] {
+        runBrowserOutboundLoop();
+    });
+    renameThread(outboundThread, "BrowserOutbound");
 
     auto thread = std::thread([=]() {
         while (true)

@@ -3,8 +3,8 @@
 #include "widgets/BaseWidget.hpp"
 
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QPushButton>
-#include <QTextBrowser>
 
 #include <memory>
 
@@ -32,8 +32,10 @@ private:
     void updateTextLayout();
 
     ChannelPtr channel_;
-    QTextBrowser *textBrowser_ = nullptr;
+    QLabel *textLabel_ = nullptr;
     QPushButton *closeButton_ = nullptr;
+    QString plainText_;
+    int contentHeight_ = 0;
     pajlada::Signals::ScopedConnection channelConnection_;
 };
 

@@ -189,6 +189,11 @@ function connectPort() {
         default:
           break;
       }
+      return;
+    }
+
+    if (msg?.action === 'sendNativeChat') {
+      void routeSendNativeChat(msg);
     }
   });
   port.onDisconnect.addListener(() => {
@@ -318,9 +323,48 @@ function forwardNativeMessage(message) {
   });
 }
 
+async function findTwitchTabForChannel(channelName) {
+  const tabs = await chrome.tabs.query({ url: '*://*.twitch.tv/*' });
+  if (channelName) {
+    const normalized = channelName.toLowerCase();
+    const matched = tabs.find(tab => {
+      const name = matchChannelName(tab.url || '');
+      return name && name.toLowerCase() === normalized;
+    });
+    if (matched) {
+      return matched;
+    }
+  }
+
+  const highlighted = tabs.filter(tab => tab.highlighted);
+  return highlighted[0] || tabs[0] || null;
+}
+
+async function routeSendNativeChat(message) {
+  const tab = await findTwitchTabForChannel(message.channel);
+  if (!tab?.id) {
+    return;
+  }
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, {
+      action: 'sendNativeChat',
+      message: message.message,
+      channel: message.channel,
+    });
+  } catch (error) {
+    console.warn('[Chatterino] Failed to route native chat send:', error);
+  }
+}
+
 // receiving messages from content scripts and the popup
 chrome.runtime.onMessage.addListener((message, sender, callback) => {
-  if (message.action === 'prediction' || message.action === 'pin') {
+  if (
+    message.action === 'prediction' ||
+    message.action === 'pin' ||
+    message.action === 'rewardPending' ||
+    message.action === 'rewardClear'
+  ) {
     forwardNativeMessage(message);
     return;
   }

@@ -10,6 +10,29 @@ html.chatterino-companion-active [data-a-target="chat-line-message-container"] {
   pointer-events: none !important;
 }
 
+/* While a message-based reward redemption is pending, keep the native chat
+   input/footer interactive so programmatic sends can complete the redeem. */
+html.chatterino-companion-active.chatterino-reward-pending [data-a-target="chat-input"],
+html.chatterino-companion-active.chatterino-reward-pending [data-a-target="chat-input"] *,
+html.chatterino-companion-active.chatterino-reward-pending [data-test-selector="chat-input"],
+html.chatterino-companion-active.chatterino-reward-pending [data-test-selector="chat-input"] *,
+html.chatterino-companion-active.chatterino-reward-pending [class*="chat-input"],
+html.chatterino-companion-active.chatterino-reward-pending [class*="chat-input"] *,
+html.chatterino-companion-active.chatterino-reward-pending [data-a-target="chat-send-button"],
+html.chatterino-companion-active.chatterino-reward-pending [data-a-target="chat-send-status"],
+html.chatterino-companion-active.chatterino-reward-pending [data-a-target="chat-rewards-button"] {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+html.chatterino-companion-active.chatterino-reward-pending .chatterino-cc-restored [data-a-target="chat-input"],
+html.chatterino-companion-active.chatterino-reward-pending .chatterino-cc-restored [data-a-target="chat-input"] *,
+html.chatterino-companion-active.chatterino-reward-pending .chatterino-cc-restored [class*="chat-input"],
+html.chatterino-companion-active.chatterino-reward-pending .chatterino-cc-restored [class*="chat-input"] * {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
 /* Chat nodes restored after a Chatterino Native Host wipe: kept mounted so
    Twitch React (and the points button) stays alive, but never visible. */
 .chatterino-cc-restored {

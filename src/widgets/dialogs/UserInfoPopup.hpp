@@ -5,10 +5,13 @@
 #pragma once
 
 #include "widgets/DraggablePopup.hpp"
+#include "widgets/helper/UserBadgeGridWidget.hpp"
 
 #include <pajlada/signals/scoped-connection.hpp>
 #include <pajlada/signals/signal.hpp>
 #include <QPointer>
+#include <QDate>
+#include <unordered_set>
 
 class QCheckBox;
 
@@ -49,7 +52,24 @@ private:
     void installEvents();
     void updateUserData();
     void updateLatestMessages();
+    void loadUserLogsForDay(const QDate &day, bool prepend,
+                            int remainingDaySkips = USER_LOGS_MAX_DAY_SKIP);
+    void mergeLocalScrollbackMessages(const QDate &day = QDate());
+    void updateLoadOlderVisibility();
+    void loadOlderUserMessages();
     void updateNotes();
+    void updateBadges();
+    QVector<UserBadgeDisplayEntry> buildUserBadges(
+        std::unordered_set<QString> *seenOut = nullptr) const;
+
+    static constexpr int USER_LOGS_DAY_LIMIT = 500;
+    static constexpr int USER_LOGS_MAX_DAY_SKIP = 90;
+
+    ChannelPtr userMessagesChannel_;
+    QDate oldestLoadedLogDay_;
+    bool loadingUserLogs_ = false;
+    bool userLogsExhausted_ = false;
+    std::unique_ptr<pajlada::Signals::ScopedConnection> scrollConnection_;
 
     void loadAvatar(const QUrl &url);
     bool isMod_{};
@@ -90,6 +110,10 @@ private:
         Label *userIDLabel = nullptr;
         Label *followageLabel = nullptr;
         Label *subageLabel = nullptr;
+
+        UserBadgeGridWidget *badgeGrid = nullptr;
+        Label *messagesHeaderLabel = nullptr;
+        LabelButton *loadOlderMessagesButton = nullptr;
 
         LiveIndicator *liveIndicator = nullptr;
 

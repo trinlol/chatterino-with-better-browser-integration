@@ -42,7 +42,7 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 
 ## 🚀 Quick start (prebuilt)
 
-1. 📦 Download **Chatterino-Better-Browser-Windows-x64-v1.0.3.zip** from [Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest)
+1. 📦 Download **Chatterino-Better-Browser-Windows-x64-v1.0.4.zip** from [Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest)
 2. 🗑️ **Uninstall** the old Chatterino app from Windows if you have it *(your settings are safe — see below)*
 3. 📂 Extract the zip **anywhere you like** (e.g. `C:\Apps\Chatterino Better Browser\`)
 4. 🔗 Right-click **`Chatterino Better Browser.exe`** → **Send to** → **Desktop (create shortcut)** *(or pin to Start / taskbar)*
@@ -58,7 +58,7 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 
 ### 🌐 Browser integration
 
-- 📌 **Pinned messages** — moderator pins show as a purple banner in Chatterino with a dismiss button
+- 📌 **Pinned messages** — moderator pins show as a compact purple banner in Chatterino with clickable links and a dismiss button
 - 🎲 **Predictions & polls** — live prediction/poll UI integrated into the Twitch toolbar
 - 🪙 **Channel points auto-claim** — claims bonus chests automatically; scrollable rewards menu
 - ⚡ **Stable browser overlay** — fixes flicker, disappearing chat, and runaway CPU from native messaging
@@ -70,14 +70,19 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 - ⭐ **Emote favourites tab** — **Ctrl+click** any emote in chat to add it to your Favourites; open the emote picker to find them quickly
 - 👆 **Click-to-type emotes** — click a single emote from another user's message to insert it straight into your input
 
+### 👤 User card (fork-exclusive)
+
+- 🏅 **Badges inline** — clicking a user shows their badges above message history
+- 📜 **Paginated message history** — loads today's messages first, then older days on demand (skips empty days automatically)
+
 ---
 
 ## 📋 Todo
 
-- [ ] Fix text spacing on pinned announcements
+- [x] Fix text spacing on pinned announcements
 - [ ] Add in-chat channel point messages (for message-based redemptions)
 - [ ] Theme presets
-- [ ] Usercard — show user's badges, chat message amount *(TBD)*
+- [x] Usercard — badges and paginated message history from channel logs
 
 ---
 

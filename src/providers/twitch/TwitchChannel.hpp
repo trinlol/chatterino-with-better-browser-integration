@@ -21,6 +21,7 @@
 #include <IrcMessage>
 #include <pajlada/signals/signalholder.hpp>
 #include <QColor>
+#include <QDateTime>
 #include <QElapsedTimer>
 #include <QRegularExpression>
 
@@ -354,6 +355,8 @@ public:
 
     pajlada::Signals::Signal<const QString &> sendWaitUpdate;
 
+    pajlada::Signals::NoArgSignal pendingRewardChanged;
+
     // Channel point rewards
     void addQueuedRedemption(const QString &rewardId,
                              const QString &originalContent,
@@ -370,6 +373,22 @@ public:
     bool isChannelPointRewardKnown(const QString &rewardId);
     std::optional<ChannelPointReward> channelPointReward(
         const QString &rewardId) const;
+
+    struct PendingRewardRedemption {
+        QString rewardId;
+        QString title;
+        QString prompt;
+        QDateTime expiresAt;
+    };
+
+    void setPendingRewardRedemption(const QString &rewardId,
+                                    const QString &title,
+                                    const QString &prompt,
+                                    int timeoutSeconds = 90);
+    void clearPendingRewardRedemption();
+    bool hasPendingRewardRedemption() const;
+    const std::optional<PendingRewardRedemption> &pendingRewardRedemption()
+        const;
 
     // Live status
     void updateStreamStatus(const std::optional<HelixStream> &helixStream,
@@ -540,6 +559,7 @@ private:
         badgeSets_;  // "subscribers": { "0": ... "3": ... "6": ...
     UniqueAccess<std::vector<CheerEmoteSet>> cheerEmoteSets_;
     UniqueAccess<std::map<QString, ChannelPointReward>> channelPointRewards_;
+    std::optional<PendingRewardRedemption> pendingRewardRedemption_;
     boost::circular_buffer_space_optimized<QueuedRedemption>
         waitingRedemptions_{MAX_QUEUED_REDEMPTIONS};
 

@@ -15,10 +15,17 @@
 #include "controllers/userdata/UserDataController.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
+#include "messages/Emote.hpp"
 #include "providers/IvrApi.hpp"
 #include "providers/pronouns/Pronouns.hpp"
+#include "providers/bttv/BttvBadges.hpp"
+#include "providers/chatterino/ChatterinoBadges.hpp"
+#include "providers/ffz/FfzBadges.hpp"
+#include "providers/seventv/SeventvBadges.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
+#include "providers/twitch/TwitchBadges.hpp"
+#include "providers/twitch/TwitchBadge.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Resources.hpp"
@@ -38,6 +45,7 @@
 #include "widgets/helper/InvisibleSizeGrip.hpp"
 #include "widgets/helper/Line.hpp"
 #include "widgets/helper/LiveIndicator.hpp"
+#include "widgets/helper/UserBadgeGridWidget.hpp"
 #include "widgets/helper/ScalingSpacerItem.hpp"
 #include "widgets/Label.hpp"
 #include "widgets/MarkdownLabel.hpp"
@@ -47,6 +55,7 @@
 #include "widgets/Window.hpp"
 
 #include <QCheckBox>
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QMessageBox>
 #include <QMetaEnum>
@@ -54,6 +63,7 @@
 #include <QNetworkReply>
 #include <QPointer>
 #include <QStringBuilder>
+#include <unordered_set>
 
 namespace {
 constexpr QStringView TEXT_FOLLOWERS = u"Followers: %1";
@@ -137,6 +147,42 @@ ChannelPtr filterMessages(const QString &userName, ChannelPtr channel)
     return channelPtr;
 };
 
+std::unordered_set<QString> existingUserMessageIds(const ChannelPtr &channel)
+{
+    std::unordered_set<QString> ids;
+    for (const auto &message : channel->getMessageSnapshot())
+    {
+        if (!message->id.isEmpty())
+        {
+            ids.insert(message->id);
+        }
+    }
+    return ids;
+}
+
+std::vector<MessagePtr> filterNewLogMessages(
+    const std::vector<MessagePtr> &messages,
+    const std::unordered_set<QString> &existingIds)
+{
+    std::vector<MessagePtr> filtered;
+    filtered.reserve(messages.size());
+
+    for (const auto &message : messages)
+    {
+        if (message->id.isEmpty() || !existingIds.contains(message->id))
+        {
+            filtered.push_back(message);
+        }
+    }
+
+    return filtered;
+}
+
+QDate messageUtcDate(const MessagePtr &message)
+{
+    return message->serverReceivedTime.toUTC().date();
+}
+
 const auto borderColor = QColor(255, 255, 255, 80);
 
 int calculateTimeoutDuration(TimeoutButton timeout)
@@ -145,6 +191,26 @@ int calculateTimeoutDuration(TimeoutButton timeout)
         {"s", 1}, {"m", 60}, {"h", 3600}, {"d", 86400}, {"w", 604800},
     };
     return timeout.second * durations[timeout.first];
+}
+
+std::optional<EmotePtr> getTwitchBadgeEmote(const TwitchBadge &badge,
+                                            const TwitchChannel *twitchChannel)
+{
+    if (twitchChannel != nullptr)
+    {
+        if (auto channelBadge =
+                twitchChannel->twitchBadge(badge.key_, badge.value_))
+        {
+            return channelBadge;
+        }
+    }
+
+    return getApp()->getTwitchBadges()->badge(badge.key_, badge.value_);
+}
+
+QString twitchBadgeKey(const TwitchBadge &badge)
+{
+    return badge.key_ + u'/' + badge.value_;
 }
 
 }  // namespace
@@ -586,8 +652,23 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
 
     layout.emplace<Line>(false);
 
-    // fourth line (last messages)
-    auto logs = layout.emplace<QVBoxLayout>().withoutMargin();
+    layout.emplace<UserBadgeGridWidget>().assign(&this->ui_.badgeGrid);
+
+    layout.emplace<Line>(false);
+
+    layout.emplace<Label>("Messages")
+        .assign(&this->ui_.messagesHeaderLabel);
+    this->ui_.messagesHeaderLabel->setFontStyle(FontStyle::UiMediumBold);
+
+    layout.emplace<LabelButton>("")
+        .assign(&this->ui_.loadOlderMessagesButton);
+    this->ui_.loadOlderMessagesButton->setVisible(false);
+    this->ui_.loadOlderMessagesButton->setPadding({0, 0});
+    QObject::connect(this->ui_.loadOlderMessagesButton,
+                     &LabelButton::leftClicked, [this] {
+                         this->loadOlderUserMessages();
+                     });
+
     {
         this->ui_.noMessagesLabel = new Label("No recent messages");
         this->ui_.noMessagesLabel->setVisible(false);
@@ -601,6 +682,7 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         this->ui_.latestMessages->setSizePolicy(QSizePolicy::Expanding,
                                                 QSizePolicy::Expanding);
 
+        auto logs = layout.emplace<QVBoxLayout>().withoutMargin();
         logs->addWidget(this->ui_.noMessagesLabel);
         logs->addWidget(this->ui_.latestMessages);
         logs->setAlignment(this->ui_.noMessagesLabel, Qt::AlignHCenter);
@@ -856,6 +938,7 @@ void UserInfoPopup::setData(const QString &name,
     if (!isId)
     {
         this->updateLatestMessages();
+        this->updateBadges();
     }
     // If we're opening by ID, this will be called as soon as we get the information from twitch
 
@@ -870,40 +953,278 @@ void UserInfoPopup::setData(const QString &name,
 
 void UserInfoPopup::updateLatestMessages()
 {
-    auto filteredChannel =
-        filterMessages(this->userName_, this->underlyingChannel_);
-    this->ui_.latestMessages->setChannel(filteredChannel);
+    this->scrollConnection_.reset();
+    this->refreshConnection_.reset();
+
+    this->loadingUserLogs_ = false;
+    this->userLogsExhausted_ = false;
+    this->oldestLoadedLogDay_ = QDate();
+
+    if (this->underlyingChannel_->getType() != Channel::Type::Twitch ||
+        this->userName_.isEmpty())
+    {
+        this->userMessagesChannel_.reset();
+        this->ui_.latestMessages->setChannel(
+            filterMessages(this->userName_, this->underlyingChannel_));
+        this->ui_.latestMessages->setSourceChannel(this->underlyingChannel_);
+        const bool hasMessages =
+            this->ui_.latestMessages->channel()->hasMessages();
+        this->ui_.latestMessages->setVisible(hasMessages);
+        this->ui_.noMessagesLabel->setVisible(!hasMessages);
+        this->ui_.loadOlderMessagesButton->setVisible(false);
+        this->adjustSize();
+        return;
+    }
+
+    if (this->underlyingChannel_->isTwitchChannel())
+    {
+        this->userMessagesChannel_ = std::make_shared<TwitchChannel>(
+            this->underlyingChannel_->getName());
+    }
+    else
+    {
+        this->userMessagesChannel_ = std::make_shared<Channel>(
+            this->underlyingChannel_->getName(), Channel::Type::None);
+    }
+
+    this->ui_.latestMessages->setChannel(this->userMessagesChannel_);
     this->ui_.latestMessages->setSourceChannel(this->underlyingChannel_);
+    this->ui_.latestMessages->setVisible(true);
+    this->ui_.noMessagesLabel->setVisible(false);
 
-    const bool hasMessages = filteredChannel->hasMessages();
-    this->ui_.latestMessages->setVisible(hasMessages);
-    this->ui_.noMessagesLabel->setVisible(!hasMessages);
+    this->scrollConnection_ =
+        std::make_unique<pajlada::Signals::ScopedConnection>(
+            this->ui_.latestMessages->getScrollBar().getCurrentValueChanged().connect(
+                [this] {
+                    this->updateLoadOlderVisibility();
+                }));
 
-    // shrink dialog in case ChannelView goes from visible to hidden
-    this->adjustSize();
+    const QDate today = QDateTime::currentDateTimeUtc().date();
+    this->loadUserLogsForDay(today, false);
 
     this->refreshConnection_ =
         std::make_unique<pajlada::Signals::ScopedConnection>(
             this->underlyingChannel_->messageAppended.connect(
-                [this, hasMessages](auto message, auto) {
+                [this](auto message, auto) {
                     if (!checkMessageUserName(this->userName_, message))
                     {
                         return;
                     }
 
-                    if (hasMessages)
+                    if (!this->userMessagesChannel_)
                     {
-                        // display message in ChannelView
-                        this->ui_.latestMessages->channel()->addMessage(
-                            message, MessageContext::Repost);
+                        return;
+                    }
+
+                    this->userMessagesChannel_->addMessage(message,
+                                                         MessageContext::Repost);
+                    this->ui_.latestMessages->setVisible(true);
+                    this->ui_.noMessagesLabel->setVisible(false);
+                }));
+
+    this->adjustSize();
+}
+
+void UserInfoPopup::loadUserLogsForDay(const QDate &day, bool prepend,
+                                       int remainingDaySkips)
+{
+    if (!day.isValid() || this->loadingUserLogs_ || !this->userMessagesChannel_)
+    {
+        return;
+    }
+
+    this->loadingUserLogs_ = true;
+    if (prepend)
+    {
+        this->updateLoadOlderVisibility();
+    }
+    else
+    {
+        this->ui_.loadOlderMessagesButton->setVisible(false);
+    }
+
+    std::weak_ptr<bool> hack = this->lifetimeHack_;
+    getIvr()->loadUserLogsForDay(
+        this->underlyingChannel_->getName(), this->userName_, day,
+        USER_LOGS_DAY_LIMIT,
+        [this, hack, day, prepend,
+         remainingDaySkips](const std::vector<MessagePtr> &messages) {
+            runInGuiThread([this, hack, day, prepend, remainingDaySkips,
+                            messages]() {
+                if (!hack.lock() || !this->userMessagesChannel_)
+                {
+                    return;
+                }
+
+                this->loadingUserLogs_ = false;
+
+                if (prepend)
+                {
+                    if (messages.empty())
+                    {
+                        if (remainingDaySkips > 0)
+                        {
+                            this->loadUserLogsForDay(day.addDays(-1), true,
+                                                     remainingDaySkips - 1);
+                            return;
+                        }
+
+                        this->userLogsExhausted_ = true;
                     }
                     else
                     {
-                        // The ChannelView is currently hidden, so manually refresh
-                        // and display the latest messages
-                        this->updateLatestMessages();
+                        const auto existingIds = existingUserMessageIds(
+                            this->userMessagesChannel_);
+                        auto newMessages =
+                            filterNewLogMessages(messages, existingIds);
+
+                        if (newMessages.empty())
+                        {
+                            if (remainingDaySkips > 0)
+                            {
+                                this->loadUserLogsForDay(day.addDays(-1), true,
+                                                         remainingDaySkips - 1);
+                                return;
+                            }
+
+                            this->userLogsExhausted_ = true;
+                        }
+                        else
+                        {
+                            this->userMessagesChannel_->fillInMissingMessages(
+                                newMessages);
+                            this->oldestLoadedLogDay_ = day;
+                        }
                     }
-                }));
+                }
+                else if (messages.empty())
+                {
+                    this->oldestLoadedLogDay_ = day;
+                    this->mergeLocalScrollbackMessages(day);
+                }
+                else
+                {
+                    for (const auto &message : messages)
+                    {
+                        this->userMessagesChannel_->addMessage(
+                            message, MessageContext::Repost);
+                    }
+                    this->oldestLoadedLogDay_ = day;
+                    this->mergeLocalScrollbackMessages(day);
+                }
+
+                const bool hasMessages =
+                    this->userMessagesChannel_->hasMessages();
+                this->ui_.latestMessages->setVisible(hasMessages);
+                this->ui_.noMessagesLabel->setVisible(!hasMessages);
+                this->updateLoadOlderVisibility();
+                this->adjustSize();
+            });
+        },
+        [this, hack, day, prepend, remainingDaySkips]() {
+            runInGuiThread([this, hack, day, prepend, remainingDaySkips]() {
+                if (!hack.lock())
+                {
+                    return;
+                }
+
+                this->loadingUserLogs_ = false;
+
+                if (prepend && remainingDaySkips > 0)
+                {
+                    this->loadUserLogsForDay(day.addDays(-1), true,
+                                             remainingDaySkips - 1);
+                    return;
+                }
+
+                if (!prepend)
+                {
+                    this->oldestLoadedLogDay_ = day;
+                    this->mergeLocalScrollbackMessages(day);
+                }
+                else
+                {
+                    this->userLogsExhausted_ = true;
+                }
+
+                this->updateLoadOlderVisibility();
+            });
+        });
+}
+
+void UserInfoPopup::mergeLocalScrollbackMessages(const QDate &day)
+{
+    if (!this->userMessagesChannel_)
+    {
+        return;
+    }
+
+    auto localMessages =
+        filterMessages(this->userName_, this->underlyingChannel_);
+    const auto existingIds =
+        existingUserMessageIds(this->userMessagesChannel_);
+
+    for (const auto &message : localMessages->getMessageSnapshot())
+    {
+        if (day.isValid() && messageUtcDate(message) != day)
+        {
+            continue;
+        }
+
+        if (!message->id.isEmpty() && existingIds.contains(message->id))
+        {
+            continue;
+        }
+
+        this->userMessagesChannel_->addMessage(message, MessageContext::Repost);
+    }
+}
+
+void UserInfoPopup::updateLoadOlderVisibility()
+{
+    if (this->userLogsExhausted_ || !this->userMessagesChannel_ ||
+        !this->oldestLoadedLogDay_.isValid())
+    {
+        this->ui_.loadOlderMessagesButton->setVisible(false);
+        this->ui_.loadOlderMessagesButton->setEnabled(true);
+        return;
+    }
+
+    auto &scrollbar = this->ui_.latestMessages->getScrollBar();
+    const bool atTop =
+        scrollbar.getRelativeCurrentValue() <= scrollbar.getMinimum() + 1.0;
+
+    if (!atTop)
+    {
+        this->ui_.loadOlderMessagesButton->setVisible(false);
+        this->ui_.loadOlderMessagesButton->setEnabled(true);
+        return;
+    }
+
+    if (this->loadingUserLogs_)
+    {
+        this->ui_.loadOlderMessagesButton->setText("Loading older messages...");
+        this->ui_.loadOlderMessagesButton->setEnabled(false);
+        this->ui_.loadOlderMessagesButton->setVisible(true);
+        return;
+    }
+
+    const QDate previousDay = this->oldestLoadedLogDay_.addDays(-1);
+    this->ui_.loadOlderMessagesButton->setText(
+        QString("Load messages from %1")
+            .arg(QLocale().toString(previousDay, QLocale::LongFormat)));
+    this->ui_.loadOlderMessagesButton->setEnabled(true);
+    this->ui_.loadOlderMessagesButton->setVisible(true);
+}
+
+void UserInfoPopup::loadOlderUserMessages()
+{
+    if (this->userLogsExhausted_ || !this->oldestLoadedLogDay_.isValid())
+    {
+        return;
+    }
+
+    this->loadUserLogsForDay(this->oldestLoadedLogDay_.addDays(-1), true);
 }
 
 void UserInfoPopup::updateUserData()
@@ -943,10 +1264,12 @@ void UserInfoPopup::updateUserData()
 
             // Ensure recent messages are shown
             this->updateLatestMessages();
+            this->updateBadges();
         }
 
         this->userId_ = user.id;
         this->updateNotes();
+        this->updateBadges();
         this->avatarUrl_ = user.profileImageUrl;
 
         // copyable button for login name of users with a localized username
@@ -1207,6 +1530,146 @@ void UserInfoPopup::updateNotes()
     }
     this->ui_.notesPreview->setText(userData->notes);
     this->ui_.notesPreview->setVisible(true);
+}
+
+void UserInfoPopup::updateBadges()
+{
+    if (this->userName_.isEmpty())
+    {
+        this->ui_.badgeGrid->clearBadges();
+        return;
+    }
+
+    this->ui_.badgeGrid->setBadges(this->buildUserBadges());
+
+    std::weak_ptr<bool> hack = this->lifetimeHack_;
+    getIvr()->getUserBadges(
+        this->userName_,
+        [this, hack](const std::vector<IvrUserBadge> &ivrBadges) {
+            runInGuiThread([this, hack, ivrBadges]() {
+                if (!hack.lock())
+                {
+                    return;
+                }
+
+                std::unordered_set<QString> seen;
+                auto badges = this->buildUserBadges(&seen);
+
+                for (const auto &badge : ivrBadges)
+                {
+                    const auto emote = getApp()->getTwitchBadges()->badge(
+                        badge.setID, badge.version);
+                    if (!emote)
+                    {
+                        continue;
+                    }
+
+                    const auto key = badge.setID + u'/' + badge.version;
+                    if (seen.contains(key))
+                    {
+                        continue;
+                    }
+
+                    seen.insert(key);
+                    const auto tooltip = badge.title.isEmpty()
+                                             ? (*emote)->tooltip.string
+                                             : badge.title;
+                    badges.append({*emote, tooltip});
+                }
+
+                this->ui_.badgeGrid->setBadges(badges);
+            });
+        },
+        [] {});
+}
+
+QVector<UserBadgeDisplayEntry> UserInfoPopup::buildUserBadges(
+    std::unordered_set<QString> *seenOut) const
+{
+    const auto *twitchChannel =
+        dynamic_cast<TwitchChannel *>(this->underlyingChannel_.get());
+
+    QVector<UserBadgeDisplayEntry> badges;
+    std::unordered_set<QString> seen;
+
+    const auto addBadge = [&](const QString &key, const EmotePtr &emote,
+                              const QString &tooltip) {
+        if (!emote || key.isEmpty() || seen.contains(key))
+        {
+            return;
+        }
+
+        seen.insert(key);
+        badges.append({emote, tooltip});
+    };
+
+    if (twitchChannel != nullptr)
+    {
+        for (auto it = this->underlyingChannel_->getMessageSnapshot().rbegin();
+             it != this->underlyingChannel_->getMessageSnapshot().rend(); ++it)
+        {
+            if (!checkMessageUserName(this->userName_, *it))
+            {
+                continue;
+            }
+
+            for (const auto &badge : (*it)->twitchBadges)
+            {
+                if (auto emote = getTwitchBadgeEmote(badge, twitchChannel))
+                {
+                    addBadge(twitchBadgeKey(badge), *emote,
+                             (*emote)->tooltip.string);
+                }
+            }
+            break;
+        }
+    }
+
+    if (!this->userId_.isEmpty())
+    {
+        for (const auto &badge :
+             getApp()->getFfzBadges()->getUserBadges({this->userId_}))
+        {
+            addBadge(QString("ffz/%1").arg(badge.emote->name.string),
+                     badge.emote, badge.emote->tooltip.string);
+        }
+
+        if (twitchChannel != nullptr)
+        {
+            for (const auto &badge :
+                 twitchChannel->ffzChannelBadges(this->userId_))
+            {
+                addBadge(QString("ffz-channel/%1").arg(badge.emote->name.string),
+                         badge.emote, badge.emote->tooltip.string);
+            }
+        }
+
+        if (auto badge = getApp()->getBttvBadges()->getBadge({this->userId_}))
+        {
+            addBadge(QString("bttv/%1").arg((*badge)->name.string), *badge,
+                     (*badge)->tooltip.string);
+        }
+
+        if (auto badge =
+                getApp()->getChatterinoBadges()->getBadge({this->userId_}))
+        {
+            addBadge(QString("chatterino/%1").arg((*badge)->name.string),
+                     *badge, (*badge)->tooltip.string);
+        }
+
+        if (auto badge = getApp()->getSeventvBadges()->getBadge({this->userId_}))
+        {
+            addBadge(QString("7tv/%1").arg((*badge)->name.string), *badge,
+                     (*badge)->tooltip.string);
+        }
+    }
+
+    if (seenOut != nullptr)
+    {
+        *seenOut = std::move(seen);
+    }
+
+    return badges;
 }
 
 //
