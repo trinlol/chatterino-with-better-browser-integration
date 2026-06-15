@@ -668,6 +668,7 @@ public:
                         const MessageLayoutContext &ctx) override;
 
     TextElement *formatTime(const QTime &time);
+    TextElement *formatTime(const QTime &time, const MessageLayoutContext &ctx);
     MessageElement *setLink(const Link &link) override;
 
     QTime time() const

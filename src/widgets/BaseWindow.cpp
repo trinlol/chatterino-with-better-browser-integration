@@ -1111,6 +1111,7 @@ bool BaseWindow::handleSHOWWINDOW(MSG *msg)
             // disable OS window border
             const MARGINS margins = {-1};
             DwmExtendFrameIntoClientArea(msg->hwnd, &margins);
+            applyApplicationIcon(this);
         }
 
         if (!this->initalBounds_.isNull())

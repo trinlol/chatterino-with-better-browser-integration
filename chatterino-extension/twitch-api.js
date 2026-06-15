@@ -34,6 +34,7 @@
       channelLogin: null
     },
     prediction: null,
+    poll: null,
     rewards: [],
     lastUpdate: 0
   };
@@ -67,6 +68,7 @@
       channelLogin: channelLogin || null
     };
     state.prediction = null;
+    state.poll = null;
     state.rewards = [];
   }
 
@@ -251,6 +253,7 @@
       'data-cc-gql-prediction',
       state.prediction?.title ? JSON.stringify(state.prediction) : ''
     );
+    root.setAttribute('data-cc-gql-poll', state.poll?.title ? JSON.stringify(state.poll) : '');
     root.setAttribute('data-cc-gql-rewards', JSON.stringify(state.rewards.slice(0, 80)));
     root.setAttribute('data-cc-gql-updated', String(state.lastUpdate));
 
@@ -291,6 +294,35 @@
       status,
       duration: event.durationSeconds || event.predictionWindowSeconds || 0,
       winner: event.winningOutcome?.title || event.winner || ''
+    };
+  }
+
+  function parsePollEvent(event) {
+    if (!event || typeof event !== 'object') {
+      return null;
+    }
+    const statusRaw = (event.status || event.pollStatus || '').toLowerCase();
+    let status = 'started';
+    if (statusRaw.includes('lock') || statusRaw.includes('close')) {
+      status = 'locked';
+    } else if (
+      statusRaw.includes('end') ||
+      statusRaw.includes('complete') ||
+      statusRaw.includes('cancel')
+    ) {
+      status = 'ended';
+    }
+
+    const choices = event.choices || event.pollChoices || event.outcomes || [];
+    const options = choices
+      .map((choice) => choice.title || choice.name || choice.label || choice.choiceText)
+      .filter(Boolean);
+
+    return {
+      title: event.title || event.pollTitle || 'Poll',
+      options,
+      status,
+      duration: event.durationSeconds || event.remainingDurationSeconds || 0
     };
   }
 
@@ -388,6 +420,13 @@
         }
       }
 
+      if (obj.communityPollEvent != null) {
+        const parsed = parsePollEvent(obj.communityPollEvent);
+        if (parsed) {
+          state.poll = parsed;
+        }
+      }
+
       if (obj.event != null && (obj.event.outcomes || obj.event.predictionOutcomes)) {
         const parsed = parsePredictionEvent(obj.event);
         if (parsed) {
@@ -395,10 +434,24 @@
         }
       }
 
+      if (obj.event != null && (obj.event.choices || obj.event.pollChoices)) {
+        const parsed = parsePollEvent(obj.event);
+        if (parsed) {
+          state.poll = parsed;
+        }
+      }
+
       if (obj.prediction != null && typeof obj.prediction === 'object') {
         const parsed = parsePredictionEvent(obj.prediction);
         if (parsed) {
           state.prediction = parsed;
+        }
+      }
+
+      if (obj.poll != null && typeof obj.poll === 'object') {
+        const parsed = parsePollEvent(obj.poll);
+        if (parsed) {
+          state.poll = parsed;
         }
       }
 

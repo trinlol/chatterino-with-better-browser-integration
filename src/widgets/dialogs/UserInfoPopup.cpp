@@ -14,6 +14,7 @@
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/userdata/UserDataController.hpp"
 #include "messages/Message.hpp"
+#include "messages/layouts/MessageLayout.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "messages/Emote.hpp"
 #include "providers/IvrApi.hpp"
@@ -38,6 +39,7 @@
 #include "util/Helpers.hpp"
 #include "util/LayoutCreator.hpp"
 #include "util/PostToThread.hpp"
+#include "widgets/BaseWidget.hpp"
 #include "widgets/buttons/LabelButton.hpp"
 #include "widgets/buttons/PixmapButton.hpp"
 #include "widgets/dialogs/EditUserNotesDialog.hpp"
@@ -63,6 +65,7 @@
 #include <QNetworkReply>
 #include <QPointer>
 #include <QStringBuilder>
+#include <QTimer>
 #include <unordered_set>
 
 namespace {
@@ -181,6 +184,34 @@ std::vector<MessagePtr> filterNewLogMessages(
 QDate messageUtcDate(const MessagePtr &message)
 {
     return message->serverReceivedTime.toUTC().date();
+}
+
+void scrollUsercardToEndOfDay(ChannelView *view, const ChannelPtr &channel,
+                              const QDate &day)
+{
+    QTimer::singleShot(0, view, [view, channel, day] {
+        const auto &snapshot = view->getMessagesSnapshot();
+        if (snapshot.empty())
+        {
+            return;
+        }
+
+        size_t lastIdxOfDay = SIZE_MAX;
+        for (size_t i = 0; i < snapshot.size(); ++i)
+        {
+            if (messageUtcDate(snapshot[i]->getMessagePtr()) == day)
+            {
+                lastIdxOfDay = i;
+            }
+        }
+
+        if (lastIdxOfDay == SIZE_MAX)
+        {
+            return;
+        }
+
+        view->scrollToMessageIndexAtBottom(lastIdxOfDay);
+    });
 }
 
 const auto borderColor = QColor(255, 255, 255, 80);
@@ -340,10 +371,15 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
 
     // first line
     auto head = layout.emplace<QHBoxLayout>().withoutMargin();
+    head.getElement()->setAlignment(Qt::AlignTop);
     {
+        auto avatarColumn = head.emplace<QVBoxLayout>().withoutMargin();
+        avatarColumn.getElement()->setSpacing(4);
+        avatarColumn.getElement()->setAlignment(Qt::AlignHCenter);
+
         // avatar
-        auto avatar =
-            head.emplace<PixmapButton>(nullptr).assign(&this->ui_.avatarButton);
+        auto avatar = avatarColumn.emplace<PixmapButton>(nullptr)
+                          .assign(&this->ui_.avatarButton);
         avatar->setScaleIndependentSize(100, 100);
         avatar->setDim(DimButton::Dim::None);
         QObject::connect(
@@ -418,23 +454,28 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                 }
             });
 
+        this->ui_.badgeGrid = new UserBadgeGridWidget(this);
+        this->ui_.badgeGrid->setScaleIndependentWidth(100);
+        avatarColumn.getElement()->addWidget(this->ui_.badgeGrid, 0,
+                                             Qt::AlignHCenter);
+
         auto vbox = head.emplace<QVBoxLayout>();
         {
-            // items on the right
+            // top row: name (left) — id, pin (right)
             {
                 auto box = vbox.emplace<QHBoxLayout>()
                                .withoutMargin()
                                .withoutSpacing();
+                box.getElement()->setAlignment(Qt::AlignTop);
 
                 this->ui_.nameLabel = addCopyableLabel(box, "Copy name");
                 this->ui_.nameLabel->setFontStyle(FontStyle::UiMediumBold);
                 this->ui_.nameLabel->setPadding(QMargins(8, 0, 1, 0));
+
                 this->ui_.liveIndicator = new LiveIndicator;
                 this->ui_.liveIndicator->hide();
-                // addCopyableLabel adds the copy button last -> add the indicator before that
                 box->insertWidget(box->count() - 1, this->ui_.liveIndicator);
-                box->insertItem(box->count() - 1,
-                                ScalingSpacerItem::horizontal(7));
+
                 box->addSpacing(5);
                 box->addStretch(1);
 
@@ -454,7 +495,6 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                 this->ui_.localizedNameLabel->setVisible(false);
                 this->ui_.localizedNameCopyButton->setVisible(false);
 
-                // button to pin the window (only if we close automatically)
                 if (this->closeAutomatically_)
                 {
                     box->addWidget(this->createPinButton());
@@ -649,10 +689,6 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
             }
         });
     }
-
-    layout.emplace<Line>(false);
-
-    layout.emplace<UserBadgeGridWidget>().assign(&this->ui_.badgeGrid);
 
     layout.emplace<Line>(false);
 
@@ -1094,6 +1130,9 @@ void UserInfoPopup::loadUserLogsForDay(const QDate &day, bool prepend,
                             this->userMessagesChannel_->fillInMissingMessages(
                                 newMessages);
                             this->oldestLoadedLogDay_ = day;
+                            scrollUsercardToEndOfDay(this->ui_.latestMessages,
+                                                     this->userMessagesChannel_,
+                                                     day);
                         }
                     }
                 }

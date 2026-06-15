@@ -1323,10 +1323,15 @@ void TimestampElement::addToContainer(MessageLayoutContainer &container,
     if (ctx.flags.hasAny(this->getFlags()))
     {
         this->setTooltip(this->getTooltip());
-        if (getSettings()->timestampFormat != this->format_)
+        if (ctx.showDatePrefixWhenNotToday)
         {
             this->format_ = getSettings()->timestampFormat.getValue();
-            this->element_.reset(this->formatTime(this->time_));
+            this->element_.reset(this->formatTime(this->time_, ctx));
+        }
+        else if (getSettings()->timestampFormat != this->format_)
+        {
+            this->format_ = getSettings()->timestampFormat.getValue();
+            this->element_.reset(this->formatTime(this->time_, ctx));
         }
 
         this->element_->addToContainer(container, ctx);
@@ -1338,6 +1343,27 @@ TextElement *TimestampElement::formatTime(const QTime &time)
     static QLocale locale("en_US");
 
     QString format = locale.toString(time, getSettings()->timestampFormat);
+
+    auto *text =
+        new TextElement(format, MessageElementFlag::Timestamp,
+                        MessageColor::System, FontStyle::TimestampMedium);
+    text->setLink(this->getLink());
+    text->setTooltip(this->getTooltip());
+    return text;
+}
+
+TextElement *TimestampElement::formatTime(const QTime &time,
+                                          const MessageLayoutContext &ctx)
+{
+    static QLocale locale("en_US");
+
+    QString format = locale.toString(time, getSettings()->timestampFormat);
+
+    if (ctx.showDatePrefixWhenNotToday && ctx.messageDate.isValid() &&
+        ctx.messageDate < QDate::currentDate())
+    {
+        format = ctx.messageDate.toString("dd/MM/yy") + " " + format;
+    }
 
     auto *text =
         new TextElement(format, MessageElementFlag::Timestamp,

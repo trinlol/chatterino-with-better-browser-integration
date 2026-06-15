@@ -7,6 +7,7 @@
 #include "messages/MessageElement.hpp"
 
 #include <QColor>
+#include <QDate>
 #include <QPainter>
 #include <QWidget>
 
@@ -121,6 +122,10 @@ struct MessageLayoutContext {
     int width = 1;
     float scale = 1;
     float imageScale = 1;
+
+    /// User card: prefix timestamps with dd/MM/yy when the message is not from today.
+    bool showDatePrefixWhenNotToday{};
+    QDate messageDate{};
 };
 
 }  // namespace chatterino

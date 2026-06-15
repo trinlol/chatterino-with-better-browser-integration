@@ -62,8 +62,10 @@ bool FramelessEmbedWindow::nativeEvent(const QByteArray &eventType,
     return BaseWidget::nativeEvent(eventType, message, result);
 }
 
-void FramelessEmbedWindow::showEvent(QShowEvent *)
+void FramelessEmbedWindow::showEvent(QShowEvent *event)
 {
+    BaseWindow::showEvent(event);
+
     if (!getApp()->getArgs().parentWindowId)
     {
         return;

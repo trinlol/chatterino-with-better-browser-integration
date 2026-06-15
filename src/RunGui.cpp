@@ -248,6 +248,9 @@ void runGui(QApplication &a, const Paths &paths, Settings &settings,
 {
     initQt(args);
     initResources();
+#ifndef Q_OS_MAC
+    QApplication::setWindowIcon(applicationIcon());
+#endif
     initSignalHandler();
 
 #ifdef Q_OS_WIN

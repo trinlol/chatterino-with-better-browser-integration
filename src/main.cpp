@@ -19,6 +19,9 @@
 #include "singletons/Updates.hpp"
 #include "util/AttachToConsole.hpp"
 #include "util/IpcQueue.hpp"
+#ifdef Q_OS_WIN
+#    include "util/WindowsHelper.hpp"
+#endif
 
 #ifdef Q_OS_MACOS
 #    include "util/MacOsHelpers.h"
@@ -40,15 +43,21 @@ using namespace chatterino;
 
 int main(int argc, char **argv)
 {
+#ifdef Q_OS_WIN
+    const auto &appUserModelId = Version::instance().appUserModelID();
+    SetCurrentProcessExplicitAppUserModelID(appUserModelId.c_str());
+#endif
+
     QApplication a(argc, argv);
+
+#ifdef Q_OS_WIN
+    ensureWindowsShellShortcuts(
+        QString::fromStdWString(appUserModelId));
+#endif
 
     QCoreApplication::setApplicationName("chatterino");
     QCoreApplication::setApplicationVersion(CHATTERINO_VERSION);
     QCoreApplication::setOrganizationDomain("chatterino.com");
-#ifdef Q_OS_WIN
-    SetCurrentProcessExplicitAppUserModelID(
-        Version::instance().appUserModelID().c_str());
-#endif
 
     std::unique_ptr<Paths> paths;
 

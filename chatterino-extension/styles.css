@@ -264,6 +264,54 @@ html.chatterino-points-replica-active
   flex-shrink: 0 !important;
 }
 
+/* Inline poll banner — move native Twitch poll DOM into toolbar slot */
+.chatterino-moved-poll-inline {
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+  max-width: 420px !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+.chatterino-moved-poll-inline,
+.chatterino-moved-poll-inline * {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+html.chatterino-companion-active .chatterino-moved-poll-inline,
+html.chatterino-companion-active .chatterino-moved-poll-inline * {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+.chatterino-poll-fallback-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background-color: #18181b !important;
+  border: 1px solid #00a3ff !important;
+  border-radius: 4px !important;
+  padding: 4px 10px !important;
+  height: 30px !important;
+  color: #efeff1 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: default !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
+.chatterino-poll-fallback-pill .dot {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: #00a3ff !important;
+  flex-shrink: 0 !important;
+}
+
 div[role="dialog"]:has(.reward-center__content),
 div.ReactModal__Content:has(.reward-center__content),
 div[role="dialog"][aria-labelledby="channel-points-reward-center-header"] {

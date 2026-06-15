@@ -3,10 +3,11 @@
 
   const BANNER_SELECTORS = [
     '[data-test-selector="community-prediction-banner"]',
-    '[data-test-selector="community-poll-banner"]',
     '.prediction-banner',
     '.gamba-prediction-status-banner'
   ];
+
+  const POLL_BANNER_SELECTOR = '[data-test-selector="community-poll-banner"]';
 
   const PINNED_SELECTORS = [
     '[data-a-target="chat-pinned-message"]',
@@ -375,7 +376,7 @@
       });
     }
 
-    mountInSlot(replica, 1);
+    mountInSlot(replica, 2);
     document.documentElement.classList.add('chatterino-points-replica-active');
     return replica;
   }
@@ -606,13 +607,14 @@
     const claim = root.getAttribute('data-cc-gql-claim');
     const claimId = root.getAttribute('data-cc-gql-claim-id');
     const predRaw = root.getAttribute('data-cc-gql-prediction');
+    const pollRaw = root.getAttribute('data-cc-gql-poll');
     const rewardsRaw = root.getAttribute('data-cc-gql-rewards');
 
-    if (!balance && claim == null && !claimId && !predRaw && !rewardsRaw) {
+    if (!balance && claim == null && !claimId && !predRaw && !pollRaw && !rewardsRaw) {
       return;
     }
 
-    gqlState = gqlState || { channelPoints: {}, prediction: null, rewards: [] };
+    gqlState = gqlState || { channelPoints: {}, prediction: null, poll: null, rewards: [] };
 
     gqlState.channelPoints = {
       ...gqlState.channelPoints,
@@ -626,6 +628,14 @@
         gqlState.prediction = JSON.parse(predRaw);
       } catch (_) {
         gqlState.prediction = { title: predRaw, options: [], status: 'started' };
+      }
+    }
+
+    if (pollRaw) {
+      try {
+        gqlState.poll = JSON.parse(pollRaw);
+      } catch (_) {
+        gqlState.poll = { title: pollRaw, options: [], status: 'started' };
       }
     }
 
@@ -761,10 +771,22 @@
 
   function findBanner() {
     for (const selector of BANNER_SELECTORS) {
-      const banner = document.querySelector(selector);
-      if (banner) {
+      for (const banner of document.querySelectorAll(selector)) {
+        if (banner.closest('#chatterino-toolbar-portal')) {
+          continue;
+        }
         return banner;
       }
+    }
+    return null;
+  }
+
+  function findPollBanner() {
+    for (const banner of document.querySelectorAll(POLL_BANNER_SELECTOR)) {
+      if (banner.closest('#chatterino-toolbar-portal')) {
+        continue;
+      }
+      return banner;
     }
     return null;
   }
@@ -1259,7 +1281,7 @@
         updateDisplayState(banner);
       });
     }
-    mountInSlot(minIcon, 0);
+    mountInSlot(minIcon, 1);
     minIcon.style.setProperty('display', isMinimized ? 'inline-flex' : 'none', 'important');
     return minIcon;
   }
@@ -1282,7 +1304,7 @@
       banner.classList.remove('chatterino-moved-banner-floating');
     }
 
-    mountInSlot(banner, 0);
+    mountInSlot(banner, 1);
 
     let minBtn = banner.querySelector('.chatterino-prediction-minimize-btn');
     if (!minBtn) {
@@ -1344,7 +1366,7 @@
     }
 
     pill.querySelector('.label').textContent = prediction.title;
-    mountInSlot(pill, 0);
+    mountInSlot(pill, 1);
     sendPredictionMessage(channelName, {
       title: prediction.title,
       options: prediction.options || [],
@@ -1360,6 +1382,39 @@
     lastPredictionTitle = '';
     isMinimized = false;
     activeBanner = null;
+  }
+
+  function handlePollBanner(banner) {
+    document.getElementById('chatterino-poll-fallback')?.remove();
+
+    if (!banner.classList.contains('chatterino-moved-poll-inline')) {
+      banner.classList.add('chatterino-moved-poll-inline');
+    }
+
+    mountInSlot(banner, 0);
+  }
+
+  function handlePollFallback() {
+    const poll = gqlState?.poll;
+    if (!poll?.title) {
+      document.getElementById('chatterino-poll-fallback')?.remove();
+      return;
+    }
+
+    let pill = document.getElementById('chatterino-poll-fallback');
+    if (!pill) {
+      pill = document.createElement('div');
+      pill.id = 'chatterino-poll-fallback';
+      pill.className = 'chatterino-poll-fallback-pill';
+      pill.innerHTML = '<span class="dot"></span><span class="label"></span>';
+    }
+
+    pill.querySelector('.label').textContent = poll.title;
+    mountInSlot(pill, 0);
+  }
+
+  function cleanupPollUi() {
+    document.getElementById('chatterino-poll-fallback')?.remove();
   }
 
   function syncCompanionState() {
@@ -1396,6 +1451,7 @@
       lastPinFingerprint = '';
       resetFingerprints();
       cleanupPredictionUi();
+      cleanupPollUi();
       resetChannelScopedUi();
       window.dispatchEvent(
         new CustomEvent('chatterino-companion-channel-change', { detail: { channel: channelName } })
@@ -1423,6 +1479,16 @@
       // Native summary was destroyed (e.g. Chatterino chat wipe) — keep the
       // existing clone alive and refresh its balance from GQL data.
       updateReplicaBalanceFromGql();
+    }
+
+    const pollBanner = findPollBanner();
+    if (pollBanner) {
+      handlePollBanner(pollBanner);
+    } else {
+      cleanupPollUi();
+      if (gqlState?.poll?.title && (companionActive || isChatShellWiped() || channelName)) {
+        handlePollFallback();
+      }
     }
 
     const banner = findBanner();

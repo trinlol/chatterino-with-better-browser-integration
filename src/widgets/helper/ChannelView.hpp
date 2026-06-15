@@ -131,6 +131,7 @@ public:
      * @return <code>true</code> if the message was found and highlighted.
      */
     bool scrollToMessageId(const QString &id);
+    void scrollToMessageIndexAtBottom(size_t messageIdx);
 
     /// Pausing
     bool pausable() const;
@@ -307,6 +308,7 @@ private:
                                              const MessageLayoutPtr &layout);
 
     int getLayoutWidth() const;
+    MessageLayoutContext makeMessageLayoutContext(int layoutWidth) const;
     void updatePauses();
     void unpaused();
 

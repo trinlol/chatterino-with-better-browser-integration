@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QIcon>
+#include <QTimer>
 #include <QWidget>
 
 #ifdef USEWINSDK
@@ -17,15 +18,34 @@ namespace chatterino {
 
 inline QIcon applicationIcon()
 {
-#ifdef Q_OS_WIN
-    const QIcon exeIcon(QCoreApplication::applicationFilePath());
-    if (!exeIcon.isNull())
+    const auto tryIcon = [](const QString &path) -> QIcon {
+        const QIcon icon(path);
+        if (!icon.isNull() && !icon.availableSizes().isEmpty())
+        {
+            return icon;
+        }
+        return {};
+    };
+
+    if (auto icon = tryIcon(QStringLiteral(":/icon.ico")); !icon.isNull())
     {
-        return exeIcon;
+        return icon;
+    }
+
+    if (auto icon = tryIcon(QStringLiteral(":/icon.png")); !icon.isNull())
+    {
+        return icon;
+    }
+
+#ifdef Q_OS_WIN
+    if (auto icon = tryIcon(QCoreApplication::applicationFilePath());
+        !icon.isNull())
+    {
+        return icon;
     }
 #endif
 
-    return QIcon(":/icon.ico");
+    return QIcon(QStringLiteral(":/icon.ico"));
 }
 
 inline void applyApplicationIcon(QWidget *widget)
@@ -35,41 +55,63 @@ inline void applyApplicationIcon(QWidget *widget)
         return;
     }
 
-    const QIcon icon = QApplication::windowIcon();
-    if (icon.isNull())
+    const QIcon icon = applicationIcon();
+    if (!icon.isNull())
     {
-        return;
+        widget->setWindowIcon(icon);
     }
-
-    widget->setWindowIcon(icon);
 
 #ifdef USEWINSDK
-    const auto hwnd = HWND(widget->winId());
-    if (!hwnd)
-    {
-        return;
-    }
+    const auto applyWin32Icons = [](HWND hwnd) {
+        if (!hwnd)
+        {
+            return;
+        }
 
-    const auto exePath = QCoreApplication::applicationFilePath();
-    const auto *path = reinterpret_cast<LPCWSTR>(exePath.utf16());
+        const HINSTANCE module = GetModuleHandleW(nullptr);
+        const LPCWSTR iconId = MAKEINTRESOURCEW(1);
 
-    HICON bigIcon = static_cast<HICON>(LoadImageW(
-        nullptr, path, IMAGE_ICON, GetSystemMetrics(SM_CXICON),
-        GetSystemMetrics(SM_CYICON), LR_LOADFROMFILE));
-    HICON smallIcon = static_cast<HICON>(LoadImageW(
-        nullptr, path, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
-        GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE));
+        auto loadSizedIcon = [&](int width, int height) -> HICON {
+            HICON icon = static_cast<HICON>(LoadImageW(
+                module, iconId, IMAGE_ICON, width, height, LR_DEFAULTCOLOR));
+            if (icon == nullptr)
+            {
+                icon = LoadIconW(module, iconId);
+            }
+            return icon;
+        };
 
-    if (bigIcon != nullptr)
-    {
-        SendMessageW(hwnd, WM_SETICON, ICON_BIG,
-                     reinterpret_cast<LPARAM>(bigIcon));
-    }
-    if (smallIcon != nullptr)
-    {
-        SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
-                     reinterpret_cast<LPARAM>(smallIcon));
-    }
+        HICON bigIcon =
+            loadSizedIcon(GetSystemMetrics(SM_CXICON),
+                          GetSystemMetrics(SM_CYICON));
+        HICON smallIcon =
+            loadSizedIcon(GetSystemMetrics(SM_CXSMICON),
+                          GetSystemMetrics(SM_CYSMICON));
+
+        if (bigIcon != nullptr)
+        {
+            SendMessageW(hwnd, WM_SETICON, ICON_BIG,
+                         reinterpret_cast<LPARAM>(bigIcon));
+            SetClassLongPtrW(hwnd, GCLP_HICON,
+                             reinterpret_cast<LONG_PTR>(bigIcon));
+        }
+        if (smallIcon != nullptr)
+        {
+            SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
+                         reinterpret_cast<LPARAM>(smallIcon));
+            SetClassLongPtrW(hwnd, GCLP_HICONSM,
+                             reinterpret_cast<LONG_PTR>(smallIcon));
+        }
+    };
+
+    applyWin32Icons(HWND(widget->winId()));
+
+    QTimer::singleShot(0, widget, [widget, applyWin32Icons] {
+        applyWin32Icons(HWND(widget->winId()));
+    });
+    QTimer::singleShot(100, widget, [widget, applyWin32Icons] {
+        applyWin32Icons(HWND(widget->winId()));
+    });
 #endif
 }
 

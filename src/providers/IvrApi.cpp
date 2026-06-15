@@ -14,7 +14,79 @@
 #include <QDateTime>
 #include <QUrlQuery>
 
+#include <cstddef>
+
 namespace chatterino {
+
+namespace {
+
+constexpr const char *USER_LOGS_BASE_URLS[] = {
+    "https://logs.zonian.dev/",
+    "https://logs.ivr.fi/",
+};
+
+using UserLogsJsonSuccessCallback =
+    std::function<void(const NetworkResult &)>;
+
+void requestUserLogsJsonImpl(QString path, const QUrlQuery &query,
+                             int timeoutMs,
+                             UserLogsJsonSuccessCallback successCallback,
+                             IvrFailureCallback failureCallback,
+                             std::size_t baseIndex)
+{
+    if (baseIndex >= std::size(USER_LOGS_BASE_URLS))
+    {
+        failureCallback();
+        return;
+    }
+
+    QUrl url(QString(USER_LOGS_BASE_URLS[baseIndex]) + path);
+    if (!query.isEmpty())
+    {
+        url.setQuery(query);
+    }
+
+    NetworkRequest(url)
+        .timeout(timeoutMs)
+        .header("Accept", "application/json")
+        .onSuccess([successCallback](const NetworkResult &result) {
+            successCallback(result);
+        })
+        .onError([path, query, timeoutMs, successCallback, failureCallback,
+                  baseIndex](const NetworkResult &result) {
+            const bool hasFallback =
+                baseIndex + 1 < std::size(USER_LOGS_BASE_URLS);
+
+            qCWarning(chatterinoIvr)
+                << "Failed user logs API call at"
+                << USER_LOGS_BASE_URLS[baseIndex] << result.formatError()
+                << QString(result.getData())
+                << (hasFallback ? ", trying fallback" : "");
+
+            if (hasFallback)
+            {
+                requestUserLogsJsonImpl(path, query, timeoutMs,
+                                        successCallback, failureCallback,
+                                        baseIndex + 1);
+            }
+            else
+            {
+                failureCallback();
+            }
+        })
+        .execute();
+}
+
+void requestUserLogsJson(QString path, QUrlQuery query, int timeoutMs,
+                         UserLogsJsonSuccessCallback successCallback,
+                         IvrFailureCallback failureCallback)
+{
+    requestUserLogsJsonImpl(std::move(path), std::move(query), timeoutMs,
+                              std::move(successCallback),
+                              std::move(failureCallback), 0);
+}
+
+}  // namespace
 
 static IvrApi *instance = nullptr;
 
@@ -85,40 +157,15 @@ void IvrApi::getChannelUserStats(
 {
     assert(!channelName.isEmpty() && !userName.isEmpty());
 
-    const QString url = QString("channel/%1/user/%2/stats")
-                            .arg(channelName.toLower(), userName.toLower());
+    const QString path = QString("channel/%1/user/%2/stats")
+                             .arg(channelName.toLower(), userName.toLower());
 
-    NetworkRequest(QUrl("https://logs.zonian.dev/" + url))
-        .timeout(5 * 1000)
-        .header("Accept", "application/json")
-        .onSuccess([successCallback](auto result) {
+    requestUserLogsJson(
+        path, {}, 5 * 1000,
+        [successCallback](const NetworkResult &result) {
             successCallback(result.parseJson());
-        })
-        .onError([channelName, userName, successCallback,
-                  failureCallback](auto result) {
-            qCWarning(chatterinoIvr)
-                << "Failed zonian logs API call, trying ivr.fi fallback"
-                << result.formatError() << QString(result.getData());
-
-            const QString fallbackUrl =
-                QString("https://logs.ivr.fi/channel/%1/user/%2/stats")
-                    .arg(channelName.toLower(), userName.toLower());
-
-            NetworkRequest(QUrl(fallbackUrl))
-                .timeout(5 * 1000)
-                .header("Accept", "application/json")
-                .onSuccess([successCallback](auto fallbackResult) {
-                    successCallback(fallbackResult.parseJson());
-                })
-                .onError([failureCallback](auto fallbackResult) {
-                    qCWarning(chatterinoIvr)
-                        << "Failed logs API call!" << fallbackResult.formatError()
-                        << QString(fallbackResult.getData());
-                    failureCallback();
-                })
-                .execute();
-        })
-        .execute();
+        },
+        failureCallback);
 }
 
 void IvrApi::loadUserLogsForDay(
@@ -140,13 +187,10 @@ void IvrApi::loadUserLogsForDay(
 
     const QString path = QString("channel/%1/user/%2")
                              .arg(channelName.toLower(), userName.toLower());
-    QUrl url("https://logs.zonian.dev/" + path);
-    url.setQuery(query);
 
-    NetworkRequest(url)
-        .timeout(10 * 1000)
-        .header("Accept", "application/json")
-        .onSuccess([successCallback, channelName](const NetworkResult &result) {
+    requestUserLogsJson(
+        path, query, 10 * 1000,
+        [successCallback, channelName](const NetworkResult &result) {
             auto root = result.parseJson();
             auto parsed = recentmessages::detail::parseUserLogMessages(root);
             if (parsed.empty())
@@ -166,14 +210,8 @@ void IvrApi::loadUserLogsForDay(
                     parsed, channel.get());
                 successCallback(std::move(built));
             });
-        })
-        .onError([failureCallback](const NetworkResult &result) {
-            qCWarning(chatterinoIvr)
-                << "Failed to load user logs!" << result.formatError()
-                << QString(result.getData());
-            failureCallback();
-        })
-        .execute();
+        },
+        failureCallback);
 }
 
 NetworkRequest IvrApi::makeRequest(QString url, QUrlQuery urlQuery)

@@ -23,6 +23,10 @@ void setRegisteredForStartup(bool isRegistered);
 
 QString getAssociatedExecutable(AssociationQueryType queryType, LPCWSTR query);
 
+/// Ensures shell shortcuts for this executable carry the same AppUserModelID as
+/// the running process so Windows shows the correct taskbar icon.
+void ensureWindowsShellShortcuts(const QString &appUserModelId);
+
 }  // namespace chatterino
 
 #endif

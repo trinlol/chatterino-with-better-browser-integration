@@ -203,7 +203,9 @@ void MessageLayout::actuallyLayout(const MessageLayoutContext &ctx)
             continue;
         }
 
-        element->addToContainer(this->container_, ctx);
+        auto elementCtx = ctx;
+        elementCtx.messageDate = this->message_->serverReceivedTime.date();
+        element->addToContainer(this->container_, elementCtx);
     }
 
     if (this->height_ != this->container_.getHeight())

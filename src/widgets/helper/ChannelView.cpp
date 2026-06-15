@@ -726,7 +726,6 @@ void ChannelView::layoutVisibleMessages(
 {
     const auto start = size_t(this->scrollBar_->getRelativeCurrentValue());
     const auto layoutWidth = this->getLayoutWidth();
-    const auto flags = this->getFlags();
     auto redrawRequired = false;
 
     if (messages.size() > start)
@@ -739,14 +738,7 @@ void ChannelView::layoutVisibleMessages(
             const auto &message = messages[i];
 
             redrawRequired |= message->layout(
-                {
-                    .messageColors = this->messageColors_,
-                    .flags = flags,
-                    .width = layoutWidth,
-                    .scale = this->scale(),
-                    .imageScale = this->scale() *
-                                  static_cast<float>(this->devicePixelRatio()),
-                },
+                this->makeMessageLayoutContext(layoutWidth),
                 this->bufferInvalidationQueued_);
 
             y += message->getHeight();
@@ -771,7 +763,6 @@ void ChannelView::updateScrollbar(const std::vector<MessageLayoutPtr> &messages,
 
     /// Layout the messages at the bottom
     qreal h = this->height() - 8;
-    auto flags = this->getFlags();
     auto layoutWidth = this->getLayoutWidth();
     auto showScrollbar = false;
 
@@ -780,16 +771,7 @@ void ChannelView::updateScrollbar(const std::vector<MessageLayoutPtr> &messages,
     {
         auto *message = messages[i].get();
 
-        message->layout(
-            {
-                .messageColors = this->messageColors_,
-                .flags = flags,
-                .width = layoutWidth,
-                .scale = this->scale(),
-                .imageScale = this->scale() *
-                              static_cast<float>(this->devicePixelRatio()),
-            },
-            false);
+        message->layout(this->makeMessageLayoutContext(layoutWidth), false);
 
         h -= message->getHeight();
 
@@ -1528,6 +1510,21 @@ bool ChannelView::scrollToMessage(const MessagePtr &message)
     return true;
 }
 
+void ChannelView::scrollToMessageIndexAtBottom(size_t messageIdx)
+{
+    if (!this->showScrollBar_)
+    {
+        return;
+    }
+
+    auto &scrollbar = this->getScrollBar();
+    const qreal target = scrollbar.getMinimum() + qreal(messageIdx) -
+                         scrollbar.getPageSize() + 1;
+    scrollbar.setDesiredValue(
+        std::max(scrollbar.getMinimum(),
+                 std::min(scrollbar.getBottom(), target)));
+}
+
 bool ChannelView::scrollToMessageId(const QString &messageId)
 {
     auto &messagesSnapshot = this->getMessagesSnapshot();
@@ -1838,15 +1835,7 @@ void ChannelView::wheelEvent(QWheelEvent *event)
                 else
                 {
                     snapshot[i - 1]->layout(
-                        {
-                            .messageColors = this->messageColors_,
-                            .flags = this->getFlags(),
-                            .width = this->getLayoutWidth(),
-                            .scale = this->scale(),
-                            .imageScale =
-                                this->scale() *
-                                static_cast<float>(this->devicePixelRatio()),
-                        },
+                        this->makeMessageLayoutContext(this->getLayoutWidth()),
                         false);
                     scrollFactor = 1;
                     currentScrollLeft = snapshot[i - 1]->getHeight();
@@ -1881,15 +1870,7 @@ void ChannelView::wheelEvent(QWheelEvent *event)
                 else
                 {
                     snapshot[i + 1]->layout(
-                        {
-                            .messageColors = this->messageColors_,
-                            .flags = this->getFlags(),
-                            .width = this->getLayoutWidth(),
-                            .scale = this->scale(),
-                            .imageScale =
-                                this->scale() *
-                                static_cast<float>(this->devicePixelRatio()),
-                        },
+                        this->makeMessageLayoutContext(this->getLayoutWidth()),
                         false);
 
                     scrollFactor = 1;
@@ -3343,6 +3324,20 @@ bool ChannelView::tryGetMessageAt(QPointF p,
     }
 
     return false;
+}
+
+MessageLayoutContext ChannelView::makeMessageLayoutContext(
+    int layoutWidth) const
+{
+    return {
+        .messageColors = this->messageColors_,
+        .flags = this->getFlags(),
+        .width = layoutWidth,
+        .scale = this->scale(),
+        .imageScale = this->scale() *
+                      static_cast<float>(this->devicePixelRatio()),
+        .showDatePrefixWhenNotToday = this->context_ == Context::UserCard,
+    };
 }
 
 int ChannelView::getLayoutWidth() const
