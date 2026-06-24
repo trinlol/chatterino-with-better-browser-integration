@@ -50,6 +50,12 @@
     'button[aria-label*="Channel Points" i]'
   ];
 
+  const BADGE_SELECTORS = [
+    '.chat-input__badge-carousel',
+    '[class*="chat-input"] [data-a-target="chat-badge-carousel"]',
+    '[data-a-target="chat-badge-carousel-badge-icon"]'
+  ];
+
   const CLAIM_BONUS_SELECTORS = [
     'button[aria-label="Claim Bonus"]',
     'button[aria-label*="Claim Bonus" i]'
@@ -376,7 +382,7 @@
       });
     }
 
-    mountInSlot(replica, 2);
+    mountInSlot(replica, 3);
     document.documentElement.classList.add('chatterino-points-replica-active');
     return replica;
   }
@@ -384,6 +390,253 @@
   function removePointsReplica() {
     document.getElementById('chatterino-points-replica')?.remove();
     document.documentElement.classList.remove('chatterino-points-replica-active');
+  }
+
+  // Chat badge carousel — same replica pattern as channel points. The native
+  // element stays in the React tree; we mirror it in the toolbar and forward
+  // clicks so Twitch opens the Chat Identity popover.
+  function findChatInputRoot() {
+    return (
+      document.querySelector('[data-a-target="chat-input"]')?.closest('[class*="chat-input"]') ||
+      document.querySelector('[class*="chat-input__textarea"]')?.closest('[class*="chat-input"]') ||
+      document.querySelector('.chat-input') ||
+      document.querySelector('[class*="chat-input"]')
+    );
+  }
+
+  function findChatBadgeCarousel() {
+    const searchRoot = findChatInputRoot() || document;
+    for (const selector of BADGE_SELECTORS) {
+      for (const el of searchRoot.querySelectorAll(selector)) {
+        if (el.closest('#chatterino-toolbar-portal')) {
+          continue;
+        }
+        return (
+          el.closest('.chat-input__badge-carousel') ||
+          el.closest('[data-a-target="chat-badge-carousel"]') ||
+          el
+        );
+      }
+    }
+    return null;
+  }
+
+  function findNativeChatBadgeButton() {
+    const carousel = findChatBadgeCarousel();
+    if (!carousel) {
+      return null;
+    }
+    const btn =
+      carousel.querySelector('[data-a-target="chat-badge-carousel-badge-icon"]') ||
+      carousel.querySelector('button[aria-label="ChatBadgeCarousel"]') ||
+      carousel.querySelector('button');
+    if (btn && !btn.closest('#chatterino-toolbar-portal')) {
+      return btn;
+    }
+    return null;
+  }
+
+  const BADGE_REPLICA_VERSION = '3';
+
+  const BADGE_REPLICA_MARKUP = `
+<button type="button" class="chatterino-badge-replica-btn" aria-hidden="true" tabindex="-1">
+  <span class="chatterino-badge-replica-btn__icon" aria-hidden="true">
+    <svg width="32" height="32" viewBox="0 0 24 24" focusable="false" role="presentation">
+      <path fill="currentColor" d="M12 1.25 3.5 5v7c0 5.45 3.85 10.35 8.5 12 4.65-1.65 8.5-6.55 8.5-12V5L12 1.25z"/>
+      <path fill="#efeff1" d="M12 6.5l2.1 4.25 4.7.68-3.4 3.31.8 4.68L12 17.2l-4.2 2.42.8-4.68-3.4-3.31 4.7-.68L12 6.5z"/>
+    </svg>
+  </span>
+</button>`;
+
+  function applyBadgeReplicaMarkup(replica) {
+    replica.innerHTML = BADGE_REPLICA_MARKUP;
+    replica.dataset.ccBadgeVersion = BADGE_REPLICA_VERSION;
+  }
+
+  function buildBadgeReplicaShell() {
+    const replica = document.createElement('div');
+    replica.id = 'chatterino-badge-replica';
+    replica.setAttribute('role', 'button');
+    replica.setAttribute('tabindex', '0');
+    replica.setAttribute('aria-label', 'Chat Identity');
+    replica.setAttribute('title', 'Chat Identity');
+    applyBadgeReplicaMarkup(replica);
+
+    const handleActivate = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleBadgeReplicaClick(replica);
+    };
+
+    replica.addEventListener('click', handleActivate, true);
+    replica.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        handleActivate(e);
+      }
+    });
+    return replica;
+  }
+
+  let identityDialogWatchId = null;
+
+  function findNativeChatIdentityDialog() {
+    return (
+      document.querySelector('div[role="dialog"][aria-label="Chat Identity"]') ||
+      document.querySelector('div[role="dialog"]:has(.chat-identity-menu)') ||
+      document.querySelector('.chat-identity-menu')?.closest('[role="dialog"]')
+    );
+  }
+
+  function ensureChatIdentityDialogScrollable(popover) {
+    const scrollSelectors = [
+      '[class*="scrollable"]',
+      '[class*="Scrollable"]',
+      '.chat-identity-menu',
+      '.chat-identity-menu__content',
+      '.simplebar-content-wrapper',
+      '.simplebar-scrollable-node',
+      '[data-simplebar-scrollable]'
+    ];
+    for (const selector of scrollSelectors) {
+      popover.querySelectorAll(selector).forEach((el) => {
+        el.style.setProperty('pointer-events', 'auto', 'important');
+        el.style.setProperty('visibility', 'visible', 'important');
+        el.style.setProperty('touch-action', 'pan-y', 'important');
+        const overflowY = getComputedStyle(el).overflowY;
+        if (overflowY === 'hidden' || overflowY === 'clip') {
+          el.style.setProperty('overflow-y', 'auto', 'important');
+        }
+      });
+    }
+  }
+
+  function markChatIdentityDialog(popover) {
+    popover.classList.add('chatterino-native-chat-identity-dialog');
+    const settingsRoot =
+      popover.querySelector('.chat-settings__popover') ||
+      popover.closest('.chat-settings__popover');
+    if (settingsRoot && settingsRoot !== popover) {
+      settingsRoot.classList.add('chatterino-native-chat-identity-dialog');
+    }
+    ensureChatIdentityDialogScrollable(popover);
+    if (settingsRoot && settingsRoot !== popover) {
+      ensureChatIdentityDialogScrollable(settingsRoot);
+    }
+  }
+
+  function unmarkChatIdentityDialog(popover) {
+    if (!popover) {
+      return;
+    }
+    popover.classList.remove('chatterino-native-chat-identity-dialog');
+    popover
+      .querySelector('.chat-settings__popover')
+      ?.classList.remove('chatterino-native-chat-identity-dialog');
+  }
+
+  function positionNativeChatIdentityDialog(anchorEl) {
+    const popover = findNativeChatIdentityDialog();
+    if (!popover || !anchorEl) {
+      return false;
+    }
+
+    markChatIdentityDialog(popover);
+    popover.style.setProperty('z-index', '2147483647', 'important');
+
+    const anchorRect = anchorEl.getBoundingClientRect();
+    const popRect = popover.getBoundingClientRect();
+    if (popRect.width === 0 || popRect.height === 0) {
+      return false;
+    }
+
+    const prev = popover.__ccTranslate || { x: 0, y: 0 };
+    const baseLeft = popRect.left - prev.x;
+    const baseTop = popRect.top - prev.y;
+
+    const desiredLeft = Math.max(
+      8,
+      Math.min(anchorRect.left, window.innerWidth - popRect.width - 8)
+    );
+    let desiredTop = anchorRect.bottom + 8;
+    if (desiredTop + popRect.height > window.innerHeight - 8) {
+      desiredTop = anchorRect.top - popRect.height - 8;
+    }
+    desiredTop = Math.max(8, Math.min(desiredTop, window.innerHeight - popRect.height - 8));
+
+    const dx = Math.round(desiredLeft - baseLeft);
+    const dy = Math.round(desiredTop - baseTop);
+    if (dx !== prev.x || dy !== prev.y) {
+      popover.__ccTranslate = { x: dx, y: dy };
+      popover.style.setProperty('transform', `translate(${dx}px, ${dy}px)`, 'important');
+    }
+    return true;
+  }
+
+  function stopChatIdentityDialogWatcher() {
+    if (identityDialogWatchId) {
+      clearInterval(identityDialogWatchId);
+      identityDialogWatchId = null;
+    }
+  }
+
+  function startChatIdentityDialogWatcher(anchorEl) {
+    stopChatIdentityDialogWatcher();
+    identityDialogWatchId = setInterval(() => {
+      const dialog = findNativeChatIdentityDialog();
+      if (!dialog) {
+        stopChatIdentityDialogWatcher();
+        return;
+      }
+      positionNativeChatIdentityDialog(anchorEl);
+    }, 100);
+
+    setTimeout(() => {
+      stopChatIdentityDialogWatcher();
+    }, 60000);
+  }
+
+  function handleBadgeReplicaClick(replica) {
+    const nativeBtn = findNativeChatBadgeButton();
+    if (!nativeBtn) {
+      return;
+    }
+    nativeBtn.click();
+    const attemptPosition = (triesLeft) => {
+      if (positionNativeChatIdentityDialog(replica)) {
+        startChatIdentityDialogWatcher(replica);
+        return;
+      }
+      if (triesLeft > 0) {
+        requestAnimationFrame(() => attemptPosition(triesLeft - 1));
+      }
+    };
+    requestAnimationFrame(() => attemptPosition(20));
+  }
+
+  function ensureBadgeReplica() {
+    const nativeBtn = findNativeChatBadgeButton();
+    let replica = document.getElementById('chatterino-badge-replica');
+
+    if (!nativeBtn && !replica) {
+      return null;
+    }
+
+    if (!replica) {
+      replica = buildBadgeReplicaShell();
+    } else if (replica.dataset.ccBadgeVersion !== BADGE_REPLICA_VERSION) {
+      applyBadgeReplicaMarkup(replica);
+    }
+
+    mountInSlot(replica, 2);
+    document.documentElement.classList.add('chatterino-badge-replica-active');
+    return replica;
+  }
+
+  function removeBadgeReplica() {
+    document.getElementById('chatterino-badge-replica')?.remove();
+    document.documentElement.classList.remove('chatterino-badge-replica-active');
+    stopChatIdentityDialogWatcher();
+    unmarkChatIdentityDialog(findNativeChatIdentityDialog());
   }
 
   // When the Chatterino integration wipes the chat, the native summary dies
@@ -567,9 +820,12 @@
     stopClaimBootstrap();
     stopRewardDialogWatcher();
     stopUnintendedDismissWatcher();
+    stopChatIdentityDialogWatcher();
+    removeBadgeReplica();
     removePointsReplica();
     document.getElementById('chatterino-points-fallback')?.remove();
     findNativeRewardDialog()?.classList.remove('chatterino-native-reward-dialog');
+    unmarkChatIdentityDialog(findNativeChatIdentityDialog());
     if (rewardPendingActive) {
       forwardRewardClear('channel-reset');
     }
@@ -1464,6 +1720,14 @@
 
     scheduleAutoClaimAttempt();
     handlePinnedMessages(channelName);
+
+    if (findChatBadgeCarousel() || findNativeChatBadgeButton()) {
+      ensureBadgeReplica();
+    } else if (channelName === '') {
+      removeBadgeReplica();
+    } else if (document.getElementById('chatterino-badge-replica')) {
+      ensureBadgeReplica();
+    }
 
     const pointsSummary = findPointsSummary();
     if (pointsSummary) {

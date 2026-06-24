@@ -30,8 +30,8 @@
   // `chatShell.children[0].innerHTML = '<placeholder>'` from its own isolated
   // world, which we cannot intercept. But the wiped React-managed nodes are
   // still alive inside the MutationRecord — restore them (hidden) into their
-  // original parent so Twitch React stays mounted and the channel points
-  // button keeps working.
+  // original parent so Twitch React stays mounted and the channel points /
+  // chat badge carousel buttons keep working.
   function restoreWipedChat(target, removedNodes) {
     let restored = false;
     for (const node of removedNodes) {
@@ -107,9 +107,9 @@
   observer.observe(document.documentElement, { childList: true, subtree: true });
   tryProtectChatShell();
 
-  // NOTE: The native points element is intentionally left in place. Moving it
-  // out of the React root detaches it from Twitch's delegated event handlers,
-  // which made the button unclickable. content.js renders a replica instead.
+  // NOTE: Native points and chat-badge elements stay in place. Moving them out
+  // of the React root detaches Twitch's delegated handlers. content.js renders
+  // replicas in the toolbar instead.
 
   window.addEventListener('chatterino-companion-active', () => {
     if (chrome?.runtime?.id) {

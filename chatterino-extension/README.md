@@ -1,6 +1,6 @@
 # 🧩 Chatterino Better Browser Extension
 
-One browser extension for Chrome and Edge — chat overlay, pinned messages, channel points, and predictions, all in a single install.
+One browser extension for Chrome and Edge — chat overlay, pinned messages, channel points, chat identity badges, and predictions, all in a single install.
 
 ## 📥 Installation (Chrome / Edge)
 
@@ -21,6 +21,7 @@ One browser extension for Chrome and Edge — chat overlay, pinned messages, cha
 | 📌 Pinned messages | Forwards moderator pins to Chatterino |
 | 🎲 Predictions & polls | Syncs live prediction UI to the toolbar |
 | 🪙 Channel points | Auto-claims bonus chests; keeps points UI working after chat wipe |
+| 🏅 Chat identity | Badge button in the toolbar; opens Chat Identity menu when native chat is hidden |
 | 🛡️ Anti-wipe | Restores hidden Twitch DOM after overlay replaces chat |
 
 ## ⚙️ Popup settings

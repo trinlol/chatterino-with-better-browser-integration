@@ -2,7 +2,7 @@
 
 # ✨ Chatterino Better Browser
 
-A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes Twitch browser integration feel native and complete — Chatterino chat overlaid on Twitch, plus pinned messages, predictions, channel points, and a richer emote input experience.
+A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes Twitch browser integration feel native and complete — Chatterino chat overlaid on Twitch, plus pinned messages, predictions, channel points, chat identity badges, and a richer emote input experience.
 
 > 🧩 **One extension only** — load [`chatterino-extension/`](./chatterino-extension/) in Chrome or Edge. No separate Native Host or Companion install.
 
@@ -29,7 +29,7 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
     <td valign="top" align="center">
       <img src="./docs/showcase/twitch-toolbar.gif" width="300" alt="Channel points menu beside the Twitch player toolbar">
       <br>
-      <sub><b>Channel points menu</b> — balance and rewards beside the player toolbar.</sub>
+      <sub><b>Toolbar</b> — channel points, chat identity badges, and rewards beside the player.</sub>
     </td>
   </tr>
 </table>
@@ -61,6 +61,7 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 - 📌 **Pinned messages** — moderator pins show as a compact purple banner in Chatterino with clickable links and a dismiss button
 - 🎲 **Predictions & polls** — live prediction/poll UI integrated into the Twitch toolbar
 - 🪙 **Channel points auto-claim** — claims bonus chests automatically; scrollable rewards menu
+- 🏅 **Chat identity button** — badge picker in the toolbar (left of channel points); opens Twitch's Chat Identity menu even when the native chat is hidden
 - ⚡ **Stable browser overlay** — fixes flicker, disappearing chat, and runaway CPU from native messaging
 
 ### 💬 Rich emote input (fork-exclusive)
@@ -122,7 +123,7 @@ You do **not** need the official Chatterino installed to run this fork. Your set
 
 ## 🧩 Browser extension — one install
 
-Everything runs through a **single** extension. Chat overlay, pins, channel points, and predictions — no second extension needed.
+Everything runs through a **single** extension. Chat overlay, pins, channel points, chat identity, and predictions — no second extension needed.
 
 1. 🌐 Open `chrome://extensions` or `edge://extensions`
 2. 🔧 Enable **Developer mode**

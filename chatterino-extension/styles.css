@@ -3,7 +3,9 @@
 html.chatterino-companion-active .chat-room__content,
 html.chatterino-companion-active
   section.chat-room
-  [class*="scrollable"]:not(:is(.chatterino-native-reward-dialog *)),
+  [class*="scrollable"]:not(
+    :is(.chatterino-native-reward-dialog *, .chatterino-native-chat-identity-dialog *)
+  ),
 html.chatterino-companion-active .chat-scrollable-area__message-container,
 html.chatterino-companion-active [data-a-target="chat-line-message-container"] {
   visibility: hidden !important;
@@ -101,6 +103,71 @@ html.chatterino-points-replica-active
   [data-test-selector="community-points-summary"]:not(#chatterino-toolbar-portal *),
 html.chatterino-points-replica-active
   [data-a-target="community-points-summary"]:not(#chatterino-toolbar-portal *) {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Chat badge replica — generic Twitch badge icon; opens native Chat Identity */
+#chatterino-badge-replica {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  border-radius: 4px !important;
+  color: #9146ff !important;
+  transition: color 120ms ease, background-color 120ms ease !important;
+}
+
+#chatterino-badge-replica:hover,
+#chatterino-badge-replica:focus-visible {
+  color: #a970ff !important;
+  background-color: rgba(145, 70, 255, 0.18) !important;
+  outline: none !important;
+}
+
+#chatterino-badge-replica .chatterino-badge-replica-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 36px !important;
+  height: 36px !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  color: inherit !important;
+  pointer-events: none !important;
+}
+
+#chatterino-badge-replica .chatterino-badge-replica-btn__icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+
+#chatterino-badge-replica svg {
+  display: block !important;
+  width: 32px !important;
+  height: 32px !important;
+  pointer-events: none !important;
+}
+
+html.chatterino-companion-active #chatterino-badge-replica,
+html.chatterino-companion-active #chatterino-badge-replica * {
+  visibility: visible !important;
+}
+
+html.chatterino-badge-replica-active
+  .chat-input__badge-carousel:not(#chatterino-toolbar-portal *),
+html.chatterino-badge-replica-active
+  [data-a-target="chat-badge-carousel"]:not(#chatterino-toolbar-portal *) {
   visibility: hidden !important;
   pointer-events: none !important;
 }
@@ -335,6 +402,44 @@ html.chatterino-companion-active section.chat-room .chatterino-native-reward-dia
 
 .chatterino-native-reward-dialog {
   z-index: 2147483647 !important;
+}
+
+/* Native Twitch Chat Identity popover when repositioned beside toolbar */
+html.chatterino-companion-active section.chat-room .chatterino-native-chat-identity-dialog,
+html.chatterino-companion-active section.chat-room .chatterino-native-chat-identity-dialog *,
+.chatterino-native-chat-identity-dialog,
+.chatterino-native-chat-identity-dialog * {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+.chatterino-native-chat-identity-dialog {
+  z-index: 2147483647 !important;
+}
+
+html.chatterino-companion-active
+  section.chat-room
+  .chatterino-native-chat-identity-dialog
+  [class*="scrollable"],
+html.chatterino-companion-active
+  .chatterino-native-chat-identity-dialog
+  [class*="scrollable"],
+html.chatterino-companion-active
+  .chatterino-native-chat-identity-dialog
+  .chat-identity-menu,
+html.chatterino-companion-active
+  .chatterino-native-chat-identity-dialog
+  .chat-identity-menu__content,
+html.chatterino-companion-active
+  .chatterino-native-chat-identity-dialog
+  .simplebar-content-wrapper,
+html.chatterino-companion-active
+  .chatterino-native-chat-identity-dialog
+  .simplebar-scrollable-node {
+  pointer-events: auto !important;
+  visibility: visible !important;
+  overflow-y: auto !important;
+  touch-action: pan-y !important;
 }
 
 html.chatterino-companion-active
