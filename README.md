@@ -27,15 +27,26 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
   </tr>
   <tr>
     <td valign="top" align="center">
-      <img src="./docs/showcase/twitch-toolbar.gif" width="300" alt="Channel points menu beside the Twitch player toolbar">
-      <br>
-      <sub><b>Toolbar</b> — channel points, chat identity badges, and rewards beside the player.</sub>
+      <table width="100%">
+        <tr>
+          <td width="50%" valign="top" align="center">
+            <img src="./docs/showcase/twitch-toolbar.gif" width="300" alt="Channel points menu beside the Twitch player toolbar">
+            <br>
+            <sub><b>Channel points</b> — balance and rewards menu beside the player.</sub>
+          </td>
+          <td width="50%" valign="top" align="center">
+            <img src="./docs/showcase/chat-identity-badge.png" width="300" alt="Chat identity badge button in the Twitch toolbar with the identity menu open">
+            <br>
+            <sub><b>Chat identity</b> — purple badge button left of points; opens Twitch's identity menu to swap badges and preview your name.</sub>
+          </td>
+        </tr>
+      </table>
     </td>
   </tr>
 </table>
 
 <p align="center">
-  <sub>Showcase captured on <a href="https://www.twitch.tv/alveussanctuary">alveussanctuary</a> for demonstration only.</sub>
+  <sub>Showcase captured on <a href="https://www.twitch.tv/alveussanctuary">alveussanctuary</a> and <a href="https://www.twitch.tv/marinemammalrescue">marinemammalrescue</a> for demonstration only.</sub>
 </p>
 
 ---
