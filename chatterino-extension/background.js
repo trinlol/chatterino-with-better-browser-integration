@@ -275,11 +275,27 @@ chrome.windows.onFocusChanged.addListener(async windowId => {
 
 // attach or detach from tab
 async function onTabSelected(url, tab) {
-  let channelName = matchChannelName(url);
+  const channelName = matchChannelName(url);
 
   if (!channelName) {
     // detach from window
     await tryDetach(tab.windowId);
+    return;
+  }
+
+  // A chat-resized message can be emitted while the tab is in the background.
+  // Those messages are intentionally ignored below, because attaching the
+  // native window to an inactive tab would put it over the wrong browser
+  // window. Ask the content script to measure again once this tab is active.
+  // Without this handshake, a background-loaded Twitch tab stays detached
+  // until a later page focus or mouse event happens to trigger a measurement.
+  if (tab.id !== undefined) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, { action: 'requestChatRect' });
+    } catch (error) {
+      // The content script may not have loaded yet. Its initial measurement
+      // will attach the chat once it does, so there is nothing to detach here.
+    }
   }
 }
 

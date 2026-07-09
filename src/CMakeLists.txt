@@ -871,6 +871,10 @@ set(SOURCE_FILES
         widgets/splits/PredictionBannerWidget.hpp
         widgets/splits/SplitInput.cpp
         widgets/splits/SplitInput.hpp
+        widgets/splits/SpellCheckHoverPopup.cpp
+        widgets/splits/SpellCheckHoverPopup.hpp
+        widgets/splits/SpellCheckSuggestionItem.cpp
+        widgets/splits/SpellCheckSuggestionItem.hpp
         widgets/splits/SplitOverlay.cpp
         widgets/splits/SplitOverlay.hpp
         )

@@ -12,38 +12,44 @@ A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes T
 
 Chatterino Better Browser on a live Twitch channel — full chat in the overlay, synced pins, and toolbar integration beside the player.
 
+<div align="center">
+
 <table>
   <tr>
-    <td rowspan="2" valign="top" align="center" width="42%">
-      <img src="./docs/showcase/chatterino-overlay.gif" width="300" alt="Full Chatterino chat overlay on Twitch with pinned banner, replies, and emotes">
-      <br>
+    <td align="center" width="392">
+      <img src="./docs/showcase/chatterino-overlay.gif" width="380" height="214" alt="Full Chatterino chat overlay on Twitch with pinned banner, replies, and emotes">
+    </td>
+    <td align="center" width="392">
+      <img src="./docs/showcase/emote-picker.gif" width="380" height="214" alt="Emote favourites picker with channel, 7TV, and search tabs">
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top">
       <sub><b>Full chat preview</b> — pinned messages, input field inline emotes, and ctrl+click to input emotes directly from user messages.</sub>
     </td>
-    <td valign="top" align="center" width="58%">
-      <img src="./docs/showcase/emote-picker.gif" width="300" alt="Emote favourites picker with channel, 7TV, and search tabs">
-      <br>
+    <td align="center" valign="top">
       <sub><b>Emote favourites</b> — save per-channel, global, and 7TV emotes with search and Tab completion.</sub>
     </td>
   </tr>
   <tr>
-    <td valign="top" align="center">
-      <table width="100%">
-        <tr>
-          <td width="50%" valign="top" align="center">
-            <img src="./docs/showcase/twitch-toolbar.gif" width="300" alt="Channel points menu beside the Twitch player toolbar">
-            <br>
-            <sub><b>Channel points</b> — balance and rewards menu beside the player.</sub>
-          </td>
-          <td width="50%" valign="top" align="center">
-            <img src="./docs/showcase/chat-identity-badge.png" width="300" alt="Chat identity badge button in the Twitch toolbar with the identity menu open">
-            <br>
-            <sub><b>Chat identity</b> — purple badge button left of points; opens Twitch's identity menu to swap badges and preview your name.</sub>
-          </td>
-        </tr>
-      </table>
+    <td align="center" width="392">
+      <img src="./docs/showcase/twitch-toolbar.gif" width="380" height="214" alt="Channel points menu beside the Twitch player toolbar">
+    </td>
+    <td align="center" width="392">
+      <img src="./docs/showcase/chat-identity-badge.gif" width="380" height="214" alt="Chat identity badge button in the Twitch toolbar with the identity menu open">
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top">
+      <sub><b>Channel points</b> — balance and rewards menu beside the player.</sub>
+    </td>
+    <td align="center" valign="top">
+      <sub><b>Chat identity</b> — purple badge button left of points; opens Twitch's identity menu to swap badges and preview your name.</sub>
     </td>
   </tr>
 </table>
+
+</div>
 
 <p align="center">
   <sub>Showcase captured on <a href="https://www.twitch.tv/alveussanctuary">alveussanctuary</a> and <a href="https://www.twitch.tv/marinemammalrescue">marinemammalrescue</a> for demonstration only.</sub>

@@ -2,6 +2,17 @@
 
 ## Chatterino Better Browser
 
+### v1.0.6 (2026-07-09)
+
+#### Added
+- Inline spell-check suggestions with keyboard navigation in the chat input
+- Automatic spell-check dictionary discovery from LibreOffice and common Hunspell locations on Windows and macOS
+- Instant dictionary switching from Settings or the chat-input context menu
+
+#### Fixed
+- Browser overlay now attaches reliably when a Twitch channel finishes loading in a background tab
+- Spell-check suggestion popup stays within the visible screen bounds
+
 ### v1.0.5 (2026-06-15)
 
 #### Fixed

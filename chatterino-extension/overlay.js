@@ -303,6 +303,16 @@
   window.addEventListener('focus', queryChatRect);
   window.addEventListener('mouseup', () => setTimeout(queryChatRect, 10));
 
+  // The background script asks for a fresh measurement whenever this Twitch
+  // tab becomes active. This covers tabs that finished loading while they
+  // were in the background, when their initial chat-resized message is
+  // correctly ignored to avoid attaching over an inactive window.
+  chrome.runtime.onMessage.addListener(message => {
+    if (message?.action === 'requestChatRect') {
+      queryChatRect();
+    }
+  });
+
   let path = location.pathname;
   setInterval(() => {
     if (location.pathname != path) {

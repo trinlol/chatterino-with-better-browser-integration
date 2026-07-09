@@ -38,6 +38,7 @@ public:
     InputHighlighter &operator=(InputHighlighter &&) = delete;
 
     void setChannel(const std::shared_ptr<Channel> &channel);
+    void setCursorPosition(int pos);
 
     /// Do a pass over the whole text and filter out all words that will be
     /// checked by the spell checker.
@@ -59,6 +60,7 @@ private:
 
     SpellChecker &spellChecker;
     QTextCharFormat spellFmt;
+    int cursorPosition = -1;
 
     std::weak_ptr<TwitchChannel> channel;
 

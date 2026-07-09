@@ -25,6 +25,7 @@ class Split;
 class EmotePopup;
 class InputCompletionPopup;
 class InputHighlighter;
+class SpellCheckHoverPopup;
 class MessageView;
 class LabelButton;
 class ResizingTextEdit;
@@ -43,6 +44,7 @@ public:
     SplitInput(Split *_chatWidget, bool enableInlineReplying = true);
     SplitInput(QWidget *parent, Split *_chatWidget, ChannelView *_channelView,
                bool enableInlineReplying = true);
+    ~SplitInput() override;
 
     bool hasSelection() const;
     void clearSelection() const;
@@ -214,6 +216,20 @@ protected:
     InputHighlighter *inputHighlighter = nullptr;
 
     void updateFonts();
+
+    SpellCheckHoverPopup *spellCheckPopup_ = nullptr;
+    bool initialized_ = false;
+    QTimer hoverTimer_;
+    QTimer closeTimer_;
+    QString hoveredWord_;
+    int hoveredWordStart_ = -1;
+    int hoveredWordEnd_ = -1;
+    bool mouseInPopup_ = false;
+
+    void handleMouseMove(const QPoint &pos);
+    void handleMouseLeave();
+    void replaceHoveredWord(const QString &suggestion);
+    void hideSpellCheckPopup();
 
 private Q_SLOTS:
     void editTextChanged();

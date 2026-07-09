@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "widgets/splits/SplitInput.hpp"
+#include "widgets/splits/SpellCheckHoverPopup.hpp"
+#include <algorithm>
 
 #include "Application.hpp"
 #include "common/enums/MessageOverflow.hpp"
@@ -35,10 +37,12 @@
 #include "widgets/splits/Split.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 
+#include <QActionGroup>
 #include <QCompleter>
 #include <QPainter>
 #include <QJsonObject>
 #include <QSignalBlocker>
+#include <QTimer>
 
 #include <functional>
 #include <ranges>
@@ -131,6 +135,106 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
         },
         this->signalHolder_);
 
+    getSettings()->spellCheckingDefaultDictionary.connect(
+        [this](const QString &path) {
+            getApp()->getSpellChecker()->loadDictionary(path);
+            if (this->inputHighlighter)
+            {
+                this->inputHighlighter->rehighlight();
+            }
+        },
+        this->signalHolder_);
+
+    // Initialize spellcheck timers
+    this->hoverTimer_.setSingleShot(true);
+    connect(&this->hoverTimer_, &QTimer::timeout, this, [this]() {
+        if (this->hoveredWord_.isEmpty())
+        {
+            return;
+        }
+        auto *spellChecker = getApp()->getSpellChecker();
+        if (!spellChecker || !spellChecker->isLoaded())
+        {
+            return;
+        }
+        auto suggestions = spellChecker->suggestions(this->hoveredWord_);
+        if (suggestions.empty())
+        {
+            return;
+        }
+
+        // Keep hover suggestions consistent with the context-menu setting.
+        int limit = getSettings()->nSpellCheckingSuggestions;
+        if (limit < 0)
+        {
+            limit = std::numeric_limits<int>::max();
+        }
+
+        std::vector<QString> qSuggestions;
+        for (const auto &sugg : suggestions | std::views::take(limit))
+        {
+            qSuggestions.push_back(QString::fromStdString(sugg));
+        }
+
+        if (qSuggestions.empty())
+        {
+            return;
+        }
+
+        // Lazily initialize popup to prevent DWM/layout deadlocks on startup
+        if (!this->spellCheckPopup_)
+        {
+            this->spellCheckPopup_ = new SpellCheckHoverPopup(this);
+
+            std::ignore = this->spellCheckPopup_->suggestionSelected.connect(
+                [this](const QString &suggestion) {
+                    this->replaceHoveredWord(suggestion);
+                });
+
+            std::ignore = this->spellCheckPopup_->mouseEnteredPopup.connect(
+                [this]() {
+                    this->mouseInPopup_ = true;
+                    this->closeTimer_.stop();
+                });
+
+            std::ignore = this->spellCheckPopup_->mouseLeftPopup.connect(
+                [this]() {
+                    this->mouseInPopup_ = false;
+                    this->closeTimer_.start(200);
+                });
+        }
+
+        // Calculate positions
+        auto tempCursor = this->ui_.textEdit->textCursor();
+        tempCursor.setPosition(this->hoveredWordStart_);
+        QRect startRect = this->ui_.textEdit->cursorRect(tempCursor);
+        QPoint globalPos = this->ui_.textEdit->viewport()->mapToGlobal(QPoint(startRect.left(), startRect.bottom() + 2));
+
+        this->spellCheckPopup_->showSuggestions(globalPos, this->hoveredWord_, qSuggestions, this->hoveredWordStart_, this->hoveredWordEnd_);
+    });
+
+    this->closeTimer_.setSingleShot(true);
+    connect(&this->closeTimer_, &QTimer::timeout, this, [this]() {
+        if (!this->mouseInPopup_)
+        {
+            this->hideSpellCheckPopup();
+        }
+    });
+
+    if (this->ui_.textEdit)
+    {
+        this->ui_.textEdit->viewport()->installEventFilter(this);
+        this->ui_.textEdit->viewport()->setMouseTracking(true);
+
+        connect(this->ui_.textEdit, &QTextEdit::cursorPositionChanged, this, [this]() {
+            this->hideSpellCheckPopup();
+            if (this->inputHighlighter)
+            {
+                this->inputHighlighter->setCursorPosition(this->ui_.textEdit->textCursor().position());
+            }
+        });
+    }
+
     // misc
     this->installTextEditEvents();
     this->addShortcuts();
@@ -138,6 +242,17 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
     // destroyed, so we can safely ignore this signal's connection.
     std::ignore = this->ui_.textEdit->focusLost.connect([this] {
         this->hideCompletionPopup();
+        QTimer::singleShot(0, this, [this] {
+            if (!this->spellCheckPopup_ || !this->spellCheckPopup_->isVisible())
+            {
+                return;
+            }
+            if (this->mouseInPopup_ || this->spellCheckPopup_->underMouse())
+            {
+                return;
+            }
+            this->hideSpellCheckPopup();
+        });
     });
     this->scaleChangedEvent(this->scale());
     this->signalHolder_.managedConnect(getApp()->getHotkeys()->onItemsUpdated,
@@ -150,6 +265,15 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
     curve.setCustomType(highlightEasingFunction);
     this->backgroundColorAnimation.setDuration(500);
     this->backgroundColorAnimation.setEasingCurve(curve);
+    this->initialized_ = true;
+}
+
+SplitInput::~SplitInput()
+{
+    if (this->spellCheckPopup_)
+    {
+        this->spellCheckPopup_->deleteLater();
+    }
 }
 
 void SplitInput::initLayout()
@@ -785,6 +909,19 @@ void SplitInput::addShortcuts()
 
 bool SplitInput::eventFilter(QObject *obj, QEvent *event)
 {
+    if (this->initialized_ && this->ui_.textEdit && obj == this->ui_.textEdit->viewport())
+    {
+        if (event->type() == QEvent::MouseMove)
+        {
+            auto *mouseEvent = static_cast<QMouseEvent *>(event);
+            this->handleMouseMove(mouseEvent->pos());
+        }
+        else if (event->type() == QEvent::Leave)
+        {
+            this->handleMouseLeave();
+        }
+    }
+
     if (event->type() == QEvent::ShortcutOverride ||
         event->type() == QEvent::Shortcut)
     {
@@ -819,6 +956,16 @@ void SplitInput::installTextEditEvents()
                         event->accept();
                         return;
                     }
+                }
+            }
+
+            if (this->spellCheckPopup_ &&
+                this->spellCheckPopup_->isVisible())
+            {
+                if (this->spellCheckPopup_->eventFilter(nullptr, event))
+                {
+                    event->accept();
+                    return;
                 }
             }
 
@@ -867,6 +1014,45 @@ void SplitInput::installTextEditEvents()
                                  this->checkSpellingChanged();
                              });
             menu->addAction(spellcheckAction);
+
+            auto *spellChecker = getApp()->getSpellChecker();
+            if (spellChecker)
+            {
+                auto dictionaries = spellChecker->getAvailableDictionaries();
+                if (!dictionaries.empty())
+                {
+                    auto *languageMenu = menu->addMenu("Language");
+                    auto *languageGroup = new QActionGroup(languageMenu);
+                    languageGroup->setExclusive(true);
+
+                    const auto currentDictionary =
+                        getSettings()->spellCheckingDefaultDictionary.getValue();
+
+                    auto addDictionaryAction =
+                        [this, languageMenu, languageGroup,
+                         currentDictionary](const QString &label,
+                                            const QString &path) {
+                            auto *action = languageMenu->addAction(label);
+                            action->setToolTip(path);
+                            action->setCheckable(true);
+                            action->setChecked(path == currentDictionary);
+                            languageGroup->addAction(action);
+                            QObject::connect(action, &QAction::triggered, this,
+                                             [path]() {
+                                                 getSettings()
+                                                     ->spellCheckingDefaultDictionary
+                                                     .setValue(path);
+                                             });
+                        };
+
+                    addDictionaryAction("None", QString{});
+
+                    for (const auto &dict : dictionaries)
+                    {
+                        addDictionaryAction(dict.name, dict.path);
+                    }
+                }
+            }
 
             int nSuggestions = getSettings()->nSpellCheckingSuggestions;
             if (nSuggestions < 0)
@@ -1183,6 +1369,9 @@ void SplitInput::setInputText(const QString &newInputText)
 
 void SplitInput::editTextChanged()
 {
+    this->hideSpellCheckPopup();
+    this->hoveredWordStart_ = -1;
+    this->hoveredWordEnd_ = -1;
     auto *app = getApp();
 
     // set textLengthLabel value
@@ -1614,6 +1803,158 @@ void SplitInput::setSendWaitStatus(const QString &text) const
     {
         this->ui_.sendWaitStatus->setHidden(!getSettings()->showSendWaitTimer);
     }
+}
+
+void SplitInput::handleMouseMove(const QPoint &pos)
+{
+    if (!this->shouldCheckSpelling() || !this->inputHighlighter)
+    {
+        this->hideSpellCheckPopup();
+        return;
+    }
+
+    auto *spellChecker = getApp()->getSpellChecker();
+    if (!spellChecker || !spellChecker->isLoaded())
+    {
+        this->hideSpellCheckPopup();
+        return;
+    }
+
+    auto cursor = this->ui_.textEdit->cursorForPosition(pos);
+    QString text = this->ui_.textEdit->toPlainText();
+    QStringView word = this->inputHighlighter->getWordAt(text, cursor.position());
+
+    if (word.isEmpty())
+    {
+        this->hoverTimer_.stop();
+        if (this->spellCheckPopup_ && this->spellCheckPopup_->isVisible())
+        {
+            this->closeTimer_.start(200);
+        }
+        return;
+    }
+
+    QString wordStr = word.toString();
+
+    // Check if the word is misspelled and is in the spell-checked words list
+    auto checkedWords = this->inputHighlighter->getSpellCheckedWords(text);
+    bool isSpellChecked = std::find(checkedWords.begin(), checkedWords.end(), wordStr) != checkedWords.end();
+    bool isMisspelled = isSpellChecked && !spellChecker->check(wordStr);
+
+    if (!isMisspelled)
+    {
+        this->hoverTimer_.stop();
+        if (this->spellCheckPopup_ && this->spellCheckPopup_->isVisible())
+        {
+            this->closeTimer_.start(200);
+        }
+        return;
+    }
+
+    // Check if mouse is actually over the word bounding box
+    int wordStart = static_cast<int>(word.data() - text.constData());
+    int wordEnd = wordStart + word.size();
+
+    auto tempCursor = this->ui_.textEdit->textCursor();
+    tempCursor.setPosition(wordStart);
+    QRect startRect = this->ui_.textEdit->cursorRect(tempCursor);
+    tempCursor.setPosition(wordEnd);
+    QRect endRect = this->ui_.textEdit->cursorRect(tempCursor);
+
+    bool hovering = false;
+    if (startRect.top() == endRect.top())
+    {
+        QRect wordRect(startRect.left(), startRect.top(), endRect.right() - startRect.left(), startRect.height());
+        wordRect.adjust(-2, -2, 2, 2);
+        hovering = wordRect.contains(pos);
+    }
+    else
+    {
+        QRect rect1(startRect.left(), startRect.top(), this->ui_.textEdit->viewport()->width() - startRect.left(), startRect.height());
+        rect1.adjust(-2, -2, 2, 2);
+        QRect rect2(0, endRect.top(), endRect.right(), endRect.height());
+        rect2.adjust(-2, -2, 2, 2);
+        hovering = rect1.contains(pos) || rect2.contains(pos);
+    }
+
+    if (hovering)
+    {
+        if (this->spellCheckPopup_ && this->spellCheckPopup_->isVisible() && this->hoveredWord_ == wordStr && this->hoveredWordStart_ == wordStart)
+        {
+            // Same word, cancel close timer
+            this->closeTimer_.stop();
+            return;
+        }
+
+        // New word or not showing, start hover timer
+        this->hoveredWord_ = wordStr;
+        this->hoveredWordStart_ = wordStart;
+        this->hoveredWordEnd_ = wordEnd;
+        this->closeTimer_.stop();
+        this->hoverTimer_.start(300); // 300ms hover delay
+    }
+    else
+    {
+        this->hoverTimer_.stop();
+        if (this->spellCheckPopup_ && this->spellCheckPopup_->isVisible())
+        {
+            this->closeTimer_.start(200);
+        }
+    }
+}
+
+void SplitInput::handleMouseLeave()
+{
+    this->hoverTimer_.stop();
+    if (this->spellCheckPopup_ && this->spellCheckPopup_->isVisible())
+    {
+        this->closeTimer_.start(200);
+    }
+}
+
+void SplitInput::replaceHoveredWord(const QString &suggestion)
+{
+    int wordStart = this->hoveredWordStart_;
+    int wordEnd = this->hoveredWordEnd_;
+
+    if (this->spellCheckPopup_)
+    {
+        if (this->spellCheckPopup_->wordStart() >= 0)
+        {
+            wordStart = this->spellCheckPopup_->wordStart();
+        }
+        if (this->spellCheckPopup_->wordEnd() >= 0)
+        {
+            wordEnd = this->spellCheckPopup_->wordEnd();
+        }
+    }
+
+    if (wordStart >= 0 && wordEnd > wordStart)
+    {
+        auto cursor = this->ui_.textEdit->textCursor();
+        cursor.setPosition(wordStart);
+        cursor.setPosition(wordEnd, QTextCursor::KeepAnchor);
+        cursor.insertText(suggestion);
+        this->ui_.textEdit->setTextCursor(cursor);
+        this->ui_.textEdit->setFocus();
+    }
+
+    this->hideSpellCheckPopup();
+    this->hoveredWordStart_ = -1;
+    this->hoveredWordEnd_ = -1;
+}
+
+void SplitInput::hideSpellCheckPopup()
+{
+    this->hoverTimer_.stop();
+    this->closeTimer_.stop();
+    if (this->spellCheckPopup_)
+    {
+        this->spellCheckPopup_->hidePopup();
+    }
+    this->hoveredWord_.clear();
+    this->hoveredWordStart_ = -1;
+    this->hoveredWordEnd_ = -1;
 }
 
 }  // namespace chatterino

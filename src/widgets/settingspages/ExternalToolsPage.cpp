@@ -249,23 +249,25 @@ void ExternalToolsPage::initLayout(GeneralPageView &layout)
             formatRichNamedLink(getApp()->getPaths().dictionariesDirectory,
                                 getApp()->getPaths().dictionariesDirectory) %
             u". Dictionaries are pairs of .aff (affixes) and .dic (dictionary) "
-            u"files.");
+            u"files. On Windows and macOS, dictionaries installed with "
+            u"LibreOffice or placed in common Hunspell directories are "
+            u"detected automatically.");
 
         SettingWidget::checkbox("Check spelling by default",
                                 s.enableSpellChecking)
             ->setTooltip("Check the spelling of words in the input box of all "
                          "splits by default.")
             ->addTo(layout);
-        SettingWidget::intInput("Number of suggestions in context menu",
+        SettingWidget::intInput("Number of spelling suggestions",
                                 s.nSpellCheckingSuggestions,
                                 {
                                     .min = -1,
                                     .max = std::numeric_limits<int>::max(),
                                 })
             ->setTooltip(
-                "When right-clicking any word, show this many suggestions. If "
-                "this is 0, no suggestions will be shown and if it's -1, no "
-                "limit is set.")
+                "Show this many suggestions when hovering over or "
+                "right-clicking a misspelled word. If this is 0, no "
+                "suggestions will be shown and if it's -1, no limit is set.")
             ->addTo(layout);
 
         auto toItem =
@@ -281,10 +283,13 @@ void ExternalToolsPage::initLayout(GeneralPageView &layout)
             getApp()->getSpellChecker()->getAvailableDictionaries(),
             std::back_inserter(dictList), toItem);
 
-        if (dictList.size() > 1)
+        if (!dictList.empty())
         {
-            SettingWidget::dropdown("Default dictionary (requires restart)",
+            SettingWidget::dropdown("Default dictionary",
                                     s.spellCheckingDefaultDictionary, dictList)
+                ->setTooltip("The dictionary used for spell checking. You can "
+                             "also change this from the input box context "
+                             "menu.")
                 ->addTo(layout);
         }
     }
