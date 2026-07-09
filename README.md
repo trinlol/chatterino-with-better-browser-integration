@@ -34,11 +34,6 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
             <br>
             <sub><b>Channel points</b> — balance and rewards menu beside the player.</sub>
           </td>
-          <td width="50%" valign="top" align="center">
-            <img src="./docs/showcase/chat-identity-badge.png" width="300" alt="Chat identity badge button in the Twitch toolbar with the identity menu open">
-            <br>
-            <sub><b>Chat identity</b> — purple badge button left of points; opens Twitch's identity menu to swap badges and preview your name.</sub>
-          </td>
         </tr>
       </table>
     </td>
