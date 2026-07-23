@@ -326,6 +326,35 @@
     };
   }
 
+  function getEventKind(container, event) {
+    const typeHint = [
+      container?.__typename,
+      container?.type,
+      container?.eventType,
+      container?.operationName,
+      event?.__typename,
+      event?.type,
+      event?.eventType
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    if (typeHint.includes('poll')) {
+      return 'poll';
+    }
+    if (typeHint.includes('prediction')) {
+      return 'prediction';
+    }
+    if (event?.pollChoices || event?.choices) {
+      return 'poll';
+    }
+    if (event?.predictionOutcomes) {
+      return 'prediction';
+    }
+    return event?.outcomes ? 'prediction' : '';
+  }
+
   function walkJson(node, visitor) {
     if (!node || typeof node !== 'object') {
       return;
@@ -427,14 +456,17 @@
         }
       }
 
-      if (obj.event != null && (obj.event.outcomes || obj.event.predictionOutcomes)) {
+      const genericEventKind =
+        obj.event != null && typeof obj.event === 'object' ? getEventKind(obj, obj.event) : '';
+
+      if (genericEventKind === 'prediction') {
         const parsed = parsePredictionEvent(obj.event);
         if (parsed) {
           state.prediction = parsed;
         }
       }
 
-      if (obj.event != null && (obj.event.choices || obj.event.pollChoices)) {
+      if (genericEventKind === 'poll') {
         const parsed = parsePollEvent(obj.event);
         if (parsed) {
           state.poll = parsed;

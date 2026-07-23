@@ -614,6 +614,11 @@ void NativeMessagingServer::updatePredictionSticky(const QJsonObject &root)
     int duration = root["duration"_L1].toInt(0);
     QString winner = root["winner"_L1].toString();
     QString channelName = root["channel"_L1].toString();
+    QString kind = root["kind"_L1].toString().toLower();
+    if (kind != "poll")
+    {
+        kind = "prediction";
+    }
 
     ChannelPtr channel;
     if (!channelName.isEmpty())
@@ -639,12 +644,14 @@ void NativeMessagingServer::updatePredictionSticky(const QJsonObject &root)
     // periodic re-sends from the extension are not transitions.
     const bool transition = status != this->predictionStatus_ ||
                             title != this->predictionTitle_ ||
+                            kind != this->predictionKind_ ||
                             channel != this->activeChannel_;
 
     this->predictionTitle_ = title;
     this->predictionOptions_ = options;
     this->predictionStatus_ = status;
     this->predictionWinner_ = winner;
+    this->predictionKind_ = kind;
     this->activeChannel_ = channel;
 
     if (status == "started")
@@ -726,6 +733,15 @@ QString NativeMessagingServer::composePredictionText() const
         optionTexts.append(val.toString());
     }
     QString optionsStr = optionTexts.join(", ");
+    const bool isPoll = this->predictionKind_ == "poll";
+    const QString eventName = isPoll ? "Poll" : "Prediction";
+    QString titleAndOptions = this->predictionTitle_;
+    if (!optionsStr.isEmpty())
+    {
+        titleAndOptions += QString(" | %1").arg(optionsStr);
+    }
+    const QString eventText =
+        QString("%1: %2").arg(eventName, titleAndOptions);
 
     if (this->predictionStatus_ == "started")
     {
@@ -733,27 +749,30 @@ QString NativeMessagingServer::composePredictionText() const
         {
             int mins = this->remainingSeconds_ / 60;
             int secs = this->remainingSeconds_ % 60;
-            return QString("Prediction: %1 | %2 — %3:%4 left")
-                .arg(this->predictionTitle_, optionsStr)
+            return QString("%1 — %2:%3 left")
+                .arg(eventText)
                 .arg(mins)
                 .arg(secs, 2, 10, QChar('0'));
         }
-        return QString("Prediction: %1 | %2 — locking…")
-            .arg(this->predictionTitle_, optionsStr);
+        return QString("%1 — %2").arg(
+            eventText, isPoll ? "closing…" : "locking…");
     }
     if (this->predictionStatus_ == "locked")
     {
-        return QString("Prediction locked: %1 | %2")
-            .arg(this->predictionTitle_, optionsStr);
+        return QString("%1: %2")
+            .arg(isPoll ? "Poll closed" : "Prediction locked",
+                 titleAndOptions);
     }
     if (this->predictionStatus_ == "ended")
     {
         if (!this->predictionWinner_.isEmpty())
         {
-            return QString("Prediction ended: %1 | Outcome: %2")
-                .arg(this->predictionTitle_, this->predictionWinner_);
+            return QString("%1 ended: %2 | %3: %4")
+                .arg(eventName, this->predictionTitle_,
+                     isPoll ? "Winning choice" : "Outcome",
+                     this->predictionWinner_);
         }
-        return QString("Prediction ended: %1").arg(this->predictionTitle_);
+        return QString("%1 ended: %2").arg(eventName, this->predictionTitle_);
     }
     return {};
 }
@@ -815,6 +834,7 @@ void NativeMessagingServer::clearPrediction()
     this->predictionStatus_.clear();
     this->predictionTitle_.clear();
     this->predictionWinner_.clear();
+    this->predictionKind_.clear();
     this->predictionOptions_ = QJsonArray();
     this->remainingSeconds_ = 0;
     this->activeChannel_.reset();

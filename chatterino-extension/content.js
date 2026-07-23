@@ -7,7 +7,14 @@
     '.gamba-prediction-status-banner'
   ];
 
-  const POLL_BANNER_SELECTOR = '[data-test-selector="community-poll-banner"]';
+  const POLL_BANNER_SELECTORS = [
+    '[data-test-selector="community-poll-banner"]',
+    '[data-a-target="community-poll-banner"]',
+    '[data-test-selector*="poll-banner"]',
+    '.community-poll-banner'
+  ];
+
+  const VOTING_BANNER_SELECTOR = [...BANNER_SELECTORS, ...POLL_BANNER_SELECTORS].join(',');
 
   const PINNED_SELECTORS = [
     '[data-a-target="chat-pinned-message"]',
@@ -63,6 +70,7 @@
 
   let autoClaimEnabled = true;
   let lastPredictionFingerprint = '';
+  let lastPollFingerprint = '';
   let lastPredictionTitle = '';
   let isMinimized = false;
   let lastPinFingerprint = '';
@@ -74,6 +82,8 @@
   let domPointsLastSeen = 0;
   let domPredictionLastSeen = 0;
   let activeBanner = null;
+  let activePredictionSource = null;
+  let activePollSource = null;
   let syncScheduled = false;
   let syncPending = false;
   let syncTimer = null;
@@ -928,24 +938,33 @@
   function positionToolbarPortal() {
     ensureToolbarPortal();
     const portal = document.getElementById('chatterino-toolbar-portal');
-    const targetBtn = findTargetButton();
     const slot = document.getElementById('chatterino-toolbar-slot');
 
-    if (!portal || !targetBtn || !slot) {
-      if (portal) {
-        portal.style.display = 'none';
-      }
+    if (!portal || !slot) {
+      return null;
+    }
+
+    const fullscreen = window.ChatterinoVotingUi?.isFullscreenActive(document, window) || false;
+    document.documentElement.classList.toggle('chatterino-video-fullscreen', fullscreen);
+    if (fullscreen) {
+      portal.style.setProperty('display', 'none', 'important');
+      return slot;
+    }
+
+    const targetBtn = findTargetButton();
+    if (!targetBtn) {
+      portal.style.setProperty('display', 'none', 'important');
       return null;
     }
 
     const rect = targetBtn.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) {
-      portal.style.display = 'none';
+      portal.style.setProperty('display', 'none', 'important');
       return slot;
     }
 
-    portal.style.display = 'inline-flex';
-    slot.style.display = 'inline-flex';
+    portal.style.setProperty('display', 'inline-flex', 'important');
+    slot.style.setProperty('display', 'inline-flex', 'important');
 
     const slotWidth = slot.offsetWidth || 1;
     const slotHeight = slot.offsetHeight || 32;
@@ -1023,6 +1042,7 @@
       return;
     }
     lastPredictionFingerprint = '';
+    lastPollFingerprint = '';
   }
 
   function findBanner() {
@@ -1038,11 +1058,13 @@
   }
 
   function findPollBanner() {
-    for (const banner of document.querySelectorAll(POLL_BANNER_SELECTOR)) {
-      if (banner.closest('#chatterino-toolbar-portal')) {
-        continue;
+    for (const selector of POLL_BANNER_SELECTORS) {
+      for (const banner of document.querySelectorAll(selector)) {
+        if (banner.closest('#chatterino-toolbar-portal')) {
+          continue;
+        }
+        return banner;
       }
-      return banner;
     }
     return null;
   }
@@ -1365,10 +1387,23 @@
     return false;
   }
 
+  function containsVotingBanner(element) {
+    return Boolean(
+      element?.matches?.(VOTING_BANNER_SELECTOR) ||
+      element?.querySelector?.(VOTING_BANNER_SELECTOR)
+    );
+  }
+
   function findPinnedAnnouncementElement() {
     for (const selector of PINNED_SELECTORS) {
       for (const el of document.querySelectorAll(selector)) {
         if (el.closest('#chatterino-toolbar-portal')) {
+          continue;
+        }
+        // Polls and predictions have their own structured native-messaging
+        // path. Scraping their full Twitch card as a pin duplicates labels,
+        // countdown text, and truncated option names in Chatterino.
+        if (containsVotingBanner(el)) {
           continue;
         }
         if (isSubscriptionHighlight(el)) {
@@ -1499,14 +1534,34 @@
     return { title, options, status, durationSeconds, winner };
   }
 
-  function sendPredictionMessage(channelName, details) {
+  function mergeVotingDetails(kind, domDetails) {
+    const apiDetails = gqlState?.[kind];
+    return {
+      title: String(apiDetails?.title || domDetails.title || '').trim(),
+      options:
+        Array.isArray(apiDetails?.options) && apiDetails.options.length > 0
+          ? apiDetails.options
+          : domDetails.options,
+      status: apiDetails?.status || domDetails.status || 'started',
+      durationSeconds: apiDetails?.duration || domDetails.durationSeconds || 0,
+      winner: apiDetails?.winner || domDetails.winner || ''
+    };
+  }
+
+  function sendVotingMessage(kind, channelName, details) {
     const fingerprint = JSON.stringify(details);
-    if (fingerprint === lastPredictionFingerprint || !channelName) {
+    const previousFingerprint = kind === 'poll' ? lastPollFingerprint : lastPredictionFingerprint;
+    if (fingerprint === previousFingerprint || !channelName || !details.title) {
       return;
     }
-    lastPredictionFingerprint = fingerprint;
+    if (kind === 'poll') {
+      lastPollFingerprint = fingerprint;
+    } else {
+      lastPredictionFingerprint = fingerprint;
+    }
     chrome.runtime.sendMessage({
       action: 'prediction',
+      kind,
       channel: channelName,
       title: details.title,
       options: details.options,
@@ -1514,6 +1569,82 @@
       duration: details.durationSeconds,
       winner: details.winner
     });
+  }
+
+  function sendPredictionMessage(channelName, details) {
+    sendVotingMessage('prediction', channelName, details);
+  }
+
+  function sendPollMessage(channelName, details) {
+    sendVotingMessage('poll', channelName, details);
+  }
+
+  function sanitizeVotingClone(clone, kind) {
+    clone.removeAttribute('id');
+    clone.classList.remove(
+      'chatterino-native-voting-source',
+      'chatterino-moved-banner-floating',
+      'chatterino-moved-banner-inline',
+      'chatterino-moved-poll-inline'
+    );
+    clone.classList.add(
+      kind === 'poll' ? 'chatterino-moved-poll-inline' : 'chatterino-moved-banner-inline'
+    );
+    clone.removeAttribute('aria-hidden');
+    clone.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+    clone.querySelectorAll('[aria-hidden="true"]').forEach((el) => el.removeAttribute('aria-hidden'));
+  }
+
+  function ensureVotingReplica(source, kind, orderIndex) {
+    const replicaId = `chatterino-${kind}-replica`;
+    let replica = document.getElementById(replicaId);
+    if (!replica) {
+      replica = document.createElement('div');
+      replica.id = replicaId;
+      replica.className = `chatterino-voting-replica chatterino-${kind}-replica`;
+      replica.addEventListener(
+        'click',
+        (event) => {
+          if (event.target.closest('.chatterino-prediction-minimize-btn')) {
+            return;
+          }
+          const cloneRoot = replica.firstElementChild;
+          const sourceRoot = replica.__ccSource;
+          if (
+            window.ChatterinoVotingUi?.forwardActivation(
+              event,
+              cloneRoot,
+              sourceRoot
+            )
+          ) {
+            requestAnimationFrame(() => scheduleSync());
+            setTimeout(scheduleSync, 100);
+          }
+        },
+        true
+      );
+    }
+
+    source.classList.remove('chatterino-moved-banner-inline', 'chatterino-moved-poll-inline');
+    source.classList.add('chatterino-native-voting-source');
+    replica.__ccSource = source;
+
+    const sourceSignature = source.outerHTML;
+    if (replica.__ccSourceSignature !== sourceSignature) {
+      replica.__ccSourceSignature = sourceSignature;
+      const clone = source.cloneNode(true);
+      sanitizeVotingClone(clone, kind);
+      replica.replaceChildren(clone);
+    }
+
+    mountInSlot(replica, orderIndex);
+    return replica;
+  }
+
+  function releaseVotingSource(source) {
+    if (source?.isConnected) {
+      source.classList.remove('chatterino-native-voting-source');
+    }
   }
 
   function ensureMinimizedIcon(banner) {
@@ -1542,25 +1673,23 @@
     return minIcon;
   }
 
-  function handlePredictionBanner(banner, channelName, pointsText) {
-    activeBanner = banner;
+  function handlePredictionBanner(source, channelName, pointsText) {
     domPredictionLastSeen = Date.now();
     document.getElementById('chatterino-prediction-fallback')?.remove();
 
-    const details = parseBannerDetails(banner);
+    const details = mergeVotingDetails('prediction', parseBannerDetails(source));
     if (details.title && details.title !== lastPredictionTitle) {
       lastPredictionTitle = details.title;
       isMinimized = false;
     }
 
     sendPredictionMessage(channelName, details);
-
-    if (!banner.classList.contains('chatterino-moved-banner-inline')) {
-      banner.classList.add('chatterino-moved-banner-inline');
-      banner.classList.remove('chatterino-moved-banner-floating');
+    if (activePredictionSource && activePredictionSource !== source) {
+      releaseVotingSource(activePredictionSource);
     }
-
-    mountInSlot(banner, 1);
+    activePredictionSource = source;
+    const banner = ensureVotingReplica(source, 'prediction', 1);
+    activeBanner = banner;
 
     let minBtn = banner.querySelector('.chatterino-prediction-minimize-btn');
     if (!minBtn) {
@@ -1635,22 +1764,26 @@
   function cleanupPredictionUi() {
     document.getElementById('chatterino-prediction-min-icon')?.remove();
     document.getElementById('chatterino-prediction-fallback')?.remove();
+    document.getElementById('chatterino-prediction-replica')?.remove();
+    releaseVotingSource(activePredictionSource);
+    activePredictionSource = null;
     lastPredictionTitle = '';
     isMinimized = false;
     activeBanner = null;
   }
 
-  function handlePollBanner(banner) {
+  function handlePollBanner(source, channelName) {
     document.getElementById('chatterino-poll-fallback')?.remove();
-
-    if (!banner.classList.contains('chatterino-moved-poll-inline')) {
-      banner.classList.add('chatterino-moved-poll-inline');
+    const details = mergeVotingDetails('poll', parseBannerDetails(source));
+    sendPollMessage(channelName, details);
+    if (activePollSource && activePollSource !== source) {
+      releaseVotingSource(activePollSource);
     }
-
-    mountInSlot(banner, 0);
+    activePollSource = source;
+    ensureVotingReplica(source, 'poll', 0);
   }
 
-  function handlePollFallback() {
+  function handlePollFallback(channelName) {
     const poll = gqlState?.poll;
     if (!poll?.title) {
       document.getElementById('chatterino-poll-fallback')?.remove();
@@ -1667,10 +1800,20 @@
 
     pill.querySelector('.label').textContent = poll.title;
     mountInSlot(pill, 0);
+    sendPollMessage(channelName, {
+      title: poll.title,
+      options: poll.options || [],
+      status: poll.status || 'started',
+      durationSeconds: poll.duration || 0,
+      winner: poll.winner || ''
+    });
   }
 
   function cleanupPollUi() {
     document.getElementById('chatterino-poll-fallback')?.remove();
+    document.getElementById('chatterino-poll-replica')?.remove();
+    releaseVotingSource(activePollSource);
+    activePollSource = null;
   }
 
   function syncCompanionState() {
@@ -1747,11 +1890,11 @@
 
     const pollBanner = findPollBanner();
     if (pollBanner) {
-      handlePollBanner(pollBanner);
+      handlePollBanner(pollBanner, channelName);
     } else {
       cleanupPollUi();
       if (gqlState?.poll?.title && (companionActive || isChatShellWiped() || channelName)) {
-        handlePollFallback();
+        handlePollFallback(channelName);
       }
     }
 
@@ -1793,6 +1936,9 @@
     resetFingerprints();
     scheduleSync();
   });
+
+  document.addEventListener('fullscreenchange', scheduleSync);
+  document.addEventListener('webkitfullscreenchange', scheduleSync);
 
   window.addEventListener('chatterino-companion-active', () => {
     companionActive = true;

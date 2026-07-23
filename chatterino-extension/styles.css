@@ -71,6 +71,10 @@ html.chatterino-companion-active.chatterino-reward-pending .chatterino-cc-restor
   pointer-events: none !important;
 }
 
+html.chatterino-video-fullscreen #chatterino-toolbar-portal {
+  display: none !important;
+}
+
 /* Toolbar slot inside portal */
 #chatterino-toolbar-slot {
   display: inline-flex !important;
@@ -78,6 +82,35 @@ html.chatterino-companion-active.chatterino-reward-pending .chatterino-cc-restor
   gap: 8px !important;
   vertical-align: middle !important;
   flex-shrink: 0 !important;
+}
+
+/* Keep Twitch's React-owned voting card mounted in its original tree so its
+   event delegation continues to work. The toolbar renders an interactive
+   replica and forwards each activation back to this source control. */
+.chatterino-native-voting-source {
+  position: fixed !important;
+  left: -10000px !important;
+  top: 0 !important;
+  width: 360px !important;
+  min-width: 360px !important;
+  max-width: 360px !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.chatterino-voting-replica {
+  display: inline-flex !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+  max-width: min(480px, calc(100vw - 32px)) !important;
+  max-height: min(360px, calc(100vh - 96px)) !important;
+  overflow: auto !important;
+  pointer-events: auto !important;
 }
 
 /* Channel points replica — a live visual clone of the native Twitch button.
@@ -258,9 +291,11 @@ html.chatterino-badge-replica-active
   color: #efeff1 !important;
   font-size: 12px !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
-  max-width: 400px !important;
-  height: 30px !important;
-  overflow: hidden !important;
+  max-width: 460px !important;
+  min-height: 30px !important;
+  height: auto !important;
+  max-height: 340px !important;
+  overflow: visible !important;
   flex-shrink: 0 !important;
 }
 
@@ -286,7 +321,7 @@ html.chatterino-badge-replica-active
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  max-width: 150px !important;
+  max-width: 220px !important;
 }
 
 .chatterino-moved-banner-inline button {
@@ -337,7 +372,9 @@ html.chatterino-badge-replica-active
   display: inline-flex !important;
   align-items: center !important;
   flex-shrink: 0 !important;
-  max-width: 420px !important;
+  max-width: 460px !important;
+  max-height: 340px !important;
+  overflow: visible !important;
   visibility: visible !important;
   pointer-events: auto !important;
 }

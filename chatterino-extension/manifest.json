@@ -35,7 +35,7 @@
     },
     {
       "matches": ["https://*.twitch.tv/*"],
-      "js": ["content.js"],
+      "js": ["voting-ui.js", "content.js"],
       "css": ["styles.css"],
       "run_at": "document_end"
     }

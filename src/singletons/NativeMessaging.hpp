@@ -119,6 +119,7 @@ private:
     QJsonArray predictionOptions_;
     QString predictionStatus_;
     QString predictionWinner_;
+    QString predictionKind_;
 
     void onPredictionTimerTick();
     QString composePredictionText() const;
