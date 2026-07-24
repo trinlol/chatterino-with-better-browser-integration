@@ -299,17 +299,20 @@ TEST_F(InputCompletionTest, CompletionRendersAndCyclesInlineEmotes)
 
 TEST_F(InputCompletionTest, SeventvOnlyPopupCompletion)
 {
-    for (auto completion :
-         {queryEmoteCompletion<ClassicEmoteStrategy>(
-              ":cla", EmoteSource::ProviderMode::SeventvOnly),
-          queryEmoteCompletion<SmartEmoteStrategy>(
-              ":cla", EmoteSource::ProviderMode::SeventvOnly)})
+    for (const auto &query : {QStringLiteral(":cla"), QStringLiteral("cla")})
     {
-        ASSERT_EQ(completion.size(), 2);
-        containsRoughly(completion, {"Clap", "Clap2"});
-        ASSERT_TRUE(std::ranges::all_of(completion, [](const auto &item) {
-            return !item.isEmoji && item.providerName == u"Global 7TV";
-        }));
+        for (auto completion :
+             {queryEmoteCompletion<ClassicEmoteStrategy>(
+                  query, EmoteSource::ProviderMode::SeventvOnly),
+              queryEmoteCompletion<SmartEmoteStrategy>(
+                  query, EmoteSource::ProviderMode::SeventvOnly)})
+        {
+            ASSERT_EQ(completion.size(), 2);
+            containsRoughly(completion, {"Clap", "Clap2"});
+            ASSERT_TRUE(std::ranges::all_of(completion, [](const auto &item) {
+                return !item.isEmoji && item.providerName == u"Global 7TV";
+            }));
+        }
     }
 }
 

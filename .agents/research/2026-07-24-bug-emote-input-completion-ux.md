@@ -9,7 +9,7 @@ replace the wrong range or feel unresponsive.
 
 ## Root cause
 
-Two completion paths were active at once:
+Two completion paths could act on the same Tab press:
 
 1. `SplitInput` intercepted an unmodified Tab and opened
    `InputCompletionPopup`.
@@ -29,8 +29,13 @@ system. It was amplified by two competing handlers for the same Tab key.
 
 ## Fix
 
-- Let the existing `ResizingTextEdit` Tab/Shift+Tab handler own Tab completion.
-- Keep the visual popup for explicit `:` and `@` completion.
+- Show the 7TV related-emote popup on the first unmodified Tab press when it has
+  matches.
+- Make the popup own an accepted Tab press and reset any stale inline completion
+  state.
+- Fall back to the existing `ResizingTextEdit` Tab/Shift+Tab handler when the
+  popup has no matches.
+- Keep the visual popup for explicit `:` and `@` completion as well.
 - Render Tab, popup, typed, and clicked emotes as inline images.
 - When Tab cycles, replace the previous two-position `image + space` token
   instead of subtracting the expanded emote-name length.
@@ -54,3 +59,5 @@ system. It was amplified by two competing handlers for the same Tab key.
 
 1. `design_rejected`: the first mitigation made all input plain text, which
    fixed cursor stability but removed the required inline-emote feature.
+2. `design_rejected`: removing the Tab-triggered related-emote popup avoided
+   overlapping handlers but removed a required discovery and selection menu.

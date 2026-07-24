@@ -1069,42 +1069,60 @@ void SplitInput::installTextEditEvents()
 {
     // We can safely ignore this signal's connection because SplitInput owns
     // the textEdit object, so it will always be deleted before SplitInput
-    std::ignore =
-        this->ui_.textEdit->keyPressed.connect([this](QKeyEvent *event) {
-            if (auto *popup = this->inputCompletionPopup_.data())
+    std::ignore = this->ui_.textEdit->keyPressed.connect([this](
+                                                             QKeyEvent *event) {
+        if (auto *popup = this->inputCompletionPopup_.data())
+        {
+            if (popup->isVisible())
             {
-                if (popup->isVisible())
-                {
-                    if (popup->eventFilter(nullptr, event))
-                    {
-                        event->accept();
-                        return;
-                    }
-                }
-            }
-
-            if (this->spellCheckPopup_ && this->spellCheckPopup_->isVisible())
-            {
-                if (this->spellCheckPopup_->eventFilter(nullptr, event))
+                if (popup->eventFilter(nullptr, event))
                 {
                     event->accept();
                     return;
                 }
             }
+        }
 
-            // One of the last remaining of it's kind, the copy shortcut.
-            // For some bizarre reason Qt doesn't want this key be rebound.
-            // TODO(Mm2PL): Revisit in Qt6, maybe something changed?
-            if ((event->key() == Qt::Key_C || event->key() == Qt::Key_Insert) &&
-                event->modifiers() == Qt::ControlModifier)
+        if (this->spellCheckPopup_ && this->spellCheckPopup_->isVisible())
+        {
+            if (this->spellCheckPopup_->eventFilter(nullptr, event))
             {
-                if (this->channelView_->hasSelection())
+                event->accept();
+                return;
+            }
+        }
+
+        if (event->key() == Qt::Key_Tab && event->modifiers() == Qt::NoModifier)
+        {
+            const auto word = this->ui_.textEdit->textUnderCursor();
+            if (word.length() >= 2)
+            {
+                const auto kind = word.startsWith('@') ? CompletionKind::User
+                                                       : CompletionKind::Emote;
+                if (this->showCompletionPopup(word, kind))
                 {
-                    this->channelView_->copySelectedText();
+                    // The popup owns this Tab press. Clear any previous inline
+                    // completion so it cannot resume with a stale prefix.
+                    this->ui_.textEdit->resetCompletion();
                     event->accept();
+                    return;
                 }
             }
-        });
+        }
+
+        // One of the last remaining of it's kind, the copy shortcut.
+        // For some bizarre reason Qt doesn't want this key be rebound.
+        // TODO(Mm2PL): Revisit in Qt6, maybe something changed?
+        if ((event->key() == Qt::Key_C || event->key() == Qt::Key_Insert) &&
+            event->modifiers() == Qt::ControlModifier)
+        {
+            if (this->channelView_->hasSelection())
+            {
+                this->channelView_->copySelectedText();
+                event->accept();
+            }
+        }
+    });
 
     std::ignore = this->ui_.textEdit->contextMenuRequested.connect(
         [this](QMenu *menu, QPoint pos) {
