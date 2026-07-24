@@ -634,14 +634,37 @@ void NativeMessagingServer::updateEngagement(const QJsonObject &root)
             state.options.append(text);
         }
     }
+    const auto &previous = channel->getEngagement(kind);
     const auto duration = root["duration"_L1].toInt(0);
     if (state.status == QStringLiteral("started"))
     {
-        state.closesAt = QDateTime::currentDateTimeUtc().addSecs(
-            duration > 0 ? duration : 120);
+        const auto closesAtValue = root["closesAt"_L1];
+        qint64 closesAtMs = 0;
+        if (closesAtValue.isDouble())
+        {
+            closesAtMs = static_cast<qint64>(closesAtValue.toDouble());
+        }
+        else if (closesAtValue.isString())
+        {
+            closesAtMs = closesAtValue.toString().toLongLong();
+        }
+
+        if (closesAtMs > 0)
+        {
+            state.closesAt =
+                QDateTime::fromMSecsSinceEpoch(closesAtMs, Qt::UTC);
+        }
+        else if (duration > 0)
+        {
+            state.closesAt = QDateTime::currentDateTimeUtc().addSecs(duration);
+        }
+        else if (previous && previous->title == state.title &&
+                 previous->status == state.status)
+        {
+            state.closesAt = previous->closesAt;
+        }
     }
 
-    const auto &previous = channel->getEngagement(kind);
     const bool transition = !previous || previous->title != state.title ||
                             previous->status != state.status ||
                             previous->winner != state.winner;
@@ -652,8 +675,11 @@ void NativeMessagingServer::updateEngagement(const QJsonObject &root)
         const auto text = formatEngagement(kind, state);
         if (!text.isEmpty())
         {
-            QColor highlight(26, 105, 255, 70);
-            if (state.status == QStringLiteral("locked"))
+            QColor highlight = kind == EngagementKind::Prediction
+                                   ? QColor(0, 135, 90, 70)
+                                   : QColor(26, 105, 255, 70);
+            if (kind == EngagementKind::Poll &&
+                state.status == QStringLiteral("locked"))
             {
                 highlight = QColor(193, 125, 17, 70);
             }

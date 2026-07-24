@@ -18,6 +18,14 @@
     ...BANNER_SELECTORS,
     ...POLL_BANNER_SELECTORS,
   ].join(",");
+  const VOTING_CONTROL_SELECTOR = [
+    "button",
+    "input",
+    "select",
+    '[role="button"]',
+    '[role="radio"]',
+    '[role="option"]',
+  ].join(",");
 
   const PINNED_SELECTORS = [
     '[data-a-target="chat-pinned-message"]',
@@ -1167,28 +1175,52 @@
     activityStore.resetPublications();
   }
 
-  function findBanner() {
-    for (const selector of BANNER_SELECTORS) {
-      for (const banner of document.querySelectorAll(selector)) {
-        if (banner.closest("#chatterino-toolbar-portal")) {
-          continue;
-        }
-        return banner;
+  function findVotingSurface(selectors, kind) {
+    const candidates = new Map();
+    for (const selector of selectors) {
+      for (const surface of document.querySelectorAll(selector)) {
+        candidates.set(surface, 20);
       }
     }
-    return null;
+    for (const surface of document.querySelectorAll(
+      '[role="dialog"], [role="menu"]'
+    )) {
+      const text = String(surface.textContent || "").toLowerCase();
+      const controls = surface.querySelectorAll(VOTING_CONTROL_SELECTOR);
+      if (
+        controls.length >= 2 &&
+        (text.includes(kind) ||
+          (kind === "prediction" && text.includes("predict")))
+      ) {
+        candidates.set(surface, 40);
+      }
+    }
+
+    let best = null;
+    let bestScore = -1;
+    for (const [surface, baseScore] of candidates) {
+      if (
+        !surface.isConnected ||
+        surface.closest("#chatterino-toolbar-portal")
+      ) {
+        continue;
+      }
+      const controls = surface.querySelectorAll(VOTING_CONTROL_SELECTOR).length;
+      const score = baseScore + Math.min(controls, 10);
+      if (score > bestScore) {
+        best = surface;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  function findBanner() {
+    return findVotingSurface(BANNER_SELECTORS, "prediction");
   }
 
   function findPollBanner() {
-    for (const selector of POLL_BANNER_SELECTORS) {
-      for (const banner of document.querySelectorAll(selector)) {
-        if (banner.closest("#chatterino-toolbar-portal")) {
-          continue;
-        }
-        return banner;
-      }
-    }
-    return null;
+    return findVotingSurface(POLL_BANNER_SELECTORS, "poll");
   }
 
   function updateDisplayState(banner) {
@@ -1721,6 +1753,7 @@
               options: details.options,
               status: details.status,
               duration: details.durationSeconds,
+              closesAt: details.closesAt,
               winner: details.winner,
             }
           : {}),
@@ -1932,13 +1965,29 @@
 
     let pill = document.getElementById("chatterino-prediction-fallback");
     if (!pill) {
-      pill = document.createElement("div");
+      pill = document.createElement("button");
       pill.id = "chatterino-prediction-fallback";
       pill.className = "chatterino-prediction-fallback-pill";
+      pill.type = "button";
+      pill.title = "Open Twitch prediction voting";
       pill.innerHTML = '<span class="dot"></span><span class="label"></span>';
+      pill.addEventListener("click", () => {
+        if (
+          window.ChatterinoVotingUi?.activateVotingTrigger(
+            document,
+            "prediction",
+            pill
+          )
+        ) {
+          requestAnimationFrame(scheduleSync);
+          setTimeout(scheduleSync, 100);
+          setTimeout(scheduleSync, 300);
+        }
+      });
     }
 
-    pill.querySelector(".label").textContent = prediction.title;
+    pill.setAttribute("aria-label", `Vote on prediction: ${prediction.title}`);
+    pill.querySelector(".label").textContent = `Vote: ${prediction.title}`;
     mountInSlot(pill, 1);
     sendPredictionMessage(channelName);
   }

@@ -59,3 +59,50 @@ test("changing channel clears Adapter state and republishes independently", asyn
   assert.equal(store.snapshot().prediction, null);
   assert.equal(store.nextPublication("prediction"), null);
 });
+
+test("a prediction duration is anchored to one absolute deadline", async () => {
+  const { ActivityStore } = await loadModule();
+  let now = 100_000;
+  const store = new ActivityStore(() => now);
+  store.setChannel("example");
+  store.observeDom("prediction", {
+    title: "Will we win?",
+    options: ["Yes", "No"],
+    status: "started",
+    durationSeconds: 120,
+  });
+
+  const first = store.nextPublication("prediction").activity;
+  assert.equal(first.closesAt, 220_000);
+  assert.equal(first.durationSeconds, 120);
+
+  now += 30_000;
+  store.observeDom("prediction", {
+    title: "Will we win?",
+    options: ["Yes", "No"],
+    status: "started",
+    durationSeconds: 120,
+  });
+
+  const current = store.current("prediction");
+  assert.equal(current.closesAt, 220_000);
+  assert.equal(current.durationSeconds, 90);
+  assert.equal(store.nextPublication("prediction"), null);
+});
+
+test("missing timing data remains untimed instead of inventing two minutes", async () => {
+  const { ActivityStore } = await loadModule();
+  const store = new ActivityStore(() => 100_000);
+  store.setChannel("example");
+  store.applyGraphql({
+    prediction: {
+      title: "Will we win?",
+      options: ["Yes", "No"],
+      status: "started",
+    },
+  });
+
+  const activity = store.nextPublication("prediction").activity;
+  assert.equal(activity.closesAt, 0);
+  assert.equal(activity.durationSeconds, 0);
+});

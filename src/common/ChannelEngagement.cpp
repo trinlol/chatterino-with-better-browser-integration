@@ -23,8 +23,12 @@ QString formatEngagement(EngagementKind kind, const EngagementState &state,
 
     if (state.status == QStringLiteral("started"))
     {
+        if (!state.closesAt.isValid())
+        {
+            return eventText;
+        }
         const auto remaining = now.secsTo(state.closesAt);
-        if (state.closesAt.isValid() && remaining > 0)
+        if (remaining > 0)
         {
             const auto minutes = remaining / 60;
             const auto seconds = remaining % 60;

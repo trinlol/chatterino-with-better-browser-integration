@@ -21,6 +21,7 @@ class FakeXmlHttpRequest {
 }
 
 async function createTwitchApiHarness() {
+  class HarnessXmlHttpRequest extends FakeXmlHttpRequest {}
   const source = await readFile(
     new URL("../twitch-api.js", import.meta.url),
     "utf8"
@@ -55,7 +56,7 @@ async function createTwitchApiHarness() {
   vm.runInNewContext(source, {
     window,
     document,
-    XMLHttpRequest: FakeXmlHttpRequest,
+    XMLHttpRequest: HarnessXmlHttpRequest,
     CustomEvent: class CustomEvent {
       constructor(type, init = {}) {
         this.type = type;
@@ -75,12 +76,12 @@ async function createTwitchApiHarness() {
     clearTimeout() {},
   });
 
-  return { window, attributes, events };
+  return { window, attributes, events, XMLHttpRequest: HarnessXmlHttpRequest };
 }
 
 test("a generic CommunityPoll event with outcomes is not misclassified as a prediction", async () => {
   const harness = await createTwitchApiHarness();
-  const xhr = new FakeXmlHttpRequest();
+  const xhr = new harness.XMLHttpRequest();
   xhr.open("POST", "https://gql.twitch.tv/gql");
   xhr.responseText = JSON.stringify({
     data: {
@@ -104,5 +105,53 @@ test("a generic CommunityPoll event with outcomes is not misclassified as a pred
   assert.match(
     harness.attributes.get("data-cc-gql-poll"),
     /Which map should be next/
+  );
+});
+
+test("prediction timing is published as one absolute lock deadline", async () => {
+  const harness = await createTwitchApiHarness();
+  const xhr = new harness.XMLHttpRequest();
+  xhr.open("POST", "https://gql.twitch.tv/gql");
+  xhr.responseText = JSON.stringify({
+    data: {
+      communityPredictionEvent: {
+        __typename: "CommunityPredictionEvent",
+        title: "Will we win?",
+        outcomes: [{ title: "Yes" }, { title: "No" }],
+        status: "ACTIVE",
+        predictionWindowSeconds: 120,
+        createdAt: "2026-07-24T12:00:00.000Z",
+      },
+    },
+  });
+  xhr.send();
+
+  const prediction =
+    harness.window.__chatterinoCompanionGql.getState().prediction;
+  assert.equal(prediction.title, "Will we win?");
+  assert.equal(
+    prediction.closesAt,
+    Date.parse("2026-07-24T12:02:00.000Z")
+  );
+});
+
+test("an empty generic outcomes container does not create a fake prediction", async () => {
+  const harness = await createTwitchApiHarness();
+  const xhr = new harness.XMLHttpRequest();
+  xhr.open("POST", "https://gql.twitch.tv/gql");
+  xhr.responseText = JSON.stringify({
+    data: {
+      unrelatedCommunityEvent: {
+        event: {
+          outcomes: [],
+        },
+      },
+    },
+  });
+  xhr.send();
+
+  assert.equal(
+    harness.window.__chatterinoCompanionGql.getState().prediction,
+    null
   );
 });

@@ -79,6 +79,7 @@ void PredictionBannerWidget::updateState()
 
     QStringList rows;
     bool needsRefresh = false;
+    const auto now = QDateTime::currentDateTimeUtc();
     for (const auto kind : {EngagementKind::Poll, EngagementKind::Prediction})
     {
         const auto &engagement = this->channel_->getEngagement(kind);
@@ -92,7 +93,8 @@ void PredictionBannerWidget::updateState()
             rows.append(text);
         }
         needsRefresh |= engagement->status == QStringLiteral("started") &&
-                        engagement->closesAt.isValid();
+                        engagement->closesAt.isValid() &&
+                        now < engagement->closesAt;
     }
 
     if (rows.isEmpty())
@@ -119,12 +121,15 @@ QColor PredictionBannerWidget::backgroundColor() const
 {
     bool hasLocked = false;
     bool hasEnded = false;
+    bool hasPrediction = false;
     if (this->channel_)
     {
         for (const auto kind :
              {EngagementKind::Poll, EngagementKind::Prediction})
         {
             const auto &engagement = this->channel_->getEngagement(kind);
+            hasPrediction |=
+                kind == EngagementKind::Prediction && engagement.has_value();
             hasLocked |=
                 engagement && engagement->status == QStringLiteral("locked");
             hasEnded |=
@@ -132,6 +137,10 @@ QColor PredictionBannerWidget::backgroundColor() const
         }
     }
 
+    if (hasPrediction)
+    {
+        return {0, 135, 90};
+    }
     if (hasLocked)
     {
         return {193, 125, 17};

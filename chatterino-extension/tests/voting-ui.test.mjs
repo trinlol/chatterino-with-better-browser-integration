@@ -4,11 +4,19 @@ import test from "node:test";
 import vm from "node:vm";
 
 class FakeElement {
-  constructor({ interactive = false } = {}) {
+  constructor({
+    interactive = false,
+    text = "",
+    attributes = {},
+    connected = true,
+  } = {}) {
     this.children = [];
     this.parentElement = null;
     this.interactive = interactive;
     this.clicked = 0;
+    this.textContent = text;
+    this.attributes = attributes;
+    this.isConnected = connected;
   }
 
   append(...children) {
@@ -20,6 +28,14 @@ class FakeElement {
 
   matches() {
     return this.interactive;
+  }
+
+  getAttribute(name) {
+    return this.attributes[name] ?? null;
+  }
+
+  closest() {
+    return null;
   }
 
   click() {
@@ -76,6 +92,53 @@ test("replica activation is forwarded to the matching native Twitch control", as
   assert.equal(sourceButton.clicked, 1);
   assert.equal(prevented, true);
   assert.equal(stopped, true);
+});
+
+test("activation falls back to matching control order when Twitch wrappers differ", async () => {
+  const votingUi = await loadVotingUi();
+
+  const sourceRoot = new FakeElement();
+  const sourceWrapper = new FakeElement();
+  const sourceButton = new FakeElement({
+    interactive: true,
+    text: "Vote Yes",
+  });
+  sourceRoot.append(sourceWrapper);
+  sourceWrapper.append(sourceButton);
+
+  const replicaRoot = new FakeElement();
+  const replicaButton = new FakeElement({
+    interactive: true,
+    text: "Vote Yes",
+  });
+  replicaRoot.append(replicaButton);
+
+  const forwarded = votingUi.forwardActivation(
+    { target: replicaButton },
+    replicaRoot,
+    sourceRoot
+  );
+
+  assert.equal(forwarded, true);
+  assert.equal(sourceWrapper.clicked, 0);
+  assert.equal(sourceButton.clicked, 1);
+});
+
+test("prediction fallback activates Twitch's native prediction trigger", async () => {
+  const votingUi = await loadVotingUi();
+  const nativeButton = new FakeElement({
+    interactive: true,
+    text: "Prediction",
+    attributes: { "aria-label": "Open Prediction" },
+  });
+  const document = {
+    querySelectorAll() {
+      return [nativeButton];
+    },
+  };
+
+  assert.equal(votingUi.activateVotingTrigger(document, "prediction"), true);
+  assert.equal(nativeButton.clicked, 1);
 });
 
 test("fullscreen detection covers the Fullscreen API and viewport-filling video", async () => {

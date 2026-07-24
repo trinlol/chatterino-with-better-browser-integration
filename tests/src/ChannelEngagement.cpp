@@ -43,6 +43,14 @@ TEST(ChannelEngagement, FormattingIncludesCountdownAndOutcome)
     EXPECT_EQ(formatEngagement(EngagementKind::Poll, running, now),
               QStringLiteral("Poll: Best map? | A, B - 1:05 left"));
 
+    EngagementState untimed{
+        .title = QStringLiteral("Will we win?"),
+        .options = {QStringLiteral("Yes"), QStringLiteral("No")},
+        .status = QStringLiteral("started"),
+    };
+    EXPECT_EQ(formatEngagement(EngagementKind::Prediction, untimed, now),
+              QStringLiteral("Prediction: Will we win? | Yes, No"));
+
     EngagementState ended{
         .title = QStringLiteral("Will we win?"),
         .status = QStringLiteral("ended"),

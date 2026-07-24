@@ -15,6 +15,23 @@
       .filter(Boolean);
   }
 
+  function normalizeTimestamp(value) {
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+      return Math.round(value < 1_000_000_000_000 ? value * 1000 : value);
+    }
+    if (typeof value === "string" && value.trim()) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        return Math.round(
+          numeric < 1_000_000_000_000 ? numeric * 1000 : numeric
+        );
+      }
+      const parsed = Date.parse(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  }
+
   function normalizeActivity(kind, input, source = "unknown") {
     if (!ACTIVITY_KINDS.includes(kind) || !input) return null;
     const title = String(input.title || "").trim();
@@ -29,6 +46,9 @@
         .toLowerCase(),
       durationSeconds:
         Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0,
+      closesAt: normalizeTimestamp(
+        input.closesAt ?? input.locksAt ?? input.endsAt
+      ),
       winner: String(input.winner || "").trim(),
       source,
     };
@@ -45,6 +65,7 @@
       options: graphql.options.length ? graphql.options : dom.options,
       status: graphql.status || dom.status,
       durationSeconds: graphql.durationSeconds || dom.durationSeconds,
+      closesAt: graphql.closesAt || dom.closesAt,
       winner: graphql.winner || dom.winner,
       source: "dom+graphql",
     };
@@ -58,16 +79,18 @@
       options: activity.options,
       status: activity.status,
       winner: activity.winner,
-      timed: activity.durationSeconds > 0,
+      closesAt: activity.closesAt,
     });
   }
 
   class ActivityStore {
-    constructor() {
+    constructor(now = () => Date.now()) {
+      this.now = now;
       this.channel = "";
       this.dom = { poll: null, prediction: null };
       this.graphql = { poll: null, prediction: null };
       this.published = { poll: "removed", prediction: "removed" };
+      this.deadlines = { poll: null, prediction: null };
     }
 
     setChannel(channel) {
@@ -78,6 +101,7 @@
       this.channel = normalized;
       this.dom = { poll: null, prediction: null };
       this.graphql = { poll: null, prediction: null };
+      this.deadlines = { poll: null, prediction: null };
       this.resetPublications();
       return true;
     }
@@ -105,7 +129,46 @@
 
     current(kind) {
       if (!ACTIVITY_KINDS.includes(kind)) return null;
-      return mergeActivities(kind, this.dom[kind], this.graphql[kind]);
+      const activity = mergeActivities(
+        kind,
+        this.dom[kind],
+        this.graphql[kind]
+      );
+      if (!activity) {
+        this.deadlines[kind] = null;
+        return null;
+      }
+
+      if (activity.status !== "started") {
+        this.deadlines[kind] = null;
+        return { ...activity, closesAt: 0, durationSeconds: 0 };
+      }
+
+      const now = Number(this.now()) || Date.now();
+      const key = JSON.stringify({
+        title: activity.title,
+        options: activity.options,
+      });
+      const previous = this.deadlines[kind];
+      let closesAt = activity.closesAt;
+
+      if (closesAt > 0) {
+        this.deadlines[kind] = { key, closesAt };
+      } else if (previous?.key === key) {
+        closesAt = previous.closesAt;
+      } else if (activity.durationSeconds > 0) {
+        closesAt = now + activity.durationSeconds * 1000;
+        this.deadlines[kind] = { key, closesAt };
+      } else {
+        this.deadlines[kind] = { key, closesAt: 0 };
+      }
+
+      return {
+        ...activity,
+        closesAt,
+        durationSeconds:
+          closesAt > 0 ? Math.max(0, Math.ceil((closesAt - now) / 1000)) : 0,
+      };
     }
 
     nextPublication(kind) {
@@ -139,6 +202,7 @@
     ActivityStore,
     mergeActivities,
     normalizeActivity,
+    normalizeTimestamp,
     publicationFingerprint,
   };
 })(window);

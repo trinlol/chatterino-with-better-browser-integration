@@ -327,6 +327,43 @@
     }
   }
 
+  function normalizeEventTimestamp(value) {
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+      return Math.round(value < 1_000_000_000_000 ? value * 1000 : value);
+    }
+    if (typeof value === "string" && value.trim()) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        return Math.round(
+          numeric < 1_000_000_000_000 ? numeric * 1000 : numeric
+        );
+      }
+      const parsed = Date.parse(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  }
+
+  function eventDeadline(event, durationSeconds) {
+    const explicitDeadline = normalizeEventTimestamp(
+      event.locksAt ??
+        event.lockAt ??
+        event.closesAt ??
+        event.closeAt ??
+        event.endsAt ??
+        event.endAt
+    );
+    if (explicitDeadline > 0) {
+      return explicitDeadline;
+    }
+    const startedAt = normalizeEventTimestamp(
+      event.startedAt ?? event.createdAt ?? event.startTime
+    );
+    return startedAt > 0 && durationSeconds > 0
+      ? startedAt + durationSeconds * 1000
+      : 0;
+  }
+
   function parsePredictionEvent(event) {
     if (!event || typeof event !== "object") {
       return null;
@@ -351,12 +388,20 @@
     const options = outcomes
       .map((o) => o.title || o.name || o.label)
       .filter(Boolean);
+    const title = String(event.title || event.predictionTitle || "").trim();
+    if (!title && options.length < 2) {
+      return null;
+    }
+    const duration = Number(
+      event.durationSeconds || event.predictionWindowSeconds || 0
+    );
 
     return {
-      title: event.title || event.predictionTitle || "Prediction",
+      title: title || "Prediction",
       options,
       status,
-      duration: event.durationSeconds || event.predictionWindowSeconds || 0,
+      duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
+      closesAt: eventDeadline(event, duration),
       winner: event.winningOutcome?.title || event.winner || "",
     };
   }
@@ -384,12 +429,20 @@
           choice.title || choice.name || choice.label || choice.choiceText
       )
       .filter(Boolean);
+    const title = String(event.title || event.pollTitle || "").trim();
+    if (!title && options.length < 2) {
+      return null;
+    }
+    const duration = Number(
+      event.durationSeconds || event.remainingDurationSeconds || 0
+    );
 
     return {
-      title: event.title || event.pollTitle || "Poll",
+      title: title || "Poll",
       options,
       status,
-      duration: event.durationSeconds || event.remainingDurationSeconds || 0,
+      duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
+      closesAt: eventDeadline(event, duration),
     };
   }
 
@@ -413,13 +466,19 @@
     if (typeHint.includes("prediction")) {
       return "prediction";
     }
-    if (event?.pollChoices || event?.choices) {
+    if (
+      (Array.isArray(event?.pollChoices) && event.pollChoices.length > 0) ||
+      (Array.isArray(event?.choices) && event.choices.length > 0)
+    ) {
       return "poll";
     }
-    if (event?.predictionOutcomes) {
+    if (
+      Array.isArray(event?.predictionOutcomes) &&
+      event.predictionOutcomes.length > 0
+    ) {
       return "prediction";
     }
-    return event?.outcomes ? "prediction" : "";
+    return "";
   }
 
   function walkJson(node, visitor) {

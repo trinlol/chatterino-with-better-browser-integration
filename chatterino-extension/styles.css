@@ -382,21 +382,36 @@ html.chatterino-badge-replica-active
   height: 20px !important;
 }
 
+.chatterino-prediction-replica .chatterino-moved-banner-inline {
+  background-color: #063f31 !important;
+  border-color: #00f593 !important;
+}
+
 .chatterino-prediction-fallback-pill {
   display: inline-flex !important;
   align-items: center !important;
   gap: 6px !important;
-  background-color: #18181b !important;
-  border: 1px solid #a970ff !important;
+  appearance: none !important;
+  background-color: #063f31 !important;
+  border: 1px solid #00f593 !important;
   border-radius: 4px !important;
   padding: 4px 10px !important;
   height: 30px !important;
   color: #efeff1 !important;
   font-size: 12px !important;
   font-weight: 600 !important;
-  cursor: default !important;
+  cursor: pointer !important;
   flex-shrink: 0 !important;
   white-space: nowrap !important;
+}
+
+.chatterino-prediction-fallback-pill:hover {
+  background-color: #075942 !important;
+}
+
+.chatterino-prediction-fallback-pill:focus-visible {
+  outline: 2px solid #ffffff !important;
+  outline-offset: 2px !important;
 }
 
 .chatterino-prediction-fallback-pill .dot {
