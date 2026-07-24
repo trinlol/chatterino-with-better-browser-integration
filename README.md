@@ -79,7 +79,7 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 - ⚡ **Stable browser overlay** — fixes flicker, disappearing chat, and runaway CPU from native messaging
 - 🔄 **Fork-only updates** — update prompts and first-run release notes use this repository, never the upstream Chatterino download site
 
-### 💬 Better emote input (fork-exclusive)
+### 💬 Better emote input
 
 - 7️⃣ **7TV-only autocomplete** — both Tab completion and the visual `:` menu exclude Twitch, BTTV, FFZ, and emoji entries
 - ⌨️ **Reliable Tab cycling** — press **Tab** or **Shift+Tab** to cycle forward or backward through matching 7TV emotes without losing your typed text
@@ -88,7 +88,7 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 - ⭐ **Emote favourites tab** — **Ctrl+click** any emote in chat to add it to your Favourites; open the emote picker to find them quickly
 - 👆 **Click-to-type emotes** — click a single emote from another user's message to insert it straight into your input
 
-### 👤 User card (fork-exclusive)
+### 👤 User card
 
 - 🏅 **Badges under avatar** — clicking a user shows their badges in a compact grid below the profile image
 - 📜 **Paginated message history** — loads today's messages first, then older days on demand (skips empty days automatically)
