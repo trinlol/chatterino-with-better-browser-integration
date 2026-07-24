@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const extensionPath = path.join(root, 'chatterino-companion');
+const extensionPath = path.join(root, 'chatterino-extension');
 const userDataDir = path.join(root, '.playwright-companion-profile');
 const outDir = path.join(root, 'scripts', 'qa-screenshots');
 const url = process.env.TWITCH_URL || 'https://www.twitch.tv/ohnePixel';
@@ -65,7 +65,9 @@ async function readState() {
     return {
       toolbarMounted: !!document.getElementById('chatterino-toolbar-portal'),
       nativeInToolbar: !!toolbarPts,
-      nativeInHolder: !!document.querySelector('#chatterino-native-points-holder [data-test-selector="community-points-summary"]'),
+      pointsReplica: rect('#chatterino-points-replica'),
+      predictionReplica: rect('#chatterino-prediction-replica'),
+      pollReplica: rect('#chatterino-poll-replica'),
       follow: rect('[data-a-target="follow-button"], [data-a-target="unfollow-button"]'),
       toolbarPoints: rect('#chatterino-toolbar-slot [data-test-selector="community-points-summary"]'),
       gapPx: gap,

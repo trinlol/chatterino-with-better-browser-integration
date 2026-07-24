@@ -22,6 +22,8 @@ set(SOURCE_FILES
         common/ChannelChatters.hpp
         common/Channel.cpp
         common/Channel.hpp
+        common/ChannelEngagement.cpp
+        common/ChannelEngagement.hpp
         common/ChatterinoSetting.cpp
         common/ChatterinoSetting.hpp
         common/ChatterSet.cpp
@@ -526,6 +528,8 @@ set(SOURCE_FILES
         singletons/Logging.hpp
         singletons/NativeMessaging.cpp
         singletons/NativeMessaging.hpp
+        singletons/NativeMessagingProtocol.cpp
+        singletons/NativeMessagingProtocol.hpp
         singletons/Paths.cpp
         singletons/Paths.hpp
         singletons/Resources.cpp

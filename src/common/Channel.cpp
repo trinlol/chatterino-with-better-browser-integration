@@ -25,30 +25,23 @@ bool looksLikeSubscriptionSystemMessage(const QString &text)
             QStringLiteral(
                 R"(\bgifted\s+(?:\d+\s+months?\s+of\s+(?:a\s+)?)?tier\s+\d)"),
             QRegularExpression::CaseInsensitiveOption),
-        QRegularExpression(
-            QStringLiteral(R"(\bgifted\s+a\s+tier\s+\d)"),
-            QRegularExpression::CaseInsensitiveOption),
-        QRegularExpression(
-            QStringLiteral(R"(\bis\s+gifting\s+\d+)"),
-            QRegularExpression::CaseInsensitiveOption),
-        QRegularExpression(
-            QStringLiteral(R"(\banonymous\s+user\s+gifted)"),
-            QRegularExpression::CaseInsensitiveOption),
-        QRegularExpression(
-            QStringLiteral(R"(\bjust\s+subscribed\b)"),
-            QRegularExpression::CaseInsensitiveOption),
-        QRegularExpression(
-            QStringLiteral(R"(\bhas\s+subscribed\b)"),
-            QRegularExpression::CaseInsensitiveOption),
-        QRegularExpression(
-            QStringLiteral(R"(\bsubscribed\s+at\s+tier\b)"),
-            QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(QStringLiteral(R"(\bgifted\s+a\s+tier\s+\d)"),
+                           QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(QStringLiteral(R"(\bis\s+gifting\s+\d+)"),
+                           QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(QStringLiteral(R"(\banonymous\s+user\s+gifted)"),
+                           QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(QStringLiteral(R"(\bjust\s+subscribed\b)"),
+                           QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(QStringLiteral(R"(\bhas\s+subscribed\b)"),
+                           QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(QStringLiteral(R"(\bsubscribed\s+at\s+tier\b)"),
+                           QRegularExpression::CaseInsensitiveOption),
         QRegularExpression(
             QStringLiteral(R"(\bsubscribed\s+with\s+a\s+tier\b)"),
             QRegularExpression::CaseInsensitiveOption),
-        QRegularExpression(
-            QStringLiteral(R"(\bgift\s+sub\b)"),
-            QRegularExpression::CaseInsensitiveOption),
+        QRegularExpression(QStringLiteral(R"(\bgift\s+sub\b)"),
+                           QRegularExpression::CaseInsensitiveOption),
     };
 
     for (const auto &pattern : patterns)
@@ -618,7 +611,8 @@ void Channel::setPinnedMessageText(const QString &text)
         pinnedText.clear();
     }
 
-    if (!pinnedText.isEmpty() && pinnedText == this->dismissedPinnedMessageText_)
+    if (!pinnedText.isEmpty() &&
+        pinnedText == this->dismissedPinnedMessageText_)
     {
         if (!this->pinnedMessageText_.isEmpty())
         {
@@ -661,24 +655,37 @@ const QString &Channel::getPinnedMessageText() const
     return this->pinnedMessageText_;
 }
 
-void Channel::setPredictionState(const QString &text, const QString &status)
+void Channel::setEngagement(EngagementKind kind, EngagementState state)
 {
-    if (this->predictionText_ != text || this->predictionStatus_ != status)
+    auto &slot = kind == EngagementKind::Poll ? this->poll_ : this->prediction_;
+    slot = std::move(state);
+    this->engagementsChanged.invoke();
+}
+
+void Channel::clearEngagement(EngagementKind kind)
+{
+    auto &slot = kind == EngagementKind::Poll ? this->poll_ : this->prediction_;
+    if (slot)
     {
-        this->predictionText_ = text;
-        this->predictionStatus_ = status;
-        this->predictionChanged.invoke();
+        slot.reset();
+        this->engagementsChanged.invoke();
     }
 }
 
-const QString &Channel::getPredictionText() const
+void Channel::clearEngagements()
 {
-    return this->predictionText_;
+    if (this->poll_ || this->prediction_)
+    {
+        this->poll_.reset();
+        this->prediction_.reset();
+        this->engagementsChanged.invoke();
+    }
 }
 
-const QString &Channel::getPredictionStatus() const
+const std::optional<EngagementState> &Channel::getEngagement(
+    EngagementKind kind) const
 {
-    return this->predictionStatus_;
+    return kind == EngagementKind::Poll ? this->poll_ : this->prediction_;
 }
 
 }  // namespace chatterino

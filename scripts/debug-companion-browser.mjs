@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const extensionPath = path.join(root, 'chatterino-companion');
+const extensionPath = path.join(root, 'chatterino-extension');
 const userDataDir = path.join(root, '.playwright-companion-profile');
 const url = process.env.TWITCH_URL || 'https://www.twitch.tv/ohnePixel';
 
@@ -44,7 +44,9 @@ for (let i = 0; i < 12; i++) {
       portal: rect('#chatterino-toolbar-portal'),
       slot: rect('#chatterino-toolbar-slot'),
       toolbarPoints: rect('#chatterino-toolbar-slot [data-test-selector="community-points-summary"]'),
-      holderPoints: rect('#chatterino-native-points-holder [data-test-selector="community-points-summary"]'),
+      pointsReplica: rect('#chatterino-points-replica'),
+      predictionReplica: rect('#chatterino-prediction-replica'),
+      pollReplica: rect('#chatterino-poll-replica'),
       summaryParent: summary?.parentElement?.id || summary?.parentElement?.className?.slice(0, 40) || null,
       slotChildCount: document.getElementById('chatterino-toolbar-slot')?.childElementCount ?? 0,
     };

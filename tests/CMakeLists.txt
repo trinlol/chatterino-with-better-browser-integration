@@ -8,6 +8,7 @@ set(test_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/Test.hpp
     ${CMAKE_CURRENT_LIST_DIR}/src/Test.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/ChannelChatters.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/ChannelEngagement.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/AccessGuard.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/NetworkCommon.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/NetworkRequest.cpp
@@ -56,6 +57,7 @@ set(test_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/EventSubMessages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/WebSocketPool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/NativeMessaging.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/NativeMessagingProtocol.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/ImageUploader.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/TwitchChannel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/TwitchUserColor.cpp

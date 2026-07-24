@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const profile = path.join(root, '.playwright-companion-profile');
-const ext = path.join(root, 'chatterino-companion');
+const ext = path.join(root, 'chatterino-extension');
 
 const ctx = await chromium.launchPersistentContext(profile, {
   headless: true,

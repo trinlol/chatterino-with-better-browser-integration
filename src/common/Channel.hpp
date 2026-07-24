@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "common/ChannelEngagement.hpp"
 #include "common/enums/MessageContext.hpp"
 #include "controllers/completion/TabCompletionModel.hpp"
 #include "messages/LimitedQueue.hpp"
@@ -72,7 +73,7 @@ public:
     pajlada::Signals::NoArgSignal displayNameChanged;
     pajlada::Signals::NoArgSignal messagesCleared;
     pajlada::Signals::NoArgSignal pinnedMessageChanged;
-    pajlada::Signals::NoArgSignal predictionChanged;
+    pajlada::Signals::NoArgSignal engagementsChanged;
 
     Type getType() const;
     const QString &getName() const;
@@ -155,11 +156,11 @@ public:
     const QString &getPinnedMessageText() const;
     void dismissPinnedMessage();
 
-    /// Prediction announcement state shown above the chat input.
-    /// `status` is one of "started", "locked", "ended" or "" (no prediction).
-    void setPredictionState(const QString &text, const QString &status);
-    const QString &getPredictionText() const;
-    const QString &getPredictionStatus() const;
+    void setEngagement(EngagementKind kind, EngagementState state);
+    void clearEngagement(EngagementKind kind);
+    void clearEngagements();
+    const std::optional<EngagementState> &getEngagement(
+        EngagementKind kind) const;
 
 protected:
     virtual void onConnected();
@@ -174,8 +175,8 @@ private:
     Type type_;
     QString pinnedMessageText_;
     QString dismissedPinnedMessageText_;
-    QString predictionText_;
-    QString predictionStatus_;
+    std::optional<EngagementState> poll_;
+    std::optional<EngagementState> prediction_;
     bool anythingLogged_ = false;
 
     /// Recursion count for message signals.

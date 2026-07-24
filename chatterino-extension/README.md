@@ -30,6 +30,8 @@ Click the extension icon:
 
 - **Replace Twitch chat** — toggle overlay (Windows only, page reload required)
 - **Channel points claimer** — auto-claim green chests
+- **Integration health** — native connection, active channel, chat attachment,
+  GraphQL freshness, and current poll/prediction state
 
 ## 🔌 Native messaging
 

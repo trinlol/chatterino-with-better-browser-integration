@@ -52,7 +52,7 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 
 ## 🚀 Quick start (prebuilt)
 
-1. 📦 Download **Chatterino-Better-Browser-Windows-x64-v1.0.5.zip** from [Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest)
+1. 📦 Download the latest **Chatterino Better Browser Windows** archive from [Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest)
 2. 🗑️ **Uninstall** the old Chatterino app from Windows if you have it *(your settings are safe — see below)*
 3. 📂 Extract the zip **anywhere you like** (e.g. `C:\Apps\Chatterino Better Browser\`)
 4. 🔗 Right-click **`Chatterino Better Browser.exe`** → **Send to** → **Desktop (create shortcut)** *(or pin to Start / taskbar)*
@@ -138,7 +138,7 @@ Everything runs through a **single** extension. Chat overlay, pins, channel poin
 1. 🌐 Open `chrome://extensions` or `edge://extensions`
 2. 🔧 Enable **Developer mode**
 3. 📂 Click **Load unpacked**
-4. ✅ Select the [`chatterino-extension`](./chatterino-extension/) folder
+4. ✅ Select `browser-extension` from the downloaded Windows archive, or [`chatterino-extension`](./chatterino-extension/) when developing from source
 5. 🧹 Remove any old **Native Host** or **Companion** extensions if you still have them loaded
 
 See [`chatterino-extension/README.md`](./chatterino-extension/README.md) for popup settings and troubleshooting.

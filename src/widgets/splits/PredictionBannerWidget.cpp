@@ -14,16 +14,18 @@ PredictionBannerWidget::PredictionBannerWidget(QWidget *parent)
     layout->setSpacing(8);
 
     this->iconLabel_ = new QLabel(this);
-    this->iconLabel_->setText("🔮");
-    this->iconLabel_->setStyleSheet("font-size: 13px; background: transparent;");
+    this->iconLabel_->setText(QStringLiteral("\u25cf"));
+    this->iconLabel_->setStyleSheet(
+        "font-size: 13px; background: transparent;");
 
     this->textLabel_ = new QLabel(this);
     this->textLabel_->setWordWrap(true);
     this->textLabel_->setStyleSheet(
-        "color: #ffffff; font-weight: 600; font-size: 12px; background: transparent;");
+        "color: #ffffff; font-weight: 600; font-size: 12px; "
+        "background: transparent;");
 
     this->closeButton_ = new QPushButton(this);
-    this->closeButton_->setText("✕");
+    this->closeButton_->setText(QStringLiteral("\u00d7"));
     this->closeButton_->setFlat(true);
     this->closeButton_->setStyleSheet(
         "QPushButton { color: #ffffff; border: none; font-weight: bold; "
@@ -36,15 +38,18 @@ PredictionBannerWidget::PredictionBannerWidget(QWidget *parent)
     connect(this->closeButton_, &QPushButton::clicked, [this]() {
         if (this->channel_)
         {
-            this->channel_->setPredictionState("", "");
+            this->channel_->clearEngagements();
         }
     });
+
+    this->refreshTimer_.setInterval(1000);
+    connect(&this->refreshTimer_, &QTimer::timeout, this,
+            &PredictionBannerWidget::updateState);
 
     layout->addWidget(this->iconLabel_);
     layout->addWidget(this->textLabel_, 1);
     layout->addWidget(this->closeButton_);
     this->setLayout(layout);
-
     this->hide();
 }
 
@@ -55,9 +60,10 @@ void PredictionBannerWidget::setChannel(const ChannelPtr &channel)
 
     if (channel)
     {
-        this->channelConnection_ = channel->predictionChanged.connect([this]() {
-            this->updateState();
-        });
+        this->channelConnection_ =
+            channel->engagementsChanged.connect([this]() {
+                this->updateState();
+            });
     }
     this->updateState();
 }
@@ -66,39 +72,74 @@ void PredictionBannerWidget::updateState()
 {
     if (!this->channel_)
     {
+        this->refreshTimer_.stop();
         this->hide();
         return;
     }
 
-    QString text = this->channel_->getPredictionText();
-    if (text.isEmpty())
+    QStringList rows;
+    bool needsRefresh = false;
+    for (const auto kind : {EngagementKind::Poll, EngagementKind::Prediction})
     {
+        const auto &engagement = this->channel_->getEngagement(kind);
+        if (!engagement)
+        {
+            continue;
+        }
+        const auto text = formatEngagement(kind, *engagement);
+        if (!text.isEmpty())
+        {
+            rows.append(text);
+        }
+        needsRefresh |= engagement->status == QStringLiteral("started") &&
+                        engagement->closesAt.isValid();
+    }
+
+    if (rows.isEmpty())
+    {
+        this->refreshTimer_.stop();
         this->hide();
+        return;
     }
-    else
+
+    this->textLabel_->setText(rows.join(QStringLiteral("\n")));
+    if (needsRefresh && !this->refreshTimer_.isActive())
     {
-        this->textLabel_->setText(text);
-        this->show();
-        this->update();
+        this->refreshTimer_.start();
     }
+    else if (!needsRefresh)
+    {
+        this->refreshTimer_.stop();
+    }
+    this->show();
+    this->update();
 }
 
 QColor PredictionBannerWidget::backgroundColor() const
 {
-    const QString status =
-        this->channel_ ? this->channel_->getPredictionStatus() : QString();
-
-    if (status == "locked")
+    bool hasLocked = false;
+    bool hasEnded = false;
+    if (this->channel_)
     {
-        // Amber — submissions closed, waiting for outcome
+        for (const auto kind :
+             {EngagementKind::Poll, EngagementKind::Prediction})
+        {
+            const auto &engagement = this->channel_->getEngagement(kind);
+            hasLocked |=
+                engagement && engagement->status == QStringLiteral("locked");
+            hasEnded |=
+                engagement && engagement->status == QStringLiteral("ended");
+        }
+    }
+
+    if (hasLocked)
+    {
         return {193, 125, 17};
     }
-    if (status == "ended")
+    if (hasEnded)
     {
-        // Green — outcome decided
         return {0, 158, 96};
     }
-    // Started / default: Twitch prediction blue
     return {26, 105, 255};
 }
 
@@ -111,15 +152,12 @@ void PredictionBannerWidget::paintEvent(QPaintEvent *event)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-
     painter.fillRect(this->rect(), this->backgroundColor());
-    // Top border separates the banner from the chat view above it
     painter.fillRect(QRect(0, 0, this->width(), 1), this->borderColor());
 }
 
 void PredictionBannerWidget::themeChangedEvent()
 {
-    // Status colors are intentionally fixed regardless of theme
 }
 
 }  // namespace chatterino

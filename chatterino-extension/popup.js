@@ -1,6 +1,26 @@
 document.addEventListener('DOMContentLoaded', () => {
   const replaceTwitchCheckbox = document.getElementById('replaceTwitchCheckbox');
   const autoClaimCheckbox = document.getElementById('autoClaimCheckbox');
+  const debugPanel = document.getElementById('debugPanel');
+  const healthDot = document.getElementById('healthDot');
+  const healthHeadline = document.getElementById('healthHeadline');
+
+  function refreshIntegrationHealth() {
+    chrome.runtime.sendMessage({ type: 'get-integration-health' }, (health) => {
+      if (chrome.runtime.lastError || !health) {
+        health = {
+          native: {
+            connected: false,
+            lastError: chrome.runtime.lastError?.message || 'Background service unavailable'
+          }
+        };
+      }
+      const summary = globalThis.ChatterinoIntegrationHealth.summarize(health);
+      healthHeadline.textContent = summary.headline;
+      healthDot.className = `health-dot ${summary.level}`;
+      debugPanel.textContent = summary.lines.join('\n');
+    });
+  }
 
   chrome.storage.local.get({ autoClaimEnabled: true }, (items) => {
     autoClaimCheckbox.checked = items.autoClaimEnabled;
@@ -41,4 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
       replaceTwitchCheckbox.checked = changes.replaceTwitchChat.newValue;
     }
   });
+
+  refreshIntegrationHealth();
+  const healthTimer = setInterval(refreshIntegrationHealth, 2000);
+  window.addEventListener('unload', () => clearInterval(healthTimer), { once: true });
 });

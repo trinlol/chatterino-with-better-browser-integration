@@ -7,10 +7,10 @@
 #include "common/Atomic.hpp"
 #include "util/Expected.hpp"
 
-#include <QString>
-#include <QThread>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QString>
+#include <QThread>
 
 #include <optional>
 #include <vector>
@@ -90,7 +90,7 @@ private:
         void handleSelect(const QJsonObject &root);
         void handleDetach(const QJsonObject &root);
         void handleSync(const QJsonObject &root);
-        void handlePrediction(const QJsonObject &root);
+        void handleEngagement(const QJsonObject &root);
         void handlePinnedMessage(const QJsonObject &root);
         void handleRewardPending(const QJsonObject &root);
         void handleRewardClear(const QJsonObject &root);
@@ -99,7 +99,7 @@ private:
     };
 
     void syncChannels(const QJsonArray &twitchChannels);
-    void updatePredictionSticky(const QJsonObject &root);
+    void updateEngagement(const QJsonObject &root);
     void updatePinnedMessage(const QJsonObject &root);
     void updateRewardPending(const QJsonObject &root);
     void clearRewardPending(const QJsonObject &root);
@@ -111,21 +111,6 @@ private:
     /// This vector contains all channels that are open the user's browser.
     /// These channels are joined to be able to switch channels more quickly.
     std::vector<ChannelPtr> channelWarmer_;
-
-    ChannelPtr activeChannel_;
-    class QTimer *predictionTimer_ = nullptr;
-    int remainingSeconds_ = 0;
-    QString predictionTitle_;
-    QJsonArray predictionOptions_;
-    QString predictionStatus_;
-    QString predictionWinner_;
-    QString predictionKind_;
-
-    void onPredictionTimerTick();
-    QString composePredictionText() const;
-    void updatePredictionBanner();
-    void announcePredictionInChat();
-    void clearPrediction();
 
     friend ReceiverThread;
 };

@@ -1,0 +1,39 @@
+name: Browser extension
+
+on:
+  push:
+    paths:
+      - "chatterino-extension/**"
+      - "scripts/validate-extension.mjs"
+      - "scripts/validate-release-contract.mjs"
+      - "scripts/package-extension.mjs"
+      - "package.json"
+      - "release-contract.json"
+      - ".github/workflows/extension-test.yml"
+  pull_request:
+    paths:
+      - "chatterino-extension/**"
+      - "scripts/validate-extension.mjs"
+      - "scripts/validate-release-contract.mjs"
+      - "scripts/package-extension.mjs"
+      - "package.json"
+      - "release-contract.json"
+      - ".github/workflows/extension-test.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - run: npm run package:extension
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chatterino-browser-extension
+          path: dist/chatterino-browser-extension/

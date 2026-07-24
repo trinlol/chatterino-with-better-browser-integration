@@ -9,15 +9,16 @@
 #include "common/Modes.hpp"
 #include "common/QLogging.hpp"
 #include "debug/AssertInGuiThread.hpp"
+#include "messages/Message.hpp"
+#include "messages/MessageBuilder.hpp"
+#include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "singletons/NativeMessagingProtocol.hpp"
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
 #include "util/IpcQueue.hpp"
 #include "util/PostToThread.hpp"
 #include "util/XDGDirectory.hpp"
-#include "messages/MessageBuilder.hpp"
-#include "messages/Message.hpp"
-#include "providers/twitch/TwitchChannel.hpp"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -363,12 +364,6 @@ bool NativeMessagingServer::isBrowserAttached()
 
 NativeMessagingServer::~NativeMessagingServer()
 {
-    if (this->predictionTimer_)
-    {
-        this->predictionTimer_->stop();
-        delete this->predictionTimer_;
-        this->predictionTimer_ = nullptr;
-    }
     if (!ipc::IpcQueue::remove("chatterino_gui"))
     {
         qCWarning(chatterinoNativeMessage) << "Failed to remove message queue";
@@ -429,45 +424,41 @@ void NativeMessagingServer::ReceiverThread::run()
 void NativeMessagingServer::ReceiverThread::handleMessage(
     const QJsonObject &root)
 {
-    QString action = root["action"_L1].toString();
-
-    if (action == "select")
+    const auto message = nm::parseNativeMessage(root);
+    if (!message)
     {
-        this->handleSelect(root);
-        return;
-    }
-    if (action == "detach")
-    {
-        this->handleDetach(root);
-        return;
-    }
-    if (action == "sync")
-    {
-        this->handleSync(root);
-        return;
-    }
-    if (action == "prediction")
-    {
-        this->handlePrediction(root);
-        return;
-    }
-    if (action == "pin")
-    {
-        this->handlePinnedMessage(root);
-        return;
-    }
-    if (action == "rewardPending")
-    {
-        this->handleRewardPending(root);
-        return;
-    }
-    if (action == "rewardClear")
-    {
-        this->handleRewardClear(root);
+        qCDebug(chatterinoNativeMessage)
+            << "NM rejected message:" << message.error;
         return;
     }
 
-    qCDebug(chatterinoNativeMessage) << "NM unknown action" << action;
+    switch (message.action)
+    {
+        case nm::NativeAction::Select:
+            this->handleSelect(root);
+            return;
+        case nm::NativeAction::Detach:
+            this->handleDetach(root);
+            return;
+        case nm::NativeAction::Sync:
+            this->handleSync(root);
+            return;
+        case nm::NativeAction::Engagement:
+        case nm::NativeAction::PredictionLegacy:
+            this->handleEngagement(root);
+            return;
+        case nm::NativeAction::Pin:
+            this->handlePinnedMessage(root);
+            return;
+        case nm::NativeAction::RewardPending:
+            this->handleRewardPending(root);
+            return;
+        case nm::NativeAction::RewardClear:
+            this->handleRewardClear(root);
+            return;
+        case nm::NativeAction::Unknown:
+            break;
+    }
 }
 
 // NOLINTBEGIN(readability-convert-member-functions-to-static)
@@ -563,14 +554,16 @@ void NativeMessagingServer::ReceiverThread::handleSync(const QJsonObject &root)
     });
 }
 
-void NativeMessagingServer::ReceiverThread::handlePrediction(const QJsonObject &root)
+void NativeMessagingServer::ReceiverThread::handleEngagement(
+    const QJsonObject &root)
 {
     postToThread([&parent = this->parent_, root] {
-        parent.updatePredictionSticky(root);
+        parent.updateEngagement(root);
     });
 }
 
-void NativeMessagingServer::ReceiverThread::handlePinnedMessage(const QJsonObject &root)
+void NativeMessagingServer::ReceiverThread::handlePinnedMessage(
+    const QJsonObject &root)
 {
     postToThread([&parent = this->parent_, root] {
         parent.updatePinnedMessage(root);
@@ -604,240 +597,96 @@ void NativeMessagingServer::updatePinnedMessage(const QJsonObject &root)
     channel->setPinnedMessageText(text);
 }
 
-void NativeMessagingServer::updatePredictionSticky(const QJsonObject &root)
+void NativeMessagingServer::updateEngagement(const QJsonObject &root)
 {
     assertInGuiThread();
 
-    QString status = root["status"_L1].toString();
-    QString title = root["title"_L1].toString();
-    QJsonArray options = root["options"_L1].toArray();
-    int duration = root["duration"_L1].toInt(0);
-    QString winner = root["winner"_L1].toString();
-    QString channelName = root["channel"_L1].toString();
-    QString kind = root["kind"_L1].toString().toLower();
-    if (kind != "poll")
-    {
-        kind = "prediction";
-    }
-
-    ChannelPtr channel;
-    if (!channelName.isEmpty())
-    {
-        channel = getApp()->getTwitch()->getOrAddChannel(channelName);
-    }
-    else
-    {
-        channel = getApp()->getTwitch()->getWatchingChannel().get();
-    }
-
+    const auto channelName = root["channel"_L1].toString();
+    ChannelPtr channel =
+        channelName.isEmpty()
+            ? getApp()->getTwitch()->getWatchingChannel().get()
+            : getApp()->getTwitch()->getOrAddChannel(channelName);
     if (!channel || channel->isEmpty())
     {
         return;
     }
 
-    if (this->activeChannel_ && this->activeChannel_ != channel)
+    const auto kind = root["kind"_L1].toString().toLower() == u"poll"
+                          ? EngagementKind::Poll
+                          : EngagementKind::Prediction;
+    const auto lifecycle =
+        root["lifecycle"_L1].toString(QStringLiteral("upsert"));
+    if (lifecycle == QStringLiteral("remove"))
     {
-        this->clearPrediction();
+        channel->clearEngagement(kind);
+        return;
     }
 
-    // A transition is a new prediction, a status change, or a new channel —
-    // periodic re-sends from the extension are not transitions.
-    const bool transition = status != this->predictionStatus_ ||
-                            title != this->predictionTitle_ ||
-                            kind != this->predictionKind_ ||
-                            channel != this->activeChannel_;
-
-    this->predictionTitle_ = title;
-    this->predictionOptions_ = options;
-    this->predictionStatus_ = status;
-    this->predictionWinner_ = winner;
-    this->predictionKind_ = kind;
-    this->activeChannel_ = channel;
-
-    if (status == "started")
+    EngagementState state;
+    state.title = root["title"_L1].toString().trimmed();
+    state.status = root["status"_L1].toString(QStringLiteral("started"));
+    state.winner = root["winner"_L1].toString();
+    for (const auto &option : root["options"_L1].toArray())
     {
-        if (duration > 0)
+        const auto text = option.toString().trimmed();
+        if (!text.isEmpty())
         {
-            // Re-sync the countdown with what the page reports
-            this->remainingSeconds_ = duration;
-        }
-        else if (transition)
-        {
-            this->remainingSeconds_ = 120;
-        }
-
-        if (!this->predictionTimer_)
-        {
-            this->predictionTimer_ = new QTimer();
-            QObject::connect(this->predictionTimer_, &QTimer::timeout, [this] {
-                this->onPredictionTimerTick();
-            });
-        }
-        if (!this->predictionTimer_->isActive())
-        {
-            this->predictionTimer_->start(1000);
+            state.options.append(text);
         }
     }
-    else
+    const auto duration = root["duration"_L1].toInt(0);
+    if (state.status == QStringLiteral("started"))
     {
-        this->remainingSeconds_ = 0;
-        if (this->predictionTimer_)
-        {
-            this->predictionTimer_->stop();
-        }
+        state.closesAt = QDateTime::currentDateTimeUtc().addSecs(
+            duration > 0 ? duration : 120);
     }
+
+    const auto &previous = channel->getEngagement(kind);
+    const bool transition = !previous || previous->title != state.title ||
+                            previous->status != state.status ||
+                            previous->winner != state.winner;
+    channel->setEngagement(kind, state);
 
     if (transition)
     {
-        this->announcePredictionInChat();
-    }
-    this->updatePredictionBanner();
-
-    if (status == "ended")
-    {
-        // Keep the result visible for a while, then clear — unless a newer
-        // prediction has replaced it in the meantime.
-        QTimer::singleShot(30000, [this, title] {
-            if (this->predictionStatus_ == "ended" &&
-                this->predictionTitle_ == title)
+        const auto text = formatEngagement(kind, state);
+        if (!text.isEmpty())
+        {
+            QColor highlight(26, 105, 255, 70);
+            if (state.status == QStringLiteral("locked"))
             {
-                this->clearPrediction();
+                highlight = QColor(193, 125, 17, 70);
+            }
+            else if (state.status == QStringLiteral("ended"))
+            {
+                highlight = QColor(0, 158, 96, 70);
+            }
+
+            auto builder = MessageBuilder(systemMessage, text);
+            builder->highlightColor = std::make_shared<QColor>(highlight);
+            builder->flags.set(MessageFlag::Highlighted);
+            channel->addMessage(builder.release(), MessageContext::Original);
+        }
+    }
+
+    if (state.status == QStringLiteral("ended"))
+    {
+        const std::weak_ptr<Channel> weakChannel = channel;
+        const auto title = state.title;
+        QTimer::singleShot(30000, [weakChannel, kind, title] {
+            const auto channel = weakChannel.lock();
+            if (!channel)
+            {
+                return;
+            }
+            const auto &current = channel->getEngagement(kind);
+            if (current && current->status == QStringLiteral("ended") &&
+                current->title == title)
+            {
+                channel->clearEngagement(kind);
             }
         });
     }
-}
-
-void NativeMessagingServer::onPredictionTimerTick()
-{
-    assertInGuiThread();
-    if (this->remainingSeconds_ > 0)
-    {
-        this->remainingSeconds_--;
-        this->updatePredictionBanner();
-    }
-    else
-    {
-        if (this->predictionTimer_)
-        {
-            this->predictionTimer_->stop();
-        }
-        this->updatePredictionBanner();
-    }
-}
-
-QString NativeMessagingServer::composePredictionText() const
-{
-    QStringList optionTexts;
-    for (const auto &val : this->predictionOptions_)
-    {
-        optionTexts.append(val.toString());
-    }
-    QString optionsStr = optionTexts.join(", ");
-    const bool isPoll = this->predictionKind_ == "poll";
-    const QString eventName = isPoll ? "Poll" : "Prediction";
-    QString titleAndOptions = this->predictionTitle_;
-    if (!optionsStr.isEmpty())
-    {
-        titleAndOptions += QString(" | %1").arg(optionsStr);
-    }
-    const QString eventText =
-        QString("%1: %2").arg(eventName, titleAndOptions);
-
-    if (this->predictionStatus_ == "started")
-    {
-        if (this->remainingSeconds_ > 0)
-        {
-            int mins = this->remainingSeconds_ / 60;
-            int secs = this->remainingSeconds_ % 60;
-            return QString("%1 — %2:%3 left")
-                .arg(eventText)
-                .arg(mins)
-                .arg(secs, 2, 10, QChar('0'));
-        }
-        return QString("%1 — %2").arg(
-            eventText, isPoll ? "closing…" : "locking…");
-    }
-    if (this->predictionStatus_ == "locked")
-    {
-        return QString("%1: %2")
-            .arg(isPoll ? "Poll closed" : "Prediction locked",
-                 titleAndOptions);
-    }
-    if (this->predictionStatus_ == "ended")
-    {
-        if (!this->predictionWinner_.isEmpty())
-        {
-            return QString("%1 ended: %2 | %3: %4")
-                .arg(eventName, this->predictionTitle_,
-                     isPoll ? "Winning choice" : "Outcome",
-                     this->predictionWinner_);
-        }
-        return QString("%1 ended: %2").arg(eventName, this->predictionTitle_);
-    }
-    return {};
-}
-
-void NativeMessagingServer::updatePredictionBanner()
-{
-    assertInGuiThread();
-    if (!this->activeChannel_)
-    {
-        return;
-    }
-    this->activeChannel_->setPredictionState(this->composePredictionText(),
-                                             this->predictionStatus_);
-}
-
-void NativeMessagingServer::announcePredictionInChat()
-{
-    assertInGuiThread();
-    if (!this->activeChannel_)
-    {
-        return;
-    }
-
-    QString text = this->composePredictionText();
-    if (text.isEmpty())
-    {
-        return;
-    }
-
-    QColor highlight(26, 105, 255, 70);  // started — prediction blue
-    if (this->predictionStatus_ == "locked")
-    {
-        highlight = QColor(193, 125, 17, 70);  // amber
-    }
-    else if (this->predictionStatus_ == "ended")
-    {
-        highlight = QColor(0, 158, 96, 70);  // green
-    }
-
-    auto builder = MessageBuilder(systemMessage, text);
-    builder->highlightColor = std::make_shared<QColor>(highlight);
-    builder->flags.set(MessageFlag::Highlighted);
-
-    this->activeChannel_->addMessage(builder.release(),
-                                     MessageContext::Original);
-}
-
-void NativeMessagingServer::clearPrediction()
-{
-    assertInGuiThread();
-    if (this->activeChannel_)
-    {
-        this->activeChannel_->setPredictionState("", "");
-    }
-    if (this->predictionTimer_)
-    {
-        this->predictionTimer_->stop();
-    }
-    this->predictionStatus_.clear();
-    this->predictionTitle_.clear();
-    this->predictionWinner_.clear();
-    this->predictionKind_.clear();
-    this->predictionOptions_ = QJsonArray();
-    this->remainingSeconds_ = 0;
-    this->activeChannel_.reset();
 }
 
 void NativeMessagingServer::ReceiverThread::handleRewardPending(

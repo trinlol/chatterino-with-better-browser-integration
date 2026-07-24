@@ -1,3 +1,7 @@
+if (typeof importScripts === 'function') {
+  importScripts('protocol.js');
+}
+
 const ignoredPages = new Set([
   'directory',
   'downloads',
@@ -133,6 +137,8 @@ const appName = 'com.chatterino.chatterino';
 let port = null;
 let portConnectBlocked = false;
 let lastPortConnectAttempt = 0;
+let lastNativeError = '';
+let lastNativeConnectedAt = 0;
 const PORT_CONNECT_COOLDOWN_MS = 5000;
 
 async function safeGetWindow(windowId) {
@@ -171,9 +177,12 @@ function connectPort() {
 
   try {
     port = chrome.runtime.connectNative(appName);
+    lastNativeError = '';
+    lastNativeConnectedAt = Date.now();
   } catch (error) {
     portConnectBlocked = true;
     port = null;
+    lastNativeError = error?.message || String(error);
     console.warn('[Chatterino] Native messaging connect failed:', error);
     return;
   }
@@ -198,6 +207,7 @@ function connectPort() {
   });
   port.onDisconnect.addListener(() => {
     const lastError = chrome.runtime.lastError?.message ?? '';
+    lastNativeError = lastError;
 
     port = null;
 
@@ -299,6 +309,36 @@ async function onTabSelected(url, tab) {
   }
 }
 
+async function getIntegrationHealth() {
+  const [tab] = await chrome.tabs
+    .query({ active: true, currentWindow: true, url: '*://*.twitch.tv/*' })
+    .catch(() => []);
+  let content = null;
+  if (tab?.id) {
+    try {
+      content = await chrome.tabs.sendMessage(tab.id, {
+        action: 'getIntegrationHealth',
+      });
+    } catch (error) {
+      content = null;
+    }
+  }
+  return {
+    native: {
+      connected: Boolean(port),
+      blocked: portConnectBlocked,
+      lastError: lastNativeError,
+      connectedAt: lastNativeConnectedAt,
+      protocolVersion: globalThis.ChatterinoProtocol.CURRENT_VERSION,
+    },
+    tab: tab
+      ? { id: tab.id, channel: matchChannelName(tab.url || '') || '' }
+      : null,
+    content,
+    checkedAt: Date.now(),
+  };
+}
+
 function isFirefox() {
   // Only Firefox has browser.*
   return typeof browser !== 'undefined';
@@ -323,13 +363,20 @@ async function calcDisplayScaleFactor(tabId, dpr) {
 }
 
 function forwardNativeMessage(message) {
+  let outbound;
+  try {
+    outbound = globalThis.ChatterinoProtocol.normalizeOutbound(message);
+  } catch (error) {
+    console.warn('[Chatterino] Invalid native message:', error.message, message);
+    return;
+  }
   const port = getPort();
   if (port) {
-    port.postMessage(message);
+    port.postMessage(outbound);
     return;
   }
 
-  chrome.runtime.sendNativeMessage(appName, message, () => {
+  chrome.runtime.sendNativeMessage(appName, outbound, () => {
     if (chrome.runtime.lastError) {
       console.warn(
         '[Chatterino] Native messaging error:',
@@ -376,6 +423,7 @@ async function routeSendNativeChat(message) {
 // receiving messages from content scripts and the popup
 chrome.runtime.onMessage.addListener((message, sender, callback) => {
   if (
+    message.action === 'engagement' ||
     message.action === 'prediction' ||
     message.action === 'pin' ||
     message.action === 'rewardPending' ||
@@ -386,6 +434,9 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
   }
 
   switch (message.type) {
+    case 'get-integration-health':
+      getIntegrationHealth().then(callback);
+      return true;
     case 'get-setting':
       Settings.get(message.key).then(callback);
       return true;
@@ -419,11 +470,7 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
           version: 0,
           name: matchChannelName(sender.tab.url),
         };
-        let port = getPort();
-
-        if (port) {
-          port.postMessage(data);
-        }
+        forwardNativeMessage(data);
       });
       break;
     case 'chat-resized':
@@ -497,10 +544,7 @@ async function tryDetach(windowId) {
 }
 
 function sendDetach(winID) {
-  const port = getPort();
-  if (port) {
-    port.postMessage({ action: 'detach', version: 0, winId: winID.toString() });
-  }
+  forwardNativeMessage({ action: 'detach', version: 0, winId: winID.toString() });
 }
 
 async function updateBadge() {
@@ -545,10 +589,7 @@ async function syncTabs() {
   }
   previousTabs = currentTabs;
 
-  const port = getPort();
-  if (port) {
-    port.postMessage({ action: 'sync', twitchChannels: [...currentTabs] });
-  }
+  forwardNativeMessage({ action: 'sync', twitchChannels: [...currentTabs] });
 
   await setPreviousTabs(previousTabs);
 }

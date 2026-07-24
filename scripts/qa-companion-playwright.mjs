@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
-const extensionPath = path.join(root, 'chatterino-companion');
+const extensionPath = path.join(root, 'chatterino-extension');
 const userDataDir = path.join(root, '.playwright-companion-profile');
 const outDir = path.join(root, 'scripts', 'qa-screenshots');
 
@@ -55,15 +55,6 @@ async function clickNativePointsInToolbar(page) {
   });
 }
 
-async function clickNativeHolderButton(page) {
-  return page.evaluate(() => {
-    const btn = document.querySelector('#chatterino-native-points-holder button');
-    if (!btn) return { ok: false, reason: 'no native btn' };
-    btn.click();
-    return { ok: true, label: btn.getAttribute('aria-label') };
-  });
-}
-
 async function readState(page) {
   return page.evaluate(() => {
     const rect = (sel) => {
@@ -77,8 +68,9 @@ async function readState(page) {
       toolbarMounted: !!document.getElementById('chatterino-toolbar-portal'),
       toolbarSlot: rect('#chatterino-toolbar-slot'),
       pointsReplica: !!document.querySelector('#chatterino-toolbar-slot [data-test-selector="community-points-summary"]'),
-      nativeHolder: !!document.getElementById('chatterino-native-points-holder'),
-      nativePointsInHolder: !!document.querySelector('#chatterino-native-points-holder [data-test-selector="community-points-summary"]'),
+      pointsReplica: rect('#chatterino-points-replica'),
+      predictionReplica: rect('#chatterino-prediction-replica'),
+      pollReplica: rect('#chatterino-poll-replica'),
       domPoints: !!document.querySelector('[data-test-selector="community-points-summary"]'),
       follow: rect('[data-a-target="follow-button"], [data-a-target="unfollow-button"]'),
       chatWiped: (() => {
@@ -86,7 +78,7 @@ async function readState(page) {
         const text = shell?.children[0]?.innerText || '';
         return text.includes('Chatterino should show here');
       })(),
-      gqlBalance: document.documentElement.getAttribute('data-cc-channel-points-balance'),
+      gqlBalance: document.documentElement.getAttribute('data-cc-gql-balance'),
       rewardDialog: !!document.querySelector('div[role="dialog"] .reward-center__content'),
       viewport: { w: window.innerWidth, h: window.innerHeight },
     };
@@ -172,15 +164,6 @@ try {
     console.log('Native reward dialog visible:', dialogVisible);
     if (dialogVisible) {
       await shot(page, '04-native-reward-dialog');
-    } else {
-      const nativeClick = await clickNativeHolderButton(page);
-      console.log('Direct native click:', nativeClick);
-      await page.waitForTimeout(2000);
-      state = await readState(page);
-      console.log('After native click:', JSON.stringify(state, null, 2));
-      if (await dialog.first().isVisible().catch(() => false)) {
-        await shot(page, '04-native-reward-dialog');
-      }
     }
   }
 
@@ -216,8 +199,9 @@ try {
   console.log('\n=== QA SUMMARY ===');
   console.log('Toolbar mounted:', state.toolbarMounted);
   console.log('Companion active:', state.companionActive);
-  console.log('Native points preserved:', state.nativePointsInHolder);
-  console.log('Points button visible:', !!state.pointsReplica?.visible);
+  console.log('Points replica visible:', !!state.pointsReplica?.visible);
+  console.log('Prediction replica visible:', !!state.predictionReplica?.visible);
+  console.log('Poll replica visible:', !!state.pollReplica?.visible);
   console.log('GQL balance attr:', state.gqlBalance);
   console.log('Chat wiped:', state.chatWiped);
   console.log('Screenshots in:', outDir);

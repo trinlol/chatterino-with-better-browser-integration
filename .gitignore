@@ -154,3 +154,6 @@ scripts/snippets/
 
 # Release build artifacts (uploaded to GitHub Releases, not committed)
 release/
+dist/
+.release-staging/
+scripts/qa-screenshots/

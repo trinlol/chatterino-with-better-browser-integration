@@ -7,6 +7,8 @@ on:
       - master
       - "bugfix-release/*"
       - "release/*"
+    tags:
+      - "v*"
   pull_request:
   workflow_dispatch:
     inputs:
@@ -286,6 +288,7 @@ jobs:
           windeployqt bin/chatterino.exe --release --no-compiler-runtime --no-translations --no-opengl-sw --dir Chatterino2/
           cp bin/chatterino.exe Chatterino2/
           ..\.CI\deploy-crt.ps1 Chatterino2
+          node ..\scripts\package-extension.mjs build\Chatterino2\browser-extension
 
       - name: Package (windows)
         if: startsWith(matrix.os, 'windows')
@@ -361,12 +364,23 @@ jobs:
   create-release:
     needs: [build-ubuntu-docker, build]
     runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')))
 
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0 # allows for tags access
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Package browser extension
+        run: |
+          node scripts/validate-release-contract.mjs
+          node scripts/package-extension.mjs release-artifacts/chatterino-browser-extension
+          cd release-artifacts
+          zip -r chatterino-browser-extension-${{ github.ref_name }}.zip chatterino-browser-extension
 
       # Windows
       - uses: actions/download-artifact@v8
@@ -423,11 +437,12 @@ jobs:
           artifactErrorsFailBuild: true
           artifacts: "release-artifacts/*"
           body: ${{ steps.format-changes.outputs.changelog }}
-          prerelease: true
-          name: Nightly Release
-          tag: nightly-build
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && format('Chatterino Better Browser {0}', github.ref_name) || 'Nightly Release' }}
+          tag: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'nightly-build' }}
 
       - name: Update nightly-build tag
+        if: github.ref == 'refs/heads/master'
         run: |
           git tag -f nightly-build
           git push -f origin nightly-build

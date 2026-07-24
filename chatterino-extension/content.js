@@ -69,8 +69,6 @@
   ];
 
   let autoClaimEnabled = true;
-  let lastPredictionFingerprint = '';
-  let lastPollFingerprint = '';
   let lastPredictionTitle = '';
   let isMinimized = false;
   let lastPinFingerprint = '';
@@ -78,6 +76,7 @@
   let syncIntervalId = null;
   let currentChannel = '';
   let gqlState = null;
+  const activityStore = new window.ChatterinoActivity.ActivityStore();
   let companionActive = document.documentElement.classList.contains('chatterino-companion-active');
   let domPointsLastSeen = 0;
   let domPredictionLastSeen = 0;
@@ -825,6 +824,7 @@
 
   function resetChannelScopedUi() {
     gqlState = null;
+    activityStore.applyGraphql(null);
     intentionalRewardDialogOpen = false;
     lastSuccessfulClaimAt = 0;
     stopClaimBootstrap();
@@ -875,6 +875,8 @@
     const predRaw = root.getAttribute('data-cc-gql-prediction');
     const pollRaw = root.getAttribute('data-cc-gql-poll');
     const rewardsRaw = root.getAttribute('data-cc-gql-rewards');
+    const hasPrediction = root.hasAttribute('data-cc-gql-prediction');
+    const hasPoll = root.hasAttribute('data-cc-gql-poll');
 
     if (!balance && claim == null && !claimId && !predRaw && !pollRaw && !rewardsRaw) {
       return;
@@ -889,19 +891,27 @@
       ...(claimId ? { claimId } : {})
     };
 
-    if (predRaw) {
-      try {
-        gqlState.prediction = JSON.parse(predRaw);
-      } catch (_) {
-        gqlState.prediction = { title: predRaw, options: [], status: 'started' };
+    if (hasPrediction) {
+      if (predRaw) {
+        try {
+          gqlState.prediction = JSON.parse(predRaw);
+        } catch (_) {
+          gqlState.prediction = { title: predRaw, options: [], status: 'started' };
+        }
+      } else {
+        gqlState.prediction = null;
       }
     }
 
-    if (pollRaw) {
-      try {
-        gqlState.poll = JSON.parse(pollRaw);
-      } catch (_) {
-        gqlState.poll = { title: pollRaw, options: [], status: 'started' };
+    if (hasPoll) {
+      if (pollRaw) {
+        try {
+          gqlState.poll = JSON.parse(pollRaw);
+        } catch (_) {
+          gqlState.poll = { title: pollRaw, options: [], status: 'started' };
+        }
+      } else {
+        gqlState.poll = null;
       }
     }
 
@@ -912,6 +922,8 @@
         gqlState.rewards = [];
       }
     }
+
+    activityStore.applyGraphql(gqlState);
   }
 
   function ensureToolbarPortal() {
@@ -1041,8 +1053,7 @@
     if (isContextInvalidated()) {
       return;
     }
-    lastPredictionFingerprint = '';
-    lastPollFingerprint = '';
+    activityStore.resetPublications();
   }
 
   function findBanner() {
@@ -1535,48 +1546,53 @@
   }
 
   function mergeVotingDetails(kind, domDetails) {
-    const apiDetails = gqlState?.[kind];
-    return {
-      title: String(apiDetails?.title || domDetails.title || '').trim(),
-      options:
-        Array.isArray(apiDetails?.options) && apiDetails.options.length > 0
-          ? apiDetails.options
-          : domDetails.options,
-      status: apiDetails?.status || domDetails.status || 'started',
-      durationSeconds: apiDetails?.duration || domDetails.durationSeconds || 0,
-      winner: apiDetails?.winner || domDetails.winner || ''
-    };
+    activityStore.applyGraphql(gqlState);
+    return activityStore.observeDom(kind, domDetails);
   }
 
-  function sendVotingMessage(kind, channelName, details) {
-    const fingerprint = JSON.stringify(details);
-    const previousFingerprint = kind === 'poll' ? lastPollFingerprint : lastPredictionFingerprint;
-    if (fingerprint === previousFingerprint || !channelName || !details.title) {
+  function sendVotingMessage(kind, channelName) {
+    const publication = activityStore.nextPublication(kind);
+    if (!publication || !channelName) {
       return;
     }
-    if (kind === 'poll') {
-      lastPollFingerprint = fingerprint;
-    } else {
-      lastPredictionFingerprint = fingerprint;
-    }
-    chrome.runtime.sendMessage({
-      action: 'prediction',
+    const details = publication.activity;
+    chrome.runtime.sendMessage(window.ChatterinoProtocol.create('engagement', {
       kind,
       channel: channelName,
-      title: details.title,
-      options: details.options,
-      status: details.status,
-      duration: details.durationSeconds,
-      winner: details.winner
-    });
+      lifecycle: publication.lifecycle,
+      ...(details
+        ? {
+            title: details.title,
+            options: details.options,
+            status: details.status,
+            duration: details.durationSeconds,
+            winner: details.winner
+          }
+        : {})
+    }));
   }
 
-  function sendPredictionMessage(channelName, details) {
-    sendVotingMessage('prediction', channelName, details);
+  function removeVotingMessages(channelName) {
+    if (!channelName) {
+      return;
+    }
+    for (const kind of window.ChatterinoActivity.ACTIVITY_KINDS) {
+      chrome.runtime.sendMessage(
+        window.ChatterinoProtocol.create('engagement', {
+          lifecycle: 'remove',
+          kind,
+          channel: channelName
+        })
+      );
+    }
   }
 
-  function sendPollMessage(channelName, details) {
-    sendVotingMessage('poll', channelName, details);
+  function sendPredictionMessage(channelName) {
+    sendVotingMessage('prediction', channelName);
+  }
+
+  function sendPollMessage(channelName) {
+    sendVotingMessage('poll', channelName);
   }
 
   function sanitizeVotingClone(clone, kind) {
@@ -1683,7 +1699,7 @@
       isMinimized = false;
     }
 
-    sendPredictionMessage(channelName, details);
+    sendPredictionMessage(channelName);
     if (activePredictionSource && activePredictionSource !== source) {
       releaseVotingSource(activePredictionSource);
     }
@@ -1736,7 +1752,9 @@
   }
 
   function handlePredictionFallback(channelName) {
-    const prediction = gqlState?.prediction;
+    activityStore.removeDom('prediction');
+    activityStore.applyGraphql(gqlState);
+    const prediction = activityStore.current('prediction');
     if (!prediction?.title) {
       document.getElementById('chatterino-prediction-fallback')?.remove();
       return;
@@ -1752,13 +1770,7 @@
 
     pill.querySelector('.label').textContent = prediction.title;
     mountInSlot(pill, 1);
-    sendPredictionMessage(channelName, {
-      title: prediction.title,
-      options: prediction.options || [],
-      status: prediction.status || 'started',
-      durationSeconds: prediction.duration || 0,
-      winner: prediction.winner || ''
-    });
+    sendPredictionMessage(channelName);
   }
 
   function cleanupPredictionUi() {
@@ -1775,7 +1787,7 @@
   function handlePollBanner(source, channelName) {
     document.getElementById('chatterino-poll-fallback')?.remove();
     const details = mergeVotingDetails('poll', parseBannerDetails(source));
-    sendPollMessage(channelName, details);
+    sendPollMessage(channelName);
     if (activePollSource && activePollSource !== source) {
       releaseVotingSource(activePollSource);
     }
@@ -1784,7 +1796,9 @@
   }
 
   function handlePollFallback(channelName) {
-    const poll = gqlState?.poll;
+    activityStore.removeDom('poll');
+    activityStore.applyGraphql(gqlState);
+    const poll = activityStore.current('poll');
     if (!poll?.title) {
       document.getElementById('chatterino-poll-fallback')?.remove();
       return;
@@ -1800,13 +1814,7 @@
 
     pill.querySelector('.label').textContent = poll.title;
     mountInSlot(pill, 0);
-    sendPollMessage(channelName, {
-      title: poll.title,
-      options: poll.options || [],
-      status: poll.status || 'started',
-      durationSeconds: poll.duration || 0,
-      winner: poll.winner || ''
-    });
+    sendPollMessage(channelName);
   }
 
   function cleanupPollUi() {
@@ -1845,7 +1853,9 @@
 
     const channelName = getTwitchChannelName();
     if (channelName !== currentChannel) {
+      removeVotingMessages(currentChannel);
       currentChannel = channelName;
+      activityStore.setChannel(channelName);
       domPointsLastSeen = 0;
       lastPinFingerprint = '';
       resetFingerprints();
@@ -1892,9 +1902,12 @@
     if (pollBanner) {
       handlePollBanner(pollBanner, channelName);
     } else {
+      activityStore.removeDom('poll');
       cleanupPollUi();
       if (gqlState?.poll?.title && (companionActive || isChatShellWiped() || channelName)) {
         handlePollFallback(channelName);
+      } else {
+        sendPollMessage(channelName);
       }
     }
 
@@ -1902,9 +1915,12 @@
     if (banner) {
       handlePredictionBanner(banner, channelName, pointsText);
     } else {
+      activityStore.removeDom('prediction');
       cleanupPredictionUi();
       if (gqlState?.prediction?.title && (companionActive || isChatShellWiped() || channelName)) {
         handlePredictionFallback(channelName);
+      } else {
+        sendPredictionMessage(channelName);
       }
     }
 
@@ -1951,6 +1967,7 @@
   window.addEventListener('chatterino-companion-gql', (event) => {
     const prevClaimAvailable = gqlState?.channelPoints?.claimAvailable;
     gqlState = event.detail;
+    activityStore.applyGraphql(gqlState);
     if (gqlState?.channelPoints?.claimAvailable) {
       scheduleAutoClaimAttempt();
     } else if (prevClaimAvailable) {
@@ -1972,6 +1989,18 @@
   });
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.action === 'getIntegrationHealth') {
+      sendResponse({
+        channel: currentChannel,
+        companionActive,
+        fullscreen: window.ChatterinoVotingUi.isFullscreenActive(document, window),
+        graphqlUpdatedAt: Number(
+          document.documentElement.getAttribute('data-cc-gql-updated') || 0
+        ),
+        activities: activityStore.snapshot()
+      });
+      return true;
+    }
     if (message?.action === 'sendNativeChat') {
       const result = sendNativeChatMessage(message.message);
       if (result.ok) {
