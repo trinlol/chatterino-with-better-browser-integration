@@ -8,10 +8,10 @@
 #include "messages/Message.hpp"
 
 #include <IrcMessage>
+#include <QDate>
 #include <QJsonObject>
 #include <QString>
 #include <QUrl>
-#include <QDate>
 
 #include <chrono>
 #include <memory>

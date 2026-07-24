@@ -122,8 +122,8 @@
                     },
                     "flags": "EmojiImage|EmojiText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "🫣"
                     },
                     "tooltip": ":face_with_peeking_eye:<br/>Emoji",
                     "trailingSpace": true,
@@ -147,7 +147,6 @@
             ],
             "flags": "Collapsed|WatchStreak",
             "frozen": false,
-            "highlightColor": "#64c466ff",
             "id": "5f360c15-db41-439a-83fd-2e2dbcdebada",
             "localizedName": "",
             "loginName": "imrlazyi",

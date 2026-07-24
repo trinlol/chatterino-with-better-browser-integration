@@ -85,8 +85,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "BTTVGlobal"
                     },
                     "tooltip": "BTTVGlobal Tooltip",
                     "trailingSpace": true,
@@ -119,8 +119,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": ":)"
                     },
                     "tooltip": ":)<br>Twitch Emote",
                     "trailingSpace": true,

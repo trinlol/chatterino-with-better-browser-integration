@@ -12,8 +12,8 @@
 #include "widgets/splits/Split.hpp"
 
 #include <QTimer>
-#include <QWindow>
 #include <QVBoxLayout>
+#include <QWindow>
 
 #include <memory>
 
@@ -152,7 +152,7 @@ AttachedWindow *AttachedWindow::getForeground(const GetArgs &args)
 
 void AttachedWindow::detach(const QString &winId)
 {
-    for (auto it = items.begin(); it != items.end(); )
+    for (auto it = items.begin(); it != items.end();)
     {
         if (it->winId == winId)
         {
@@ -192,8 +192,11 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
     this->attached_ = true;
 
     // Set the browser window as the owner of this window to prevent Z-order flickering
-    ::SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(attached));
-    ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    ::SetWindowLongPtr(hwnd, GWLP_HWNDPARENT,
+                       reinterpret_cast<LONG_PTR>(attached));
+    ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER |
+                       SWP_FRAMECHANGED);
 
     // FAST TIMER - used to resize/reorder windows (16ms ~= 60fps; 1ms pegged CPU)
     this->timer_.setInterval(16);

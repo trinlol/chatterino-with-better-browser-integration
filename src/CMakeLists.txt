@@ -22,12 +22,12 @@ set(SOURCE_FILES
         common/ChannelChatters.hpp
         common/Channel.cpp
         common/Channel.hpp
+        common/ChannelEngagement.cpp
+        common/ChannelEngagement.hpp
         common/ChatterinoSetting.cpp
         common/ChatterinoSetting.hpp
         common/ChatterSet.cpp
         common/ChatterSet.hpp
-        common/Credentials.cpp
-        common/Credentials.hpp
         common/Env.cpp
         common/Env.hpp
         common/LastMessageLineStyle.hpp
@@ -264,6 +264,8 @@ set(SOURCE_FILES
         controllers/plugins/api/ChannelRef.hpp
         controllers/plugins/api/ConnectionHandle.cpp
         controllers/plugins/api/ConnectionHandle.hpp
+        controllers/plugins/api/DateTime.cpp
+        controllers/plugins/api/DateTime.hpp
         controllers/plugins/api/DebugLibrary.cpp
         controllers/plugins/api/DebugLibrary.hpp
         controllers/plugins/api/EventType.hpp
@@ -508,6 +510,8 @@ set(SOURCE_FILES
         providers/twitch/pubsubmessages/Listen.cpp
         providers/twitch/pubsubmessages/Listen.hpp
         providers/twitch/pubsubmessages/Message.hpp
+        providers/twitch/pubsubmessages/PinnedChatUpdates.cpp
+        providers/twitch/pubsubmessages/PinnedChatUpdates.hpp
         providers/twitch/pubsubmessages/Unlisten.cpp
         providers/twitch/pubsubmessages/Unlisten.hpp
 
@@ -526,6 +530,8 @@ set(SOURCE_FILES
         singletons/Logging.hpp
         singletons/NativeMessaging.cpp
         singletons/NativeMessaging.hpp
+        singletons/NativeMessagingProtocol.cpp
+        singletons/NativeMessagingProtocol.hpp
         singletons/Paths.cpp
         singletons/Paths.hpp
         singletons/Resources.cpp
@@ -591,6 +597,9 @@ set(SOURCE_FILES
         util/OnceFlag.hpp
         util/RapidjsonHelpers.cpp
         util/RapidjsonHelpers.hpp
+        util/RapidJsonSerializeQSize.hpp
+        util/RapidJsonSerializeQString.hpp
+        util/RapidJsonSerializeQStringView.hpp
         util/RatelimitBucket.cpp
         util/RatelimitBucket.hpp
         util/RenameThread.cpp
@@ -603,6 +612,8 @@ set(SOURCE_FILES
         util/SignalListener.hpp
         util/StreamLink.cpp
         util/StreamLink.hpp
+        util/TabHistory.cpp
+        util/TabHistory.hpp
         util/ThreadGuard.hpp
         util/Twitch.cpp
         util/Twitch.hpp
@@ -871,8 +882,14 @@ set(SOURCE_FILES
         widgets/splits/PredictionBannerWidget.hpp
         widgets/splits/SplitInput.cpp
         widgets/splits/SplitInput.hpp
+        widgets/splits/SpellCheckHoverPopup.cpp
+        widgets/splits/SpellCheckHoverPopup.hpp
+        widgets/splits/SpellCheckSuggestionItem.cpp
+        widgets/splits/SpellCheckSuggestionItem.hpp
         widgets/splits/SplitOverlay.cpp
         widgets/splits/SplitOverlay.hpp
+        widgets/splits/PinnedMessageWidget.cpp
+        widgets/splits/PinnedMessageWidget.hpp
         )
 
 if (APPLE)
@@ -890,6 +907,12 @@ source_group(TREE ${CMAKE_SOURCE_DIR} FILES ${SOURCE_FILES})
 list(APPEND SOURCE_FILES ${RES_AUTOGEN_FILES})
 
 add_library(${LIBRARY_PROJECT} OBJECT ${SOURCE_FILES})
+
+if (APPLE)
+    target_link_libraries(${LIBRARY_PROJECT} PRIVATE
+        "$<LINK_LIBRARY:FRAMEWORK,Security>"
+    )
+endif ()
 
 if(CHATTERINO_PLUGINS)
     target_compile_definitions(${LIBRARY_PROJECT}
@@ -919,7 +942,6 @@ if (CHATTERINO_GENERATE_COVERAGE)
         EXCLUDE "lib/lua/*"
         EXCLUDE "lib/magic_enum/*"
         EXCLUDE "lib/miniaudio/*"
-        EXCLUDE "lib/qtkeychain/*"
         EXCLUDE "lib/rapidjson/*"
         EXCLUDE "lib/semver/*"
         EXCLUDE "lib/serialize/*"
@@ -980,18 +1002,6 @@ if (CHATTERINO_ALLOW_PRIVATE_QT_API)
         CHATTERINO_WITH_PRIVATE_QT_API)
 endif()
 
-if (BUILD_WITH_QTKEYCHAIN)
-    target_link_libraries(${LIBRARY_PROJECT}
-            PUBLIC
-            qt${MAJOR_QT_VERSION}keychain
-            )
-else()
-    target_compile_definitions(${LIBRARY_PROJECT}
-        PUBLIC
-        NO_QTKEYCHAIN
-        )
-endif()
-
 # Set the output of TARGET to be 
 # - CMAKE_BIN_DIR/lib for libraries
 # - CMAKE_BIN_DIR/bin for BINARIES
@@ -1015,9 +1025,18 @@ if (BUILD_APP)
         add_executable(${EXECUTABLE_PROJECT} main.cpp)
     endif()
 
-    set_target_properties(${EXECUTABLE_PROJECT} PROPERTIES
-        OUTPUT_NAME "Chatterino Better Browser"
-    )
+    if (WIN32 OR APPLE)
+        set_target_properties(${EXECUTABLE_PROJECT} PROPERTIES
+            OUTPUT_NAME "Chatterino Better Browser"
+        )
+    else()
+        # Unix packaging and Makefile generators expect the historical,
+        # whitespace-free executable path. The in-app product name remains
+        # Chatterino Better Browser on every platform.
+        set_target_properties(${EXECUTABLE_PROJECT} PROPERTIES
+            OUTPUT_NAME "chatterino"
+        )
+    endif()
 
     if (WIN32 AND RES_WINDOWS_RC_FILE)
         target_sources(${EXECUTABLE_PROJECT} PRIVATE "${RES_WINDOWS_RC_FILE}")
@@ -1211,11 +1230,6 @@ set(_c2_qt_defs
 target_compile_definitions(${VERSION_PROJECT} PUBLIC ${_c2_qt_defs})
 target_compile_definitions(${LIBRARY_PROJECT} PUBLIC ${_c2_qt_defs})
 
-if (USE_SYSTEM_QTKEYCHAIN)
-    target_compile_definitions(${LIBRARY_PROJECT} PUBLIC
-        CMAKE_BUILD
-        )
-endif ()
 if (WIN32)
     target_compile_definitions(${LIBRARY_PROJECT} PUBLIC
         USEWINSDK
@@ -1236,7 +1250,7 @@ if (APPLE AND BUILD_APP)
     set_target_properties(${EXECUTABLE_PROJECT} PROPERTIES MACOSX_BUNDLE TRUE)
     set_target_properties(${EXECUTABLE_PROJECT}
         PROPERTIES
-        MACOSX_BUNDLE_BUNDLE_NAME "Chatterino"
+        MACOSX_BUNDLE_BUNDLE_NAME "Chatterino Better Browser"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.chatterino"
         MACOSX_BUNDLE_LONG_VERSION_STRING "${PROJECT_VERSION}"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"

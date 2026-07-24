@@ -1,7 +1,7 @@
 {
-  "name": "adventurous-rutherford",
-  "version": "1.0.0",
-  "description": "![chatterinoLogo](https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png)",
+  "name": "chatterino-better-browser",
+  "version": "2.6.0",
+  "description": "Chatterino desktop client with native Twitch browser integration.",
   "main": "index.js",
   "directories": {
     "doc": "docs",
@@ -9,7 +9,9 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run test:extension",
+    "test:extension": "node scripts/validate-extension.mjs && node scripts/validate-release-contract.mjs",
+    "package:extension": "node scripts/package-extension.mjs"
   },
   "repository": {
     "type": "git",

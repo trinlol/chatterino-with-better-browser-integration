@@ -160,8 +160,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "Keepo"
                     },
                     "tooltip": "Keepo<br>Twitch Emote",
                     "trailingSpace": true,
@@ -179,8 +179,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "FFZEmote"
                     },
                     "tooltip": "FFZEmote Tooltip",
                     "trailingSpace": true,
@@ -196,8 +196,8 @@
                     },
                     "flags": "EmojiImage|EmojiText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "😭"
                     },
                     "tooltip": ":sob:<br/>Emoji",
                     "trailingSpace": true,

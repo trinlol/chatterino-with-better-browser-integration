@@ -8,6 +8,7 @@ set(test_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/Test.hpp
     ${CMAKE_CURRENT_LIST_DIR}/src/Test.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/ChannelChatters.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/ChannelEngagement.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/AccessGuard.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/NetworkCommon.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/NetworkRequest.cpp
@@ -37,6 +38,7 @@ set(test_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/XDGHelper.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/XDGDirectory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/Selection.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/TabHistory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/NotebookTab.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/SplitInput.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/LinkInfo.cpp
@@ -56,12 +58,14 @@ set(test_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/EventSubMessages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/WebSocketPool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/NativeMessaging.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/NativeMessagingProtocol.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/ImageUploader.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/TwitchChannel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/TwitchUserColor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/FunctionRef.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/InputHighlighter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/BalancedResolverResults.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/UtilSerializeList.cpp
 
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/Snapshot.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/Snapshot.hpp

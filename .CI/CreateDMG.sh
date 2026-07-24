@@ -2,8 +2,10 @@
 
 set -eo pipefail
 
-if [ ! -d chatterino.app ]; then
-    echo "ERROR: No 'chatterino.app' dir found in the build directory. Make sure you've run ./CI/MacDeploy.sh"
+APP_BUNDLE="Chatterino Better Browser.app"
+
+if [ ! -d "$APP_BUNDLE" ]; then
+    echo "ERROR: No '$APP_BUNDLE' dir found in the build directory. Make sure you've run ./.CI/MacDeploy.sh"
     exit 1
 fi
 
@@ -23,12 +25,12 @@ fi
 
 if [ -n "$MACOS_CODESIGN_CERTIFICATE" ]; then
     echo "Codesigning force deep inside the app"
-    codesign -s "$MACOS_CODESIGN_CERTIFICATE" --deep --force --options=runtime chatterino.app
+    codesign -s "$MACOS_CODESIGN_CERTIFICATE" --deep --force --options=runtime "$APP_BUNDLE"
     echo "Done!"
 fi
 
 echo "Running dmgbuild.."
-dmgbuild --settings ./../.CI/dmg-settings.py -D app=./chatterino.app Chatterino2 "$OUTPUT_DMG_PATH"
+dmgbuild --settings ./../.CI/dmg-settings.py -D app="./$APP_BUNDLE" "Chatterino Better Browser" "$OUTPUT_DMG_PATH"
 echo "Done!"
 
 if [ -n "$MACOS_CODESIGN_CERTIFICATE" ]; then

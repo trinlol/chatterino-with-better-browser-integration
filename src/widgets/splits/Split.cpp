@@ -35,12 +35,12 @@
 #include "widgets/OverlayWindow.hpp"
 #include "widgets/Scrollbar.hpp"
 #include "widgets/splits/DraggedSplit.hpp"
+#include "widgets/splits/PinnedMessageWidget.hpp"
+#include "widgets/splits/PredictionBannerWidget.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 #include "widgets/splits/SplitHeader.hpp"
 #include "widgets/splits/SplitInput.hpp"
 #include "widgets/splits/SplitOverlay.hpp"
-#include "widgets/splits/PinnedMessageWidget.hpp"
-#include "widgets/splits/PredictionBannerWidget.hpp"
 #include "widgets/Window.hpp"
 
 #include <QApplication>
@@ -91,7 +91,7 @@ Split::Split(QWidget *parent)
     , channel_(Channel::getEmpty())
     , vbox_(new QVBoxLayout(this))
     , header_(new SplitHeader(this))
-    , pinnedMessageWidget_(new PinnedMessageWidget(this))
+    , pinnedBanner_(new PinnedMessageWidget(this))
     , view_(new ChannelView(this, this, ChannelView::Context::None,
                             getSettings()->scrollbackSplitLimit))
     , predictionBannerWidget_(new PredictionBannerWidget(this))
@@ -107,7 +107,7 @@ Split::Split(QWidget *parent)
     this->vbox_->setContentsMargins(1, 1, 1, 1);
 
     this->vbox_->addWidget(this->header_);
-    this->vbox_->addWidget(this->pinnedMessageWidget_);
+    this->vbox_->addWidget(this->pinnedBanner_);
     this->vbox_->addWidget(this->view_, 1);
     this->vbox_->addWidget(this->predictionBannerWidget_);
     this->vbox_->addWidget(this->input_);
@@ -171,39 +171,19 @@ Split::Split(QWidget *parent)
             }
         });
 
-    // this connection can be ignored since the SplitInput is owned by this Split
+    // These connections can be ignored since the SplitInput is owned by this Split.
     std::ignore =
         this->input_->textChanged.connect([this](const QString &newText) {
-            if (getSettings()->showEmptyInput)
-            {
-                // We always show the input regardless of the text, so we can early out here
-                return;
-            }
-
-            if (newText.isEmpty())
-            {
-                this->input_->hide();
-            }
-            else if (this->input_->isHidden())
-            {
-                // Text updated and the input was previously hidden, show it
-                this->input_->show();
-            }
+            this->refreshInputState(newText);
         });
 
+    std::ignore = this->input_->historySearchStateChanged.connect([this] {
+        this->refreshInputState(this->input_->getInputText());
+    });
+
     getSettings()->showEmptyInput.connect(
-        [this](const bool &showEmptyInput) {
-            if (showEmptyInput)
-            {
-                this->input_->show();
-            }
-            else
-            {
-                if (this->input_->getInputText().isEmpty())
-                {
-                    this->input_->hide();
-                }
-            }
+        [this] {
+            this->refreshInputState(this->input_->getInputText());
         },
         this->signalHolder_);
 
@@ -752,6 +732,11 @@ SplitInput &Split::getInput()
     return *this->input_;
 }
 
+PinnedMessageWidget *Split::getPinnedBanner() const
+{
+    return this->pinnedBanner_;
+}
+
 void Split::updateInputPlaceholder()
 {
     if (!this->getChannel()->isTwitchChannel())
@@ -792,6 +777,29 @@ void Split::refreshModerationMode()
 {
     this->header_->updateIcons();
     this->view_->queueLayout();
+}
+
+void Split::refreshInputState(const QString &inputText)
+{
+    if (getSettings()->showEmptyInput)
+    {
+        // We always show the input regardless of the text, so we can early out here
+        if (this->input_->isHidden())
+        {
+            this->input_->show();
+        }
+        return;
+    }
+
+    if (inputText.isEmpty() && !this->input_->isInHistorySearch())
+    {
+        this->input_->hide();
+    }
+    else
+    {
+        // Text updated and the input was previously hidden, show it
+        this->input_->show();
+    }
 }
 
 void Split::openChannelInBrowserPlayer(ChannelPtr channel)
@@ -835,7 +843,6 @@ void Split::setChannel(IndirectChannel newChannel)
 {
     this->channel_ = newChannel;
 
-    this->pinnedMessageWidget_->setChannel(newChannel.get());
     this->predictionBannerWidget_->setChannel(newChannel.get());
     this->view_->setChannel(newChannel.get());
 
@@ -860,6 +867,17 @@ void Split::setChannel(IndirectChannel newChannel)
             tc->sendWaitUpdate, [this](const QString &text) {
                 this->getInput().setSendWaitStatus(text);
             });
+
+        this->channelSignalHolder_.managedConnect(
+            tc->sharedChatStatusChanged,
+            [this](const std::vector<HelixMinimalUser> &) {
+                this->header_->updateChannelText();
+            });
+        this->pinnedBanner_->setChannel(tc);
+    }
+    else
+    {
+        this->pinnedBanner_->setChannel(nullptr);
     }
 
     this->indirectChannelChangedConnection_ =
@@ -1276,6 +1294,11 @@ void Split::showSearch(bool singleChannel)
 void Split::reconnect()
 {
     this->getChannel()->reconnect();
+}
+
+void Split::togglePinnedBanner()
+{
+    this->pinnedBanner_->toggleUserPinned();
 }
 
 void Split::dragEnterEvent(QDragEnterEvent *event)

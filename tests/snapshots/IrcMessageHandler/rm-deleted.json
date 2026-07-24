@@ -86,8 +86,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "7TVEmote"
                     },
                     "tooltip": "7TVEmote Tooltip",
                     "trailingSpace": true,
@@ -105,8 +105,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "Kappa"
                     },
                     "tooltip": "Kappa<br>Twitch Emote",
                     "trailingSpace": true,
@@ -141,8 +141,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "7TVEmote"
                     },
                     "tooltip": "7TVEmote Tooltip",
                     "trailingSpace": true,
@@ -158,8 +158,8 @@
                     },
                     "flags": "EmojiImage|EmojiText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "❤️"
                     },
                     "tooltip": ":heart:<br/>Emoji",
                     "trailingSpace": true,

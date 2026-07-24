@@ -57,7 +57,8 @@ void ClassicEmoteStrategy::apply(const std::vector<EmoteItem> &items,
         }
     }
 
-    output.insert(output.end(), startsWithMatches.begin(), startsWithMatches.end());
+    output.insert(output.end(), startsWithMatches.begin(),
+                  startsWithMatches.end());
     output.insert(output.end(), containsMatches.begin(), containsMatches.end());
 
     // Second pass: if there is an exact match, put that emote first

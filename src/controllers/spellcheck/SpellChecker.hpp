@@ -42,14 +42,18 @@ public:
     bool check(const QString &word);
     std::vector<std::string> suggestions(const QString &word);
 
+    bool loadDictionary(const QString &path);
+
+    /// The path of the currently loaded dictionary (empty if none).
+    const QString &loadedDictionaryPath() const;
+
     /// Get a list of dictionaries from the Chatterino Dictionaries directory
-    /// and the system directories if supported.
-    ///
-    /// System-dictionary loading is currently only implemented on Linux.
+    /// and common system directories when available.
     std::vector<DictionaryInfo> getAvailableDictionaries() const;
 
 private:
     std::unique_ptr<SpellCheckerPrivate> private_;
+    QString loadedDictionaryPath_;
 };
 
 }  // namespace chatterino

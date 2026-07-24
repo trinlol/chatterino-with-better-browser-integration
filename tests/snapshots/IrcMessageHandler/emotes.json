@@ -104,8 +104,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "Kappa"
                     },
                     "tooltip": "Kappa<br>Twitch Emote",
                     "trailingSpace": true,
@@ -123,8 +123,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "Keepo"
                     },
                     "tooltip": "Keepo<br>Twitch Emote",
                     "trailingSpace": true,
@@ -142,8 +142,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "PogChamp"
                     },
                     "tooltip": "PogChamp<br>Twitch Emote",
                     "trailingSpace": true,

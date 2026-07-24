@@ -10,20 +10,14 @@
 #include "messages/layouts/MessageLayoutContext.hpp"
 #include "messages/MessageElement.hpp"
 #include "providers/twitch/TwitchEmotes.hpp"
+#include "singletons/Settings.hpp"
 #include "util/DebugCount.hpp"
 
 #include <QDebug>
 #include <QPainter>
 #include <QPainterPath>
-
-#include "singletons/Settings.hpp"
-#include "widgets/dialogs/EmotePopup.hpp"
-#include "widgets/helper/ChannelView.hpp"
-#include "common/Channel.hpp"
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QWidget>
+
 #include <cmath>
 #include <optional>
 
@@ -71,54 +65,16 @@ std::optional<EmotePtr> emoteFromLayoutElement(MessageLayoutElement *element)
 }
 
 void drawFavouriteStar(QPainter &painter, const QRectF &rect,
-                       MessageLayoutElement *element, QWidget *hostWidget)
+                       MessageLayoutElement *element, QWidget * /*hostWidget*/)
 {
-    if (hostWidget == nullptr)
-    {
-        return;
-    }
-
-    auto *channelView = dynamic_cast<ChannelView *>(hostWidget);
-    if (channelView == nullptr)
-    {
-        return;
-    }
-
-    auto *popup = dynamic_cast<EmotePopup *>(channelView->window());
-    if (popup == nullptr)
-    {
-        return;
-    }
-
     auto emote = emoteFromLayoutElement(element);
     if (!emote)
     {
         return;
     }
 
-    auto activeChannel = popup->getChannel();
-    if (!activeChannel)
-    {
-        return;
-    }
-
-    QString channelName = activeChannel->getName().toLower();
-    auto favsStr = getSettings()->favouriteEmotes.getValue();
-    QJsonDocument doc = QJsonDocument::fromJson(favsStr.toUtf8());
-    QJsonObject root = doc.object();
-    QJsonArray favsArr = root[channelName].toArray();
-
-    bool isFavourited = false;
-    for (const auto &val : favsArr)
-    {
-        if (val.toString() == (*emote)->name.string)
-        {
-            isFavourited = true;
-            break;
-        }
-    }
-
-    if (!isFavourited)
+    if (!getSettings()->favouriteEmotes.getValue().contains(
+            (*emote)->name.string))
     {
         return;
     }
@@ -128,7 +84,8 @@ void drawFavouriteStar(QPainter &painter, const QRectF &rect,
     painter.setRenderHint(QPainter::Antialiasing);
 
     double R = rect.height() * 0.18;
-    if (R < 4.0) R = 4.0;
+    if (R < 4.0)
+        R = 4.0;
     double r = R * 0.4;
     double cx = rect.right() - R - 1.0;
     double cy = rect.top() + R + 1.0;
@@ -162,8 +119,8 @@ void drawFavouriteStar(QPainter &painter, const QRectF &rect,
     }
     starPath.closeSubpath();
 
-    painter.setBrush(QColor(255, 215, 0)); // Gold
-    painter.setPen(QPen(QColor(218, 165, 32), 0.75)); // Darker gold outline
+    painter.setBrush(QColor(255, 215, 0));             // Gold
+    painter.setPen(QPen(QColor(218, 165, 32), 0.75));  // Darker gold outline
     painter.drawPath(starPath);
 
     painter.restore();

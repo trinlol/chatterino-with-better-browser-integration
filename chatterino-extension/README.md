@@ -14,15 +14,15 @@ One browser extension for Chrome and Edge — chat overlay, pinned messages, cha
 
 ## ✨ What it does
 
-| Feature | How |
-|---------|-----|
-| 💬 Chat overlay | Replaces Twitch chat with Chatterino on Windows |
-| 🪟 Window sync | Reports channel + geometry to the desktop app |
-| 📌 Pinned messages | Forwards moderator pins to Chatterino |
-| 🎲 Predictions & polls | Syncs live prediction UI to the toolbar |
-| 🪙 Channel points | Auto-claims bonus chests; keeps points UI working after chat wipe |
-| 🏅 Chat identity | Badge button in the toolbar; opens Chat Identity menu when native chat is hidden |
-| 🛡️ Anti-wipe | Restores hidden Twitch DOM after overlay replaces chat |
+| Feature                | How                                                                              |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| 💬 Chat overlay        | Replaces Twitch chat with Chatterino on Windows                                  |
+| 🪟 Window sync         | Reports channel + geometry to the desktop app                                    |
+| 📌 Pinned messages     | Forwards moderator pins to Chatterino                                            |
+| 🎲 Predictions & polls | Syncs live prediction UI to the toolbar                                          |
+| 🪙 Channel points      | Auto-claims bonus chests; keeps points UI working after chat wipe                |
+| 🏅 Chat identity       | Badge button in the toolbar; opens Chat Identity menu when native chat is hidden |
+| 🛡️ Anti-wipe           | Restores hidden Twitch DOM after overlay replaces chat                           |
 
 ## ⚙️ Popup settings
 
@@ -30,6 +30,8 @@ Click the extension icon:
 
 - **Replace Twitch chat** — toggle overlay (Windows only, page reload required)
 - **Channel points claimer** — auto-claim green chests
+- **Integration health** — native connection, active channel, chat attachment,
+  GraphQL freshness, and current poll/prediction state
 
 ## 🔌 Native messaging
 

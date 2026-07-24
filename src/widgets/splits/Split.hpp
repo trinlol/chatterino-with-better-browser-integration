@@ -56,6 +56,7 @@ public:
 
     ChannelView &getChannelView();
     SplitInput &getInput();
+    [[nodiscard]] PinnedMessageWidget *getPinnedBanner() const;
 
     IndirectChannel getIndirectChannel();
     ChannelPtr getChannel() const;
@@ -155,6 +156,8 @@ private:
      **/
     void refreshModerationMode();
 
+    void refreshInputState(const QString &inputText);
+
     IndirectChannel channel_;
 
     bool moderationMode_{};
@@ -165,7 +168,7 @@ private:
 
     QVBoxLayout *const vbox_;
     SplitHeader *const header_;
-    PinnedMessageWidget *const pinnedMessageWidget_;
+    PinnedMessageWidget *const pinnedBanner_;
     ChannelView *const view_;
     PredictionBannerWidget *const predictionBannerWidget_;
     SplitInput *const input_;
@@ -206,6 +209,7 @@ public Q_SLOTS:
     void openChatterList();
     void openSubPage();
     void reconnect();
+    void togglePinnedBanner();
 };
 
 }  // namespace chatterino

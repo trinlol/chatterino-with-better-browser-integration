@@ -5,7 +5,9 @@ on:
 jobs:
   publish:
     runs-on: windows-latest
-    if: ${{ startsWith(github.event.release.tag_name, 'v') }} && github.repository_owner == 'Chatterino'
+    # This workflow publishes the upstream Chatterino package identifier and
+    # must never run for Chatterino Better Browser releases.
+    if: ${{ startsWith(github.event.release.tag_name, 'v') && github.repository == 'Chatterino/chatterino2' }}
     steps:
       - uses: vedantmgoyal9/winget-releaser@main
         with:

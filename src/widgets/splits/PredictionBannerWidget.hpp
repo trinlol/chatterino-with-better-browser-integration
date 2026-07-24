@@ -5,6 +5,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QTimer>
 
 #include <memory>
 
@@ -13,10 +14,8 @@ namespace chatterino {
 class Channel;
 using ChannelPtr = std::shared_ptr<Channel>;
 
-/// Announcement-style banner shown directly above the chat input while a
-/// Twitch prediction is running in the channel. Driven by
-/// Channel::setPredictionState (fed from the browser extension via native
-/// messaging).
+/// Announcement-style banner shown directly above the chat input for the
+/// channel's active Twitch poll and prediction Activities.
 class PredictionBannerWidget : public BaseWidget
 {
     Q_OBJECT
@@ -39,6 +38,7 @@ private:
     QLabel *iconLabel_ = nullptr;
     QLabel *textLabel_ = nullptr;
     QPushButton *closeButton_ = nullptr;
+    QTimer refreshTimer_;
     pajlada::Signals::ScopedConnection channelConnection_;
 };
 

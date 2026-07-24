@@ -128,6 +128,16 @@ void InputHighlighter::setChannel(const std::shared_ptr<Channel> &channel)
     this->rehighlight();
 }
 
+void InputHighlighter::setCursorPosition(int pos)
+{
+    if (this->cursorPosition == pos)
+    {
+        return;
+    }
+    this->cursorPosition = pos;
+    this->rehighlight();
+}
+
 std::vector<QString> InputHighlighter::getSpellCheckedWords(const QString &text)
 {
     std::vector<QString> words;
@@ -181,6 +191,13 @@ void InputHighlighter::highlightBlock(const QString &text)
     }
     this->visitWords(
         text, [&](const QString &word, qsizetype start, qsizetype count) {
+            // Skip highlighting if the cursor is currently inside or at the end of this word
+            if (this->cursorPosition >= start &&
+                this->cursorPosition <= start + count)
+            {
+                return;
+            }
+
             if (!this->spellChecker.check(word))
             {
                 this->setFormat(static_cast<int>(start),

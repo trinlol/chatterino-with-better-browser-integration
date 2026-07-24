@@ -75,8 +75,8 @@
                     },
                     "flags": "ChannelPointReward",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "MyBitsEmote"
                     },
                     "tooltip": "MyBitsEmote<br>Twitch Emote",
                     "trailingSpace": true,

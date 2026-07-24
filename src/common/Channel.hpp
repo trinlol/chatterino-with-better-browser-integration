@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "common/ChannelEngagement.hpp"
 #include "common/enums/MessageContext.hpp"
 #include "controllers/completion/TabCompletionModel.hpp"
 #include "messages/LimitedQueue.hpp"
@@ -72,7 +73,7 @@ public:
     pajlada::Signals::NoArgSignal displayNameChanged;
     pajlada::Signals::NoArgSignal messagesCleared;
     pajlada::Signals::NoArgSignal pinnedMessageChanged;
-    pajlada::Signals::NoArgSignal predictionChanged;
+    pajlada::Signals::NoArgSignal engagementsChanged;
 
     Type getType() const;
     const QString &getName() const;
@@ -155,11 +156,11 @@ public:
     const QString &getPinnedMessageText() const;
     void dismissPinnedMessage();
 
-    /// Prediction announcement state shown above the chat input.
-    /// `status` is one of "started", "locked", "ended" or "" (no prediction).
-    void setPredictionState(const QString &text, const QString &status);
-    const QString &getPredictionText() const;
-    const QString &getPredictionStatus() const;
+    void setEngagement(EngagementKind kind, EngagementState state);
+    void clearEngagement(EngagementKind kind);
+    void clearEngagements();
+    const std::optional<EngagementState> &getEngagement(
+        EngagementKind kind) const;
 
 protected:
     virtual void onConnected();
@@ -174,8 +175,8 @@ private:
     Type type_;
     QString pinnedMessageText_;
     QString dismissedPinnedMessageText_;
-    QString predictionText_;
-    QString predictionStatus_;
+    std::optional<EngagementState> poll_;
+    std::optional<EngagementState> prediction_;
     bool anythingLogged_ = false;
 
     /// Recursion count for message signals.
@@ -215,3 +216,39 @@ private:
 };
 
 }  // namespace chatterino
+
+// NOLINTBEGIN(readability-identifier-naming)
+template <>
+constexpr magic_enum::customize::customize_t
+    magic_enum::customize::enum_name<chatterino::Channel::Type>(
+        chatterino::Channel::Type value) noexcept
+{
+    using Type = chatterino::Channel::Type;
+
+    // These names are used for encoding channels in the window layout settings.
+    // They need to be stable across Chatterino versions.
+    switch (value)
+    {
+        case Type::Twitch:
+            return "twitch";
+        case Type::TwitchAutomod:
+            return "automod";
+        case Type::TwitchMentions:
+            return "mentions";
+        case Type::TwitchWatching:
+            return "watching";
+        case Type::TwitchWhispers:
+            return "whispers";
+        case Type::TwitchLive:
+            return "live";
+        case Type::Misc:
+            return "misc";
+
+        case Type::None:
+        case Type::Direct:
+        case Type::TwitchEnd:
+            return default_tag;  // FIXME: Remove these (#5703)
+    }
+    return default_tag;
+}
+// NOLINTEND(readability-identifier-naming)

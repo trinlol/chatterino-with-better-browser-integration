@@ -5,7 +5,6 @@
 #include "widgets/dialogs/UpdateDialog.hpp"
 
 #include "Application.hpp"
-#include "common/Version.hpp"
 #include "singletons/Updates.hpp"
 #include "util/LayoutCreator.hpp"
 #include "widgets/Label.hpp"
@@ -31,16 +30,8 @@ UpdateDialog::UpdateDialog()
 
     auto buttons = layout.emplace<QDialogButtonBox>();
 
-    const auto *installText = [] {
-        if (Version::instance().isNightly())
-        {
-            return "Yes";
-        }
-
-        return "Install";
-    }();
     auto *install =
-        buttons->addButton(installText, QDialogButtonBox::AcceptRole);
+        buttons->addButton("Open release", QDialogButtonBox::AcceptRole);
     this->ui_.installButton = install;
     auto *dismiss = buttons->addButton("Dismiss", QDialogButtonBox::RejectRole);
 
@@ -99,9 +90,10 @@ void UpdateDialog::updateStatusChanged(Updates::Status status)
         break;
 
         case Updates::MissingPortableUpdater: {
-            this->ui_.label->setText("The portable updater (expected in " %
-                                     Updates::portableUpdaterPath() %
-                                     ") was not found.");
+            this->ui_.label->setText(
+                "The portable updater (expected in " %
+                Updates::portableUpdaterPath(getApp()->getPaths()) %
+                ") was not found.");
         }
         break;
 

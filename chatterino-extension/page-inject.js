@@ -1,5 +1,5 @@
-(function() {
-  'use strict';
+(function () {
+  "use strict";
 
   // Override removeChild to prevent React exceptions when nodes are reparented
   const originalRemoveChild = Node.prototype.removeChild;
@@ -13,8 +13,16 @@
   // Override insertBefore to prevent React exceptions when nodes are reparented
   const originalInsertBefore = Node.prototype.insertBefore;
   Node.prototype.insertBefore = function (newNode, referenceNode) {
-    if (referenceNode && referenceNode.parentNode && referenceNode.parentNode !== this) {
-      return originalInsertBefore.call(referenceNode.parentNode, newNode, referenceNode);
+    if (
+      referenceNode &&
+      referenceNode.parentNode &&
+      referenceNode.parentNode !== this
+    ) {
+      return originalInsertBefore.call(
+        referenceNode.parentNode,
+        newNode,
+        referenceNode
+      );
     }
     return originalInsertBefore.apply(this, arguments);
   };

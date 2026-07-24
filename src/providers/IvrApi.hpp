@@ -6,9 +6,9 @@
 
 #include "common/network/NetworkRequest.hpp"
 
+#include <QDate>
 #include <QJsonArray>
 #include <QJsonObject>
-#include <QDate>
 
 #include <functional>
 #include <memory>
@@ -88,10 +88,10 @@ public:
                              IvrFailureCallback failureCallback);
 
     // https://logs.zonian.dev/channel/{channel}/user/{user}?json=true
-    void loadUserLogsForDay(QString channelName, QString userName, QDate day,
-                            int limit,
-                            ResultCallback<std::vector<MessagePtr>> successCallback,
-                            IvrFailureCallback failureCallback);
+    void loadUserLogsForDay(
+        QString channelName, QString userName, QDate day, int limit,
+        ResultCallback<std::vector<MessagePtr>> successCallback,
+        IvrFailureCallback failureCallback);
 
     static void initialize();
 

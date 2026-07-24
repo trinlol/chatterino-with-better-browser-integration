@@ -2,9 +2,23 @@
 
 ## Chatterino Better Browser
 
+### v1.0.6 (2026-07-09)
+
+#### Added
+
+- Inline spell-check suggestions with keyboard navigation in the chat input
+- Automatic spell-check dictionary discovery from LibreOffice and common Hunspell locations on Windows and macOS
+- Instant dictionary switching from Settings or the chat-input context menu
+
+#### Fixed
+
+- Browser overlay now attaches reliably when a Twitch channel finishes loading in a background tab
+- Spell-check suggestion popup stays within the visible screen bounds
+
 ### v1.0.5 (2026-06-15)
 
 #### Fixed
+
 - User card badges moved under the profile avatar for a cleaner header layout
 - User card message history shows `dd/MM/yy` date prefixes for non-today messages
 - Older-day history loads anchor to the last message of that day
@@ -12,17 +26,20 @@
 - Windows taskbar icon now matches the pinned shortcut when the app is running
 
 #### Also
+
 - Native Twitch polls appear in the extension toolbar ahead of channel points
 
 ### v1.0.4 (2026-06-14)
 
 #### Added
+
 - User card badges shown inline above message history (Twitch, FFZ, BTTV, 7TV, Chatterino)
 - User card message history loaded from logs.zonian.dev by day (today first)
 - "Load messages from {date}" button to paginate older days, auto-skipping days with no messages
 - Live session messages merged into user card history (deduped by message ID)
 
 #### Fixed
+
 - Pinned announcement banner now sizes to its content instead of leaving a large empty area
 - Pinned announcement links are clickable; URLs no longer break across line wraps
 - Pinned announcement text spacing after sentence punctuation
@@ -33,6 +50,7 @@
 ### v1.0.3 (2026-06-12)
 
 #### Fixed
+
 - Pinned announcements preserve line breaks and paragraph spacing
 - Missing spaces after sentence punctuation restored (e.g. `Hello.World` → `Hello. World`)
 - Channel points reward menu no longer opens randomly during auto-claim

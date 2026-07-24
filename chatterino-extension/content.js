@@ -1,22 +1,40 @@
 (function () {
-  'use strict';
+  "use strict";
 
   const BANNER_SELECTORS = [
     '[data-test-selector="community-prediction-banner"]',
-    '.prediction-banner',
-    '.gamba-prediction-status-banner'
+    ".prediction-banner",
+    ".gamba-prediction-status-banner",
   ];
 
-  const POLL_BANNER_SELECTOR = '[data-test-selector="community-poll-banner"]';
+  const POLL_BANNER_SELECTORS = [
+    '[data-test-selector="community-poll-banner"]',
+    '[data-a-target="community-poll-banner"]',
+    '[data-test-selector*="poll-banner"]',
+    ".community-poll-banner",
+  ];
+
+  const VOTING_BANNER_SELECTOR = [
+    ...BANNER_SELECTORS,
+    ...POLL_BANNER_SELECTORS,
+  ].join(",");
+  const VOTING_CONTROL_SELECTOR = [
+    "button",
+    "input",
+    "select",
+    '[role="button"]',
+    '[role="radio"]',
+    '[role="option"]',
+  ].join(",");
 
   const PINNED_SELECTORS = [
     '[data-a-target="chat-pinned-message"]',
-    '.pinned-chat__highlight-card',
-    '.pinned-chat__container',
-    '.pinned-chat-list-item',
-    '.community-highlight-stack__card',
-    '.community-highlight-stack',
-    '.community-highlight'
+    ".pinned-chat__highlight-card",
+    ".pinned-chat__container",
+    ".pinned-chat-list-item",
+    ".community-highlight-stack__card",
+    ".community-highlight-stack",
+    ".community-highlight",
   ];
 
   // Twitch community highlights include gift subs/resubs — those already arrive
@@ -37,7 +55,7 @@
     /\bgift\s+sub\b/i,
     /\bprime\s+sub\b/i,
     /\bcommunity\s+gift\b/i,
-    /\bsub\s+mystery\s+gift\b/i
+    /\bsub\s+mystery\s+gift\b/i,
   ];
 
   const DOM_FAIL_THRESHOLD_MS = 2000;
@@ -47,33 +65,37 @@
     '[data-test-selector="community-points-summary"]',
     '[data-a-target="community-points-summary"]',
     '[class*="community-points-summary"]',
-    'button[aria-label*="Channel Points" i]'
+    'button[aria-label*="Channel Points" i]',
   ];
 
   const BADGE_SELECTORS = [
-    '.chat-input__badge-carousel',
+    ".chat-input__badge-carousel",
     '[class*="chat-input"] [data-a-target="chat-badge-carousel"]',
-    '[data-a-target="chat-badge-carousel-badge-icon"]'
+    '[data-a-target="chat-badge-carousel-badge-icon"]',
   ];
 
   const CLAIM_BONUS_SELECTORS = [
     'button[aria-label="Claim Bonus"]',
-    'button[aria-label*="Claim Bonus" i]'
+    'button[aria-label*="Claim Bonus" i]',
   ];
 
   let autoClaimEnabled = true;
-  let lastPredictionFingerprint = '';
-  let lastPredictionTitle = '';
+  let lastPredictionTitle = "";
   let isMinimized = false;
-  let lastPinFingerprint = '';
+  let lastPinFingerprint = "";
   let pollIntervalId = null;
   let syncIntervalId = null;
-  let currentChannel = '';
+  let currentChannel = "";
   let gqlState = null;
-  let companionActive = document.documentElement.classList.contains('chatterino-companion-active');
+  const activityStore = new window.ChatterinoActivity.ActivityStore();
+  let companionActive = document.documentElement.classList.contains(
+    "chatterino-companion-active"
+  );
   let domPointsLastSeen = 0;
   let domPredictionLastSeen = 0;
   let activeBanner = null;
+  let activePredictionSource = null;
+  let activePollSource = null;
   let syncScheduled = false;
   let syncPending = false;
   let syncTimer = null;
@@ -89,18 +111,21 @@
     '[data-test-selector="chat-input"]',
     'div[data-a-target="chat-input"] [contenteditable="true"]',
     '[contenteditable="true"][data-slate-editor="true"]',
-    'textarea[placeholder*="chat" i]'
+    'textarea[placeholder*="chat" i]',
   ];
 
   const NATIVE_CHAT_SEND_SELECTORS = [
     '[data-a-target="chat-send-button"]',
     'button[aria-label="Send Message"]',
-    'button[aria-label*="Send" i]'
+    'button[aria-label*="Send" i]',
   ];
 
   function setRewardPendingUi(active) {
     rewardPendingActive = active;
-    document.documentElement.classList.toggle('chatterino-reward-pending', active);
+    document.documentElement.classList.toggle(
+      "chatterino-reward-pending",
+      active
+    );
     if (active) {
       unrestoreNativeChatInput();
     }
@@ -114,7 +139,7 @@
       }
       let node = input;
       while (node && node !== document.documentElement) {
-        node.classList.remove('chatterino-cc-restored');
+        node.classList.remove("chatterino-cc-restored");
         node = node.parentElement;
       }
     }
@@ -148,24 +173,37 @@
     if (!input) {
       return false;
     }
-    if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {
+    if (
+      input instanceof HTMLTextAreaElement ||
+      input instanceof HTMLInputElement
+    ) {
       const proto =
-        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value') ||
-        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+        Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype,
+          "value"
+        ) ||
+        Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "value"
+        );
       if (proto?.set) {
         proto.set.call(input, text);
       } else {
         input.value = text;
       }
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
     }
     if (input.isContentEditable) {
       input.focus();
       input.textContent = text;
       input.dispatchEvent(
-        new InputEvent('input', { bubbles: true, data: text, inputType: 'insertText' })
+        new InputEvent("input", {
+          bubbles: true,
+          data: text,
+          inputType: "insertText",
+        })
       );
       return true;
     }
@@ -173,18 +211,18 @@
   }
 
   function sendNativeChatMessage(message) {
-    const text = String(message || '').trim();
+    const text = String(message || "").trim();
     if (!text) {
-      return { ok: false, error: 'empty message' };
+      return { ok: false, error: "empty message" };
     }
     unrestoreNativeChatInput();
     const input = findNativeChatInput();
     if (!input) {
-      return { ok: false, error: 'chat input not found' };
+      return { ok: false, error: "chat input not found" };
     }
     input.focus();
     if (!setNativeInputValue(input, text)) {
-      return { ok: false, error: 'failed to set input value' };
+      return { ok: false, error: "failed to set input value" };
     }
     const sendBtn = findNativeChatSendButton();
     if (sendBtn) {
@@ -192,10 +230,20 @@
       return { ok: true };
     }
     input.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+        cancelable: true,
+      })
     );
     input.dispatchEvent(
-      new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })
+      new KeyboardEvent("keypress", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+        cancelable: true,
+      })
     );
     return { ok: true };
   }
@@ -207,11 +255,11 @@
     }
     setRewardPendingUi(true);
     chrome.runtime.sendMessage({
-      action: 'rewardPending',
+      action: "rewardPending",
       channel: channelName,
-      rewardId: detail?.rewardId || '',
-      title: detail?.title || '',
-      prompt: detail?.prompt || ''
+      rewardId: detail?.rewardId || "",
+      title: detail?.title || "",
+      prompt: detail?.prompt || "",
     });
   }
 
@@ -222,9 +270,9 @@
       return;
     }
     chrome.runtime.sendMessage({
-      action: 'rewardClear',
+      action: "rewardClear",
       channel: channelName,
-      reason: reason || ''
+      reason: reason || "",
     });
   }
 
@@ -238,7 +286,10 @@
       if (!syncPending) {
         return;
       }
-      const delay = Math.max(0, MIN_SYNC_INTERVAL_MS - (Date.now() - lastSyncAt));
+      const delay = Math.max(
+        0,
+        MIN_SYNC_INTERVAL_MS - (Date.now() - lastSyncAt)
+      );
       if (delay > 0) {
         syncTimer = setTimeout(flush, delay);
         return;
@@ -262,9 +313,9 @@
       'button[aria-label*="Se désabonner" i]',
       '[data-a-target="subscribe-button"]',
       'button[aria-label*="Subscribe" i]',
-      "button[aria-label*=\"S'abonner\" i]",
+      'button[aria-label*="S\'abonner" i]',
       '[data-a-target="stream-info-card"] button',
-      '.stream-info button'
+      ".stream-info button",
     ];
     for (const selector of selectors) {
       const btn = document.querySelector(selector);
@@ -282,7 +333,7 @@
   function findPointsSummary() {
     for (const selector of POINTS_SELECTORS) {
       for (const el of document.querySelectorAll(selector)) {
-        if (el.closest('#chatterino-toolbar-portal')) {
+        if (el.closest("#chatterino-toolbar-portal")) {
           continue;
         }
         return (
@@ -298,13 +349,15 @@
   function findNativePointsButton() {
     const summary = findPointsSummary();
     if (summary) {
-      const btn = summary.querySelector('button') || summary.closest('button');
+      const btn = summary.querySelector("button") || summary.closest("button");
       if (btn) {
         return btn;
       }
     }
-    for (const btn of document.querySelectorAll('button[aria-label*="Channel Points" i]')) {
-      if (!btn.closest('#chatterino-toolbar-portal')) {
+    for (const btn of document.querySelectorAll(
+      'button[aria-label*="Channel Points" i]'
+    )) {
+      if (!btn.closest("#chatterino-toolbar-portal")) {
         return btn;
       }
     }
@@ -342,17 +395,17 @@
   function ensurePointsReplica() {
     const summary = findPointsSummary();
     if (!summary) {
-      return document.getElementById('chatterino-points-replica');
+      return document.getElementById("chatterino-points-replica");
     }
 
-    let replica = document.getElementById('chatterino-points-replica');
+    let replica = document.getElementById("chatterino-points-replica");
     if (!replica) {
-      replica = document.createElement('div');
-      replica.id = 'chatterino-points-replica';
+      replica = document.createElement("div");
+      replica.id = "chatterino-points-replica";
       // Forward real user clicks to the native (hidden) button so Twitch's
       // own React handler opens the reward center.
       replica.addEventListener(
-        'click',
+        "click",
         (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -367,29 +420,36 @@
     const sourceHtml = summary.outerHTML;
     if (replica.__ccSourceHtml !== sourceHtml) {
       replica.__ccSourceHtml = sourceHtml;
-      replica.className = summary.parentElement?.className || '';
+      replica.className = summary.parentElement?.className || "";
       replica.innerHTML = sourceHtml;
-      replica.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
-      replica.querySelectorAll('button').forEach((btn) => {
-        btn.setAttribute('tabindex', '-1');
+      replica
+        .querySelectorAll("[id]")
+        .forEach((el) => el.removeAttribute("id"));
+      replica.querySelectorAll("button").forEach((btn) => {
+        btn.setAttribute("tabindex", "-1");
       });
       // Strip transient "+N" point-gain animations so they don't freeze
       // inside the clone.
-      replica.querySelectorAll('span, div').forEach((el) => {
-        if (/^\+[\d,.]+[KMB]?$/i.test(el.textContent.trim()) && !el.querySelector('button')) {
+      replica.querySelectorAll("span, div").forEach((el) => {
+        if (
+          /^\+[\d,.]+[KMB]?$/i.test(el.textContent.trim()) &&
+          !el.querySelector("button")
+        ) {
           el.remove();
         }
       });
     }
 
     mountInSlot(replica, 3);
-    document.documentElement.classList.add('chatterino-points-replica-active');
+    document.documentElement.classList.add("chatterino-points-replica-active");
     return replica;
   }
 
   function removePointsReplica() {
-    document.getElementById('chatterino-points-replica')?.remove();
-    document.documentElement.classList.remove('chatterino-points-replica-active');
+    document.getElementById("chatterino-points-replica")?.remove();
+    document.documentElement.classList.remove(
+      "chatterino-points-replica-active"
+    );
   }
 
   // Chat badge carousel — same replica pattern as channel points. The native
@@ -397,9 +457,13 @@
   // clicks so Twitch opens the Chat Identity popover.
   function findChatInputRoot() {
     return (
-      document.querySelector('[data-a-target="chat-input"]')?.closest('[class*="chat-input"]') ||
-      document.querySelector('[class*="chat-input__textarea"]')?.closest('[class*="chat-input"]') ||
-      document.querySelector('.chat-input') ||
+      document
+        .querySelector('[data-a-target="chat-input"]')
+        ?.closest('[class*="chat-input"]') ||
+      document
+        .querySelector('[class*="chat-input__textarea"]')
+        ?.closest('[class*="chat-input"]') ||
+      document.querySelector(".chat-input") ||
       document.querySelector('[class*="chat-input"]')
     );
   }
@@ -408,11 +472,11 @@
     const searchRoot = findChatInputRoot() || document;
     for (const selector of BADGE_SELECTORS) {
       for (const el of searchRoot.querySelectorAll(selector)) {
-        if (el.closest('#chatterino-toolbar-portal')) {
+        if (el.closest("#chatterino-toolbar-portal")) {
           continue;
         }
         return (
-          el.closest('.chat-input__badge-carousel') ||
+          el.closest(".chat-input__badge-carousel") ||
           el.closest('[data-a-target="chat-badge-carousel"]') ||
           el
         );
@@ -427,16 +491,18 @@
       return null;
     }
     const btn =
-      carousel.querySelector('[data-a-target="chat-badge-carousel-badge-icon"]') ||
+      carousel.querySelector(
+        '[data-a-target="chat-badge-carousel-badge-icon"]'
+      ) ||
       carousel.querySelector('button[aria-label="ChatBadgeCarousel"]') ||
-      carousel.querySelector('button');
-    if (btn && !btn.closest('#chatterino-toolbar-portal')) {
+      carousel.querySelector("button");
+    if (btn && !btn.closest("#chatterino-toolbar-portal")) {
       return btn;
     }
     return null;
   }
 
-  const BADGE_REPLICA_VERSION = '3';
+  const BADGE_REPLICA_VERSION = "3";
 
   const BADGE_REPLICA_MARKUP = `
 <button type="button" class="chatterino-badge-replica-btn" aria-hidden="true" tabindex="-1">
@@ -454,12 +520,12 @@
   }
 
   function buildBadgeReplicaShell() {
-    const replica = document.createElement('div');
-    replica.id = 'chatterino-badge-replica';
-    replica.setAttribute('role', 'button');
-    replica.setAttribute('tabindex', '0');
-    replica.setAttribute('aria-label', 'Chat Identity');
-    replica.setAttribute('title', 'Chat Identity');
+    const replica = document.createElement("div");
+    replica.id = "chatterino-badge-replica";
+    replica.setAttribute("role", "button");
+    replica.setAttribute("tabindex", "0");
+    replica.setAttribute("aria-label", "Chat Identity");
+    replica.setAttribute("title", "Chat Identity");
     applyBadgeReplicaMarkup(replica);
 
     const handleActivate = (e) => {
@@ -468,9 +534,9 @@
       handleBadgeReplicaClick(replica);
     };
 
-    replica.addEventListener('click', handleActivate, true);
-    replica.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+    replica.addEventListener("click", handleActivate, true);
+    replica.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
         handleActivate(e);
       }
     });
@@ -481,9 +547,11 @@
 
   function findNativeChatIdentityDialog() {
     return (
-      document.querySelector('div[role="dialog"][aria-label="Chat Identity"]') ||
+      document.querySelector(
+        'div[role="dialog"][aria-label="Chat Identity"]'
+      ) ||
       document.querySelector('div[role="dialog"]:has(.chat-identity-menu)') ||
-      document.querySelector('.chat-identity-menu')?.closest('[role="dialog"]')
+      document.querySelector(".chat-identity-menu")?.closest('[role="dialog"]')
     );
   }
 
@@ -491,32 +559,32 @@
     const scrollSelectors = [
       '[class*="scrollable"]',
       '[class*="Scrollable"]',
-      '.chat-identity-menu',
-      '.chat-identity-menu__content',
-      '.simplebar-content-wrapper',
-      '.simplebar-scrollable-node',
-      '[data-simplebar-scrollable]'
+      ".chat-identity-menu",
+      ".chat-identity-menu__content",
+      ".simplebar-content-wrapper",
+      ".simplebar-scrollable-node",
+      "[data-simplebar-scrollable]",
     ];
     for (const selector of scrollSelectors) {
       popover.querySelectorAll(selector).forEach((el) => {
-        el.style.setProperty('pointer-events', 'auto', 'important');
-        el.style.setProperty('visibility', 'visible', 'important');
-        el.style.setProperty('touch-action', 'pan-y', 'important');
+        el.style.setProperty("pointer-events", "auto", "important");
+        el.style.setProperty("visibility", "visible", "important");
+        el.style.setProperty("touch-action", "pan-y", "important");
         const overflowY = getComputedStyle(el).overflowY;
-        if (overflowY === 'hidden' || overflowY === 'clip') {
-          el.style.setProperty('overflow-y', 'auto', 'important');
+        if (overflowY === "hidden" || overflowY === "clip") {
+          el.style.setProperty("overflow-y", "auto", "important");
         }
       });
     }
   }
 
   function markChatIdentityDialog(popover) {
-    popover.classList.add('chatterino-native-chat-identity-dialog');
+    popover.classList.add("chatterino-native-chat-identity-dialog");
     const settingsRoot =
-      popover.querySelector('.chat-settings__popover') ||
-      popover.closest('.chat-settings__popover');
+      popover.querySelector(".chat-settings__popover") ||
+      popover.closest(".chat-settings__popover");
     if (settingsRoot && settingsRoot !== popover) {
-      settingsRoot.classList.add('chatterino-native-chat-identity-dialog');
+      settingsRoot.classList.add("chatterino-native-chat-identity-dialog");
     }
     ensureChatIdentityDialogScrollable(popover);
     if (settingsRoot && settingsRoot !== popover) {
@@ -528,10 +596,10 @@
     if (!popover) {
       return;
     }
-    popover.classList.remove('chatterino-native-chat-identity-dialog');
+    popover.classList.remove("chatterino-native-chat-identity-dialog");
     popover
-      .querySelector('.chat-settings__popover')
-      ?.classList.remove('chatterino-native-chat-identity-dialog');
+      .querySelector(".chat-settings__popover")
+      ?.classList.remove("chatterino-native-chat-identity-dialog");
   }
 
   function positionNativeChatIdentityDialog(anchorEl) {
@@ -541,7 +609,7 @@
     }
 
     markChatIdentityDialog(popover);
-    popover.style.setProperty('z-index', '2147483647', 'important');
+    popover.style.setProperty("z-index", "2147483647", "important");
 
     const anchorRect = anchorEl.getBoundingClientRect();
     const popRect = popover.getBoundingClientRect();
@@ -561,13 +629,20 @@
     if (desiredTop + popRect.height > window.innerHeight - 8) {
       desiredTop = anchorRect.top - popRect.height - 8;
     }
-    desiredTop = Math.max(8, Math.min(desiredTop, window.innerHeight - popRect.height - 8));
+    desiredTop = Math.max(
+      8,
+      Math.min(desiredTop, window.innerHeight - popRect.height - 8)
+    );
 
     const dx = Math.round(desiredLeft - baseLeft);
     const dy = Math.round(desiredTop - baseTop);
     if (dx !== prev.x || dy !== prev.y) {
       popover.__ccTranslate = { x: dx, y: dy };
-      popover.style.setProperty('transform', `translate(${dx}px, ${dy}px)`, 'important');
+      popover.style.setProperty(
+        "transform",
+        `translate(${dx}px, ${dy}px)`,
+        "important"
+      );
     }
     return true;
   }
@@ -615,7 +690,7 @@
 
   function ensureBadgeReplica() {
     const nativeBtn = findNativeChatBadgeButton();
-    let replica = document.getElementById('chatterino-badge-replica');
+    let replica = document.getElementById("chatterino-badge-replica");
 
     if (!nativeBtn && !replica) {
       return null;
@@ -628,13 +703,15 @@
     }
 
     mountInSlot(replica, 2);
-    document.documentElement.classList.add('chatterino-badge-replica-active');
+    document.documentElement.classList.add("chatterino-badge-replica-active");
     return replica;
   }
 
   function removeBadgeReplica() {
-    document.getElementById('chatterino-badge-replica')?.remove();
-    document.documentElement.classList.remove('chatterino-badge-replica-active');
+    document.getElementById("chatterino-badge-replica")?.remove();
+    document.documentElement.classList.remove(
+      "chatterino-badge-replica-active"
+    );
     stopChatIdentityDialogWatcher();
     unmarkChatIdentityDialog(findNativeChatIdentityDialog());
   }
@@ -644,9 +721,9 @@
   // from the GQL stream instead. The points balance is the last numeric text
   // node in the cloned markup (the first is the bits balance).
   function updateReplicaBalanceFromGql() {
-    const replica = document.getElementById('chatterino-points-replica');
+    const replica = document.getElementById("chatterino-points-replica");
     const balance = gqlState?.channelPoints?.balance;
-    if (!replica || balance == null || balance === '') {
+    if (!replica || balance == null || balance === "") {
       return;
     }
     const walker = document.createTreeWalker(replica, NodeFilter.SHOW_TEXT);
@@ -673,11 +750,21 @@
 
   function findNativeRewardDialog() {
     return (
-      document.querySelector('div[role="dialog"]:has(.reward-center__content)') ||
-      document.querySelector('div[role="dialog"][aria-labelledby="channel-points-reward-center-header"]') ||
-      document.querySelector('div[role="dialog"]:has([data-test-selector="reward-center"])') ||
-      document.querySelector('.ReactModal__Content:has([data-test-selector="reward-center"])') ||
-      document.querySelector('div.ReactModal__Content:has(.reward-center__content)')
+      document.querySelector(
+        'div[role="dialog"]:has(.reward-center__content)'
+      ) ||
+      document.querySelector(
+        'div[role="dialog"][aria-labelledby="channel-points-reward-center-header"]'
+      ) ||
+      document.querySelector(
+        'div[role="dialog"]:has([data-test-selector="reward-center"])'
+      ) ||
+      document.querySelector(
+        '.ReactModal__Content:has([data-test-selector="reward-center"])'
+      ) ||
+      document.querySelector(
+        "div.ReactModal__Content:has(.reward-center__content)"
+      )
     );
   }
 
@@ -685,19 +772,19 @@
     const scrollSelectors = [
       '[class*="scrollable"]',
       '[class*="Scrollable"]',
-      '.reward-center__content',
-      '.simplebar-content-wrapper',
-      '.simplebar-scrollable-node',
-      '[data-simplebar-scrollable]'
+      ".reward-center__content",
+      ".simplebar-content-wrapper",
+      ".simplebar-scrollable-node",
+      "[data-simplebar-scrollable]",
     ];
     for (const selector of scrollSelectors) {
       popover.querySelectorAll(selector).forEach((el) => {
-        el.style.setProperty('pointer-events', 'auto', 'important');
-        el.style.setProperty('visibility', 'visible', 'important');
-        el.style.setProperty('touch-action', 'pan-y', 'important');
+        el.style.setProperty("pointer-events", "auto", "important");
+        el.style.setProperty("visibility", "visible", "important");
+        el.style.setProperty("touch-action", "pan-y", "important");
         const overflowY = getComputedStyle(el).overflowY;
-        if (overflowY === 'hidden' || overflowY === 'clip') {
-          el.style.setProperty('overflow-y', 'auto', 'important');
+        if (overflowY === "hidden" || overflowY === "clip") {
+          el.style.setProperty("overflow-y", "auto", "important");
         }
       });
     }
@@ -709,8 +796,8 @@
       return false;
     }
 
-    popover.classList.add('chatterino-native-reward-dialog');
-    popover.style.setProperty('z-index', '2147483647', 'important');
+    popover.classList.add("chatterino-native-reward-dialog");
+    popover.style.setProperty("z-index", "2147483647", "important");
     ensureRewardDialogScrollable(popover);
 
     // The dialog lives inside ancestors with CSS transforms, so
@@ -738,13 +825,20 @@
     if (desiredTop + popRect.height > window.innerHeight - 8) {
       desiredTop = anchorRect.top - popRect.height - 8;
     }
-    desiredTop = Math.max(8, Math.min(desiredTop, window.innerHeight - popRect.height - 8));
+    desiredTop = Math.max(
+      8,
+      Math.min(desiredTop, window.innerHeight - popRect.height - 8)
+    );
 
     const dx = Math.round(desiredLeft - baseLeft);
     const dy = Math.round(desiredTop - baseTop);
     if (dx !== prev.x || dy !== prev.y) {
       popover.__ccTranslate = { x: dx, y: dy };
-      popover.style.setProperty('transform', `translate(${dx}px, ${dy}px)`, 'important');
+      popover.style.setProperty(
+        "transform",
+        `translate(${dx}px, ${dy}px)`,
+        "important"
+      );
     }
     return true;
   }
@@ -762,7 +856,7 @@
       return false;
     }
     stopRewardDialogWatcher();
-    dialog.classList.remove('chatterino-native-reward-dialog');
+    dialog.classList.remove("chatterino-native-reward-dialog");
     const closeBtn =
       dialog.querySelector('button[aria-label="Close"]') ||
       dialog.querySelector('button[aria-label="Back"]') ||
@@ -773,7 +867,11 @@
       return true;
     }
     document.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })
+      new KeyboardEvent("keydown", {
+        key: "Escape",
+        code: "Escape",
+        bubbles: true,
+      })
     );
     return true;
   }
@@ -815,6 +913,7 @@
 
   function resetChannelScopedUi() {
     gqlState = null;
+    activityStore.applyGraphql(null);
     intentionalRewardDialogOpen = false;
     lastSuccessfulClaimAt = 0;
     stopClaimBootstrap();
@@ -823,11 +922,13 @@
     stopChatIdentityDialogWatcher();
     removeBadgeReplica();
     removePointsReplica();
-    document.getElementById('chatterino-points-fallback')?.remove();
-    findNativeRewardDialog()?.classList.remove('chatterino-native-reward-dialog');
+    document.getElementById("chatterino-points-fallback")?.remove();
+    findNativeRewardDialog()?.classList.remove(
+      "chatterino-native-reward-dialog"
+    );
     unmarkChatIdentityDialog(findNativeChatIdentityDialog());
     if (rewardPendingActive) {
-      forwardRewardClear('channel-reset');
+      forwardRewardClear("channel-reset");
     }
   }
 
@@ -848,50 +949,76 @@
   }
 
   function isChatShellWiped() {
-    const shell = document.querySelector('.chat-shell');
-    const text = shell?.children[0]?.innerText || '';
+    const shell = document.querySelector(".chat-shell");
+    const text = shell?.children[0]?.innerText || "";
     return (
-      text.includes('Chatterino should show here') ||
-      text.includes('Connection to the Chatterino extension lost') ||
-      text.includes('Chatterino also needs to be running')
+      text.includes("Chatterino should show here") ||
+      text.includes("Connection to the Chatterino extension lost") ||
+      text.includes("Chatterino also needs to be running")
     );
   }
 
   function syncGqlFromDomAttributes() {
     const root = document.documentElement;
-    const balance = root.getAttribute('data-cc-gql-balance');
-    const claim = root.getAttribute('data-cc-gql-claim');
-    const claimId = root.getAttribute('data-cc-gql-claim-id');
-    const predRaw = root.getAttribute('data-cc-gql-prediction');
-    const pollRaw = root.getAttribute('data-cc-gql-poll');
-    const rewardsRaw = root.getAttribute('data-cc-gql-rewards');
+    const balance = root.getAttribute("data-cc-gql-balance");
+    const claim = root.getAttribute("data-cc-gql-claim");
+    const claimId = root.getAttribute("data-cc-gql-claim-id");
+    const predRaw = root.getAttribute("data-cc-gql-prediction");
+    const pollRaw = root.getAttribute("data-cc-gql-poll");
+    const rewardsRaw = root.getAttribute("data-cc-gql-rewards");
+    const hasPrediction = root.hasAttribute("data-cc-gql-prediction");
+    const hasPoll = root.hasAttribute("data-cc-gql-poll");
 
-    if (!balance && claim == null && !claimId && !predRaw && !pollRaw && !rewardsRaw) {
+    if (
+      !balance &&
+      claim == null &&
+      !claimId &&
+      !predRaw &&
+      !pollRaw &&
+      !rewardsRaw
+    ) {
       return;
     }
 
-    gqlState = gqlState || { channelPoints: {}, prediction: null, poll: null, rewards: [] };
+    gqlState = gqlState || {
+      channelPoints: {},
+      prediction: null,
+      poll: null,
+      rewards: [],
+    };
 
     gqlState.channelPoints = {
       ...gqlState.channelPoints,
       ...(balance ? { balance } : {}),
-      ...(claim != null ? { claimAvailable: claim === '1' } : {}),
-      ...(claimId ? { claimId } : {})
+      ...(claim != null ? { claimAvailable: claim === "1" } : {}),
+      ...(claimId ? { claimId } : {}),
     };
 
-    if (predRaw) {
-      try {
-        gqlState.prediction = JSON.parse(predRaw);
-      } catch (_) {
-        gqlState.prediction = { title: predRaw, options: [], status: 'started' };
+    if (hasPrediction) {
+      if (predRaw) {
+        try {
+          gqlState.prediction = JSON.parse(predRaw);
+        } catch (_) {
+          gqlState.prediction = {
+            title: predRaw,
+            options: [],
+            status: "started",
+          };
+        }
+      } else {
+        gqlState.prediction = null;
       }
     }
 
-    if (pollRaw) {
-      try {
-        gqlState.poll = JSON.parse(pollRaw);
-      } catch (_) {
-        gqlState.poll = { title: pollRaw, options: [], status: 'started' };
+    if (hasPoll) {
+      if (pollRaw) {
+        try {
+          gqlState.poll = JSON.parse(pollRaw);
+        } catch (_) {
+          gqlState.poll = { title: pollRaw, options: [], status: "started" };
+        }
+      } else {
+        gqlState.poll = null;
       }
     }
 
@@ -902,50 +1029,65 @@
         gqlState.rewards = [];
       }
     }
+
+    activityStore.applyGraphql(gqlState);
   }
 
   function ensureToolbarPortal() {
-    let portal = document.getElementById('chatterino-toolbar-portal');
+    let portal = document.getElementById("chatterino-toolbar-portal");
     if (portal) {
       return portal;
     }
 
-    portal = document.createElement('div');
-    portal.id = 'chatterino-toolbar-portal';
+    portal = document.createElement("div");
+    portal.id = "chatterino-toolbar-portal";
 
-    const slot = document.createElement('div');
-    slot.id = 'chatterino-toolbar-slot';
+    const slot = document.createElement("div");
+    slot.id = "chatterino-toolbar-slot";
     portal.appendChild(slot);
 
     document.body.appendChild(portal);
 
-    window.addEventListener('scroll', () => positionToolbarPortal(), true);
-    window.addEventListener('resize', () => positionToolbarPortal());
+    window.addEventListener("scroll", () => positionToolbarPortal(), true);
+    window.addEventListener("resize", () => positionToolbarPortal());
 
     return portal;
   }
 
   function positionToolbarPortal() {
     ensureToolbarPortal();
-    const portal = document.getElementById('chatterino-toolbar-portal');
-    const targetBtn = findTargetButton();
-    const slot = document.getElementById('chatterino-toolbar-slot');
+    const portal = document.getElementById("chatterino-toolbar-portal");
+    const slot = document.getElementById("chatterino-toolbar-slot");
 
-    if (!portal || !targetBtn || !slot) {
-      if (portal) {
-        portal.style.display = 'none';
-      }
+    if (!portal || !slot) {
+      return null;
+    }
+
+    const fullscreen =
+      window.ChatterinoVotingUi?.isFullscreenActive(document, window) || false;
+    document.documentElement.classList.toggle(
+      "chatterino-video-fullscreen",
+      fullscreen
+    );
+    if (fullscreen) {
+      portal.style.setProperty("display", "none", "important");
+      return slot;
+    }
+
+    const targetBtn = findTargetButton();
+    if (!targetBtn) {
+      portal.style.setProperty("display", "none", "important");
       return null;
     }
 
     const rect = targetBtn.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) {
-      portal.style.display = 'none';
+      portal.style.setProperty("display", "none", "important");
       return slot;
     }
 
-    portal.style.display = 'inline-flex';
-    slot.style.display = 'inline-flex';
+    portal.style.setProperty("display", "inline-flex", "important");
+    slot.style.setProperty("display", "inline-flex", "important");
 
     const slotWidth = slot.offsetWidth || 1;
     const slotHeight = slot.offsetHeight || 32;
@@ -967,7 +1109,7 @@
   function getToolbarSlot() {
     ensureToolbarPortal();
     positionToolbarPortal();
-    return document.getElementById('chatterino-toolbar-slot');
+    return document.getElementById("chatterino-toolbar-slot");
   }
 
   function mountInSlot(element, orderIndex) {
@@ -988,19 +1130,27 @@
 
   function getTwitchChannelName() {
     const path = window.location.pathname.toLowerCase();
-    const parts = path.split('/').filter(Boolean);
+    const parts = path.split("/").filter(Boolean);
     if (parts.length === 0) {
-      return '';
+      return "";
     }
-    if (parts[0] === 'popout' && parts[1]) {
+    if (parts[0] === "popout" && parts[1]) {
       return parts[1];
     }
-    if (parts[0] === 'moderator' && parts[1]) {
+    if (parts[0] === "moderator" && parts[1]) {
       return parts[1];
     }
-    const staticPages = ['directory', 'videos', 'settings', 'subscriptions', 'wallet', 'drops', 'search'];
+    const staticPages = [
+      "directory",
+      "videos",
+      "settings",
+      "subscriptions",
+      "wallet",
+      "drops",
+      "search",
+    ];
     if (staticPages.includes(parts[0])) {
-      return '';
+      return "";
     }
     return parts[0];
   }
@@ -1022,42 +1172,68 @@
     if (isContextInvalidated()) {
       return;
     }
-    lastPredictionFingerprint = '';
+    activityStore.resetPublications();
+  }
+
+  function findVotingSurface(selectors, kind) {
+    const candidates = new Map();
+    for (const selector of selectors) {
+      for (const surface of document.querySelectorAll(selector)) {
+        candidates.set(surface, 20);
+      }
+    }
+    for (const surface of document.querySelectorAll(
+      '[role="dialog"], [role="menu"]'
+    )) {
+      const text = String(surface.textContent || "").toLowerCase();
+      const controls = surface.querySelectorAll(VOTING_CONTROL_SELECTOR);
+      if (
+        controls.length >= 2 &&
+        (text.includes(kind) ||
+          (kind === "prediction" && text.includes("predict")))
+      ) {
+        candidates.set(surface, 40);
+      }
+    }
+
+    let best = null;
+    let bestScore = -1;
+    for (const [surface, baseScore] of candidates) {
+      if (
+        !surface.isConnected ||
+        surface.closest("#chatterino-toolbar-portal")
+      ) {
+        continue;
+      }
+      const controls = surface.querySelectorAll(VOTING_CONTROL_SELECTOR).length;
+      const score = baseScore + Math.min(controls, 10);
+      if (score > bestScore) {
+        best = surface;
+        bestScore = score;
+      }
+    }
+    return best;
   }
 
   function findBanner() {
-    for (const selector of BANNER_SELECTORS) {
-      for (const banner of document.querySelectorAll(selector)) {
-        if (banner.closest('#chatterino-toolbar-portal')) {
-          continue;
-        }
-        return banner;
-      }
-    }
-    return null;
+    return findVotingSurface(BANNER_SELECTORS, "prediction");
   }
 
   function findPollBanner() {
-    for (const banner of document.querySelectorAll(POLL_BANNER_SELECTOR)) {
-      if (banner.closest('#chatterino-toolbar-portal')) {
-        continue;
-      }
-      return banner;
-    }
-    return null;
+    return findVotingSurface(POLL_BANNER_SELECTORS, "poll");
   }
 
   function updateDisplayState(banner) {
-    const minIcon = document.getElementById('chatterino-prediction-min-icon');
+    const minIcon = document.getElementById("chatterino-prediction-min-icon");
     if (isMinimized) {
-      banner.style.setProperty('display', 'none', 'important');
+      banner.style.setProperty("display", "none", "important");
       if (minIcon) {
-        minIcon.style.setProperty('display', 'inline-flex', 'important');
+        minIcon.style.setProperty("display", "inline-flex", "important");
       }
     } else {
-      banner.style.removeProperty('display');
+      banner.style.removeProperty("display");
       if (minIcon) {
-        minIcon.style.setProperty('display', 'none', 'important');
+        minIcon.style.setProperty("display", "none", "important");
       }
     }
   }
@@ -1066,7 +1242,7 @@
     if (!btn || !btn.isConnected) {
       return false;
     }
-    if (btn.closest('#chatterino-toolbar-portal, #chatterino-points-replica')) {
+    if (btn.closest("#chatterino-toolbar-portal, #chatterino-points-replica")) {
       return false;
     }
     if (btn.closest('[aria-hidden="true"]')) {
@@ -1086,8 +1262,8 @@
       }
     }
 
-    for (const icon of document.querySelectorAll('.claimable-bonus__icon')) {
-      const btn = icon.closest('button');
+    for (const icon of document.querySelectorAll(".claimable-bonus__icon")) {
+      const btn = icon.closest("button");
       if (isClaimBonusButtonClaimable(btn)) {
         candidates.push(btn);
       }
@@ -1098,7 +1274,9 @@
     }
 
     const rewardDialog = findNativeRewardDialog();
-    const outsideDialog = candidates.find((btn) => !rewardDialog?.contains(btn));
+    const outsideDialog = candidates.find(
+      (btn) => !rewardDialog?.contains(btn)
+    );
     return outsideDialog || candidates[0];
   }
 
@@ -1106,7 +1284,11 @@
     btn.click();
     if (includeSynthetic) {
       btn.dispatchEvent(
-        new MouseEvent('click', { bubbles: true, cancelable: true, view: window })
+        new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+        })
       );
     }
   }
@@ -1127,7 +1309,10 @@
     }
     const delayMs = attempt < 4 ? 250 : attempt < 7 ? 750 : 1500;
     setTimeout(() => {
-      if (!clickedButton.isConnected || !isClaimBonusButtonClaimable(clickedButton)) {
+      if (
+        !clickedButton.isConnected ||
+        !isClaimBonusButtonClaimable(clickedButton)
+      ) {
         markClaimSucceeded();
         return;
       }
@@ -1146,7 +1331,9 @@
   function scheduleClaimBootstrap() {
     stopClaimBootstrap();
     for (const delay of CLAIM_BOOTSTRAP_DELAYS_MS) {
-      claimBootstrapTimers.push(setTimeout(() => scheduleAutoClaimAttempt(), delay));
+      claimBootstrapTimers.push(
+        setTimeout(() => scheduleAutoClaimAttempt(), delay)
+      );
     }
   }
 
@@ -1167,7 +1354,8 @@
 
     const claimButton = findClaimBonusButton();
     const now = Date.now();
-    const recentlyClaimed = now - lastSuccessfulClaimAt < AUTO_CLAIM_MIN_INTERVAL_MS;
+    const recentlyClaimed =
+      now - lastSuccessfulClaimAt < AUTO_CLAIM_MIN_INTERVAL_MS;
 
     if (claimButton) {
       if (recentlyClaimed) {
@@ -1184,23 +1372,23 @@
     }
     const claimId =
       gqlState?.channelPoints?.claimId ||
-      document.documentElement.getAttribute('data-cc-gql-claim-id');
+      document.documentElement.getAttribute("data-cc-gql-claim-id");
     if (!claimId) {
       return;
     }
 
-    window.dispatchEvent(new CustomEvent('chatterino-companion-claim-request'));
+    window.dispatchEvent(new CustomEvent("chatterino-companion-claim-request"));
   }
 
   function scrapePointsText(pointsSummary) {
     if (!pointsSummary) {
-      return '';
+      return "";
     }
     // textContent (not innerText) so this still works when the native element
     // is visually hidden by companion mode or the Chatterino integration.
-    const text = pointsSummary.textContent.replace(/\s+/g, ' ').trim();
+    const text = pointsSummary.textContent.replace(/\s+/g, " ").trim();
     const match = text.match(/([\d,.]+[KMB]?)/i);
-    return match ? match[1] : '';
+    return match ? match[1] : "";
   }
 
   const PINNED_MESSAGE_BODY_SELECTORS = [
@@ -1208,18 +1396,18 @@
     '[data-test-selector="message-text"]',
     '[data-test-selector="chat-message-text"]',
     '[class*="chat-line__message"]',
-    '[class*="message-body"]'
+    '[class*="message-body"]',
   ];
 
   const PINNED_BLOCK_TAGS = new Set([
-    'p',
-    'div',
-    'li',
-    'h1',
-    'h2',
-    'h3',
-    'h4',
-    'blockquote'
+    "p",
+    "div",
+    "li",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "blockquote",
   ]);
 
   function findPinnedMessageBody(root) {
@@ -1242,7 +1430,7 @@
 
   function scrapeTextWithNewlines(node) {
     if (!node) {
-      return '';
+      return "";
     }
     const parts = [];
     const walk = (el) => {
@@ -1254,59 +1442,63 @@
         return;
       }
       const tag = el.tagName?.toLowerCase();
-      if (tag === 'a') {
-        const href = el.getAttribute('href')?.trim() || '';
-        const label = el.textContent.replace(/\s+/g, ' ').trim();
+      if (tag === "a") {
+        const href = el.getAttribute("href")?.trim() || "";
+        const label = el.textContent.replace(/\s+/g, " ").trim();
         parts.push(href || label);
         return;
       }
-      if (tag === 'br') {
-        parts.push('\n');
+      if (tag === "br") {
+        parts.push("\n");
         return;
       }
-      if (PINNED_BLOCK_TAGS.has(tag) && parts.length > 0 && !parts[parts.length - 1].endsWith('\n')) {
-        parts.push('\n');
+      if (
+        PINNED_BLOCK_TAGS.has(tag) &&
+        parts.length > 0 &&
+        !parts[parts.length - 1].endsWith("\n")
+      ) {
+        parts.push("\n");
       }
       for (const child of el.childNodes) {
         walk(child);
       }
       if (PINNED_BLOCK_TAGS.has(tag)) {
-        parts.push('\n');
+        parts.push("\n");
       }
     };
     walk(node);
-    return parts.join('');
+    return parts.join("");
   }
 
   function joinWrappedUrls(text) {
-    return String(text || '')
-      .replace(/(https?:\/\/)\s*\n\s*/gi, '$1')
-      .replace(/(www\.)\s*\n\s*/gi, '$1')
-      .replace(/(https?:\/\/[^\s\n]*)\n([^\s\n]+)/gi, '$1$2');
+    return String(text || "")
+      .replace(/(https?:\/\/)\s*\n\s*/gi, "$1")
+      .replace(/(www\.)\s*\n\s*/gi, "$1")
+      .replace(/(https?:\/\/[^\s\n]*)\n([^\s\n]+)/gi, "$1$2");
   }
 
   function applySentenceSpacingOutsideUrls(text) {
     const urlRx = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
-    let result = '';
+    let result = "";
     let last = 0;
     let match;
     while ((match = urlRx.exec(text)) !== null) {
       const before = text.slice(last, match.index);
-      result += before.replace(/([.!?])([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1 $2');
+      result += before.replace(/([.!?])([A-Za-zÀ-ÖØ-öø-ÿ])/g, "$1 $2");
       result += match[0];
       last = match.index + match[0].length;
     }
-    result += text.slice(last).replace(/([.!?])([A-Za-zÀ-ÖØ-öø-ÿ])/g, '$1 $2');
+    result += text.slice(last).replace(/([.!?])([A-Za-zÀ-ÖØ-öø-ÿ])/g, "$1 $2");
     return result;
   }
 
   function formatPinnedAnnouncementText(raw) {
     const lines = joinWrappedUrls(raw)
-      .replace(/\r\n?/g, '\n')
-      .replace(/✕/g, '')
-      .replace(/\b(dismiss|unpin|pinned message)\b/gi, '')
-      .split('\n')
-      .map((line) => line.replace(/[^\S\n]+/g, ' ').trim());
+      .replace(/\r\n?/g, "\n")
+      .replace(/✕/g, "")
+      .replace(/\b(dismiss|unpin|pinned message)\b/gi, "")
+      .split("\n")
+      .map((line) => line.replace(/[^\S\n]+/g, " ").trim());
 
     const compacted = [];
     let lastWasEmpty = false;
@@ -1318,14 +1510,16 @@
       compacted.push(line);
       lastWasEmpty = empty;
     }
-    while (compacted.length > 0 && compacted[0] === '') {
+    while (compacted.length > 0 && compacted[0] === "") {
       compacted.shift();
     }
-    while (compacted.length > 0 && compacted[compacted.length - 1] === '') {
+    while (compacted.length > 0 && compacted[compacted.length - 1] === "") {
       compacted.pop();
     }
 
-    return applySentenceSpacingOutsideUrls(compacted.join(' ').replace(/\s+/g, ' ')).trim();
+    return applySentenceSpacingOutsideUrls(
+      compacted.join(" ").replace(/\s+/g, " ")
+    ).trim();
   }
 
   function isSubscriptionHighlight(element, text) {
@@ -1333,14 +1527,17 @@
       return false;
     }
 
-    const sample = String(text || element.textContent || '')
-      .replace(/\s+/g, ' ')
+    const sample = String(text || element.textContent || "")
+      .replace(/\s+/g, " ")
       .trim();
-    if (sample && SUBSCRIPTION_HIGHLIGHT_PATTERNS.some((re) => re.test(sample))) {
+    if (
+      sample &&
+      SUBSCRIPTION_HIGHLIGHT_PATTERNS.some((re) => re.test(sample))
+    ) {
       return true;
     }
 
-    const classHint = element.className?.toString?.() || '';
+    const classHint = element.className?.toString?.() || "";
     if (/sub-?gift|subscription/i.test(classHint)) {
       return true;
     }
@@ -1353,7 +1550,7 @@
       return true;
     }
 
-    const aria = element.getAttribute('aria-label') || '';
+    const aria = element.getAttribute("aria-label") || "";
     if (
       aria &&
       /\b(subscription|gifted|resub)\b/i.test(aria) &&
@@ -1365,10 +1562,23 @@
     return false;
   }
 
+  function containsVotingBanner(element) {
+    return Boolean(
+      element?.matches?.(VOTING_BANNER_SELECTOR) ||
+      element?.querySelector?.(VOTING_BANNER_SELECTOR)
+    );
+  }
+
   function findPinnedAnnouncementElement() {
     for (const selector of PINNED_SELECTORS) {
       for (const el of document.querySelectorAll(selector)) {
-        if (el.closest('#chatterino-toolbar-portal')) {
+        if (el.closest("#chatterino-toolbar-portal")) {
+          continue;
+        }
+        // Polls and predictions have their own structured native-messaging
+        // path. Scraping their full Twitch card as a pin duplicates labels,
+        // countdown text, and truncated option names in Chatterino.
+        if (containsVotingBanner(el)) {
           continue;
         }
         if (isSubscriptionHighlight(el)) {
@@ -1383,25 +1593,27 @@
   function scrapePinnedMessageText(root) {
     const messageBody = findPinnedMessageBody(root);
     if (!messageBody) {
-      return '';
+      return "";
     }
 
     // textContent avoids layout-wrapped line breaks inside URLs (innerText
     // splits "https://starforgepc.com/foo" across lines when the banner is narrow).
-    let raw = messageBody.textContent.replace(/\s+/g, ' ').trim();
+    let raw = messageBody.textContent.replace(/\s+/g, " ").trim();
     if (!raw) {
       raw = joinWrappedUrls(scrapeTextWithNewlines(messageBody));
     }
     const formatted = formatPinnedAnnouncementText(raw);
     if (isSubscriptionHighlight(root, formatted)) {
-      return '';
+      return "";
     }
     return formatted;
   }
 
   function handlePinnedMessages(channelName) {
     const pinnedBanner = findPinnedAnnouncementElement();
-    const pinnedText = pinnedBanner ? scrapePinnedMessageText(pinnedBanner) : '';
+    const pinnedText = pinnedBanner
+      ? scrapePinnedMessageText(pinnedBanner)
+      : "";
 
     if (!channelName) {
       return;
@@ -1411,51 +1623,63 @@
     if (pinFingerprint !== lastPinFingerprint) {
       lastPinFingerprint = pinFingerprint;
       chrome.runtime.sendMessage({
-        action: 'pin',
+        action: "pin",
         channel: channelName,
-        message: pinnedText
+        message: pinnedText,
       });
     }
   }
 
   function parseBannerDetails(banner) {
-    let title = '';
+    let title = "";
     const titleEl =
       banner.querySelector('[class*="title"]') ||
-      banner.querySelector('h4') ||
+      banner.querySelector("h4") ||
       banner.querySelector('[class*="header"]');
     if (titleEl) {
       title = titleEl.textContent.trim();
     } else {
-      const lines = banner.innerText.split('\n').map((s) => s.trim()).filter(Boolean);
+      const lines = banner.innerText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
       if (lines.length > 0) {
         title = lines[0];
       }
     }
 
     const options = [];
-    banner.querySelectorAll('button, [class*="option"], [class*="outcome"]').forEach((el) => {
-      const text = el.textContent.trim();
-      if (
-        text &&
-        text.length < 50 &&
-        !text.includes('✕') &&
-        !text.includes('Dismiss') &&
-        !text.includes('Delete') &&
-        !text.includes('—')
-      ) {
-        if (!options.includes(text)) {
-          options.push(text);
+    banner
+      .querySelectorAll('button, [class*="option"], [class*="outcome"]')
+      .forEach((el) => {
+        const text = el.textContent.trim();
+        if (
+          text &&
+          text.length < 50 &&
+          !text.includes("✕") &&
+          !text.includes("Dismiss") &&
+          !text.includes("Delete") &&
+          !text.includes("—")
+        ) {
+          if (!options.includes(text)) {
+            options.push(text);
+          }
         }
-      }
-    });
+      });
 
-    let status = 'started';
+    let status = "started";
     const bannerText = banner.textContent.toLowerCase();
-    if (bannerText.includes('submissions closed') || bannerText.includes('locked')) {
-      status = 'locked';
-    } else if (bannerText.includes('ended') || bannerText.includes('won') || bannerText.includes('refunded')) {
-      status = 'ended';
+    if (
+      bannerText.includes("submissions closed") ||
+      bannerText.includes("locked")
+    ) {
+      status = "locked";
+    } else if (
+      bannerText.includes("ended") ||
+      bannerText.includes("won") ||
+      bannerText.includes("refunded")
+    ) {
+      status = "ended";
     }
 
     let durationSeconds = 0;
@@ -1466,29 +1690,37 @@
 
     if (timerMatch) {
       if (timerMatch[2] !== undefined) {
-        durationSeconds = parseInt(timerMatch[1], 10) * 60 + parseInt(timerMatch[2], 10);
+        durationSeconds =
+          parseInt(timerMatch[1], 10) * 60 + parseInt(timerMatch[2], 10);
       } else {
         durationSeconds = parseInt(timerMatch[1], 10) * 60;
       }
     } else {
-      const secMatch = banner.textContent.match(/(\d+)\s*s\s*(?:remaining|left)?/i);
+      const secMatch = banner.textContent.match(
+        /(\d+)\s*s\s*(?:remaining|left)?/i
+      );
       if (secMatch) {
         durationSeconds = parseInt(secMatch[1], 10);
       }
     }
 
-    let winner = '';
-    if (status === 'ended') {
-      const winnerEl = banner.querySelector('[class*="winner"]') || banner.querySelector('[class*="won"]');
+    let winner = "";
+    if (status === "ended") {
+      const winnerEl =
+        banner.querySelector('[class*="winner"]') ||
+        banner.querySelector('[class*="won"]');
       if (winnerEl) {
         winner = winnerEl.textContent.trim();
       } else {
-        const lines = banner.innerText.split('\n').map((s) => s.trim()).filter(Boolean);
+        const lines = banner.innerText
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean);
         const winLine = lines.find(
           (l) =>
-            l.toLowerCase().includes('won') ||
-            l.toLowerCase().includes('winner') ||
-            l.toLowerCase().includes('ended')
+            l.toLowerCase().includes("won") ||
+            l.toLowerCase().includes("winner") ||
+            l.toLowerCase().includes("ended")
         );
         if (winLine) {
           winner = winLine;
@@ -1499,31 +1731,142 @@
     return { title, options, status, durationSeconds, winner };
   }
 
-  function sendPredictionMessage(channelName, details) {
-    const fingerprint = JSON.stringify(details);
-    if (fingerprint === lastPredictionFingerprint || !channelName) {
+  function mergeVotingDetails(kind, domDetails) {
+    activityStore.applyGraphql(gqlState);
+    return activityStore.observeDom(kind, domDetails);
+  }
+
+  function sendVotingMessage(kind, channelName) {
+    const publication = activityStore.nextPublication(kind);
+    if (!publication || !channelName) {
       return;
     }
-    lastPredictionFingerprint = fingerprint;
-    chrome.runtime.sendMessage({
-      action: 'prediction',
-      channel: channelName,
-      title: details.title,
-      options: details.options,
-      status: details.status,
-      duration: details.durationSeconds,
-      winner: details.winner
-    });
+    const details = publication.activity;
+    chrome.runtime.sendMessage(
+      window.ChatterinoProtocol.create("engagement", {
+        kind,
+        channel: channelName,
+        lifecycle: publication.lifecycle,
+        ...(details
+          ? {
+              title: details.title,
+              options: details.options,
+              status: details.status,
+              duration: details.durationSeconds,
+              closesAt: details.closesAt,
+              winner: details.winner,
+            }
+          : {}),
+      })
+    );
+  }
+
+  function removeVotingMessages(channelName) {
+    if (!channelName) {
+      return;
+    }
+    for (const kind of window.ChatterinoActivity.ACTIVITY_KINDS) {
+      chrome.runtime.sendMessage(
+        window.ChatterinoProtocol.create("engagement", {
+          lifecycle: "remove",
+          kind,
+          channel: channelName,
+        })
+      );
+    }
+  }
+
+  function sendPredictionMessage(channelName) {
+    sendVotingMessage("prediction", channelName);
+  }
+
+  function sendPollMessage(channelName) {
+    sendVotingMessage("poll", channelName);
+  }
+
+  function sanitizeVotingClone(clone, kind) {
+    clone.removeAttribute("id");
+    clone.classList.remove(
+      "chatterino-native-voting-source",
+      "chatterino-moved-banner-floating",
+      "chatterino-moved-banner-inline",
+      "chatterino-moved-poll-inline"
+    );
+    clone.classList.add(
+      kind === "poll"
+        ? "chatterino-moved-poll-inline"
+        : "chatterino-moved-banner-inline"
+    );
+    clone.removeAttribute("aria-hidden");
+    clone.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
+    clone
+      .querySelectorAll('[aria-hidden="true"]')
+      .forEach((el) => el.removeAttribute("aria-hidden"));
+  }
+
+  function ensureVotingReplica(source, kind, orderIndex) {
+    const replicaId = `chatterino-${kind}-replica`;
+    let replica = document.getElementById(replicaId);
+    if (!replica) {
+      replica = document.createElement("div");
+      replica.id = replicaId;
+      replica.className = `chatterino-voting-replica chatterino-${kind}-replica`;
+      replica.addEventListener(
+        "click",
+        (event) => {
+          if (event.target.closest(".chatterino-prediction-minimize-btn")) {
+            return;
+          }
+          const cloneRoot = replica.firstElementChild;
+          const sourceRoot = replica.__ccSource;
+          if (
+            window.ChatterinoVotingUi?.forwardActivation(
+              event,
+              cloneRoot,
+              sourceRoot
+            )
+          ) {
+            requestAnimationFrame(() => scheduleSync());
+            setTimeout(scheduleSync, 100);
+          }
+        },
+        true
+      );
+    }
+
+    source.classList.remove(
+      "chatterino-moved-banner-inline",
+      "chatterino-moved-poll-inline"
+    );
+    source.classList.add("chatterino-native-voting-source");
+    replica.__ccSource = source;
+
+    const sourceSignature = source.outerHTML;
+    if (replica.__ccSourceSignature !== sourceSignature) {
+      replica.__ccSourceSignature = sourceSignature;
+      const clone = source.cloneNode(true);
+      sanitizeVotingClone(clone, kind);
+      replica.replaceChildren(clone);
+    }
+
+    mountInSlot(replica, orderIndex);
+    return replica;
+  }
+
+  function releaseVotingSource(source) {
+    if (source?.isConnected) {
+      source.classList.remove("chatterino-native-voting-source");
+    }
   }
 
   function ensureMinimizedIcon(banner) {
-    let minIcon = document.getElementById('chatterino-prediction-min-icon');
+    let minIcon = document.getElementById("chatterino-prediction-min-icon");
     if (!minIcon) {
-      minIcon = document.createElement('button');
-      minIcon.id = 'chatterino-prediction-min-icon';
-      minIcon.className = 'chatterino-prediction-minimized-icon';
-      minIcon.title = 'Expand Prediction';
-      minIcon.type = 'button';
+      minIcon = document.createElement("button");
+      minIcon.id = "chatterino-prediction-min-icon";
+      minIcon.className = "chatterino-prediction-minimized-icon";
+      minIcon.title = "Expand Prediction";
+      minIcon.type = "button";
       minIcon.innerHTML = `
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="9" r="7"/>
@@ -1532,43 +1875,48 @@
           <path d="M12 6a2 2 0 0 1 2 2"/>
         </svg>
       `;
-      minIcon.addEventListener('click', () => {
+      minIcon.addEventListener("click", () => {
         isMinimized = false;
         updateDisplayState(banner);
       });
     }
     mountInSlot(minIcon, 1);
-    minIcon.style.setProperty('display', isMinimized ? 'inline-flex' : 'none', 'important');
+    minIcon.style.setProperty(
+      "display",
+      isMinimized ? "inline-flex" : "none",
+      "important"
+    );
     return minIcon;
   }
 
-  function handlePredictionBanner(banner, channelName, pointsText) {
-    activeBanner = banner;
+  function handlePredictionBanner(source, channelName, pointsText) {
     domPredictionLastSeen = Date.now();
-    document.getElementById('chatterino-prediction-fallback')?.remove();
+    document.getElementById("chatterino-prediction-fallback")?.remove();
 
-    const details = parseBannerDetails(banner);
+    const details = mergeVotingDetails(
+      "prediction",
+      parseBannerDetails(source)
+    );
     if (details.title && details.title !== lastPredictionTitle) {
       lastPredictionTitle = details.title;
       isMinimized = false;
     }
 
-    sendPredictionMessage(channelName, details);
-
-    if (!banner.classList.contains('chatterino-moved-banner-inline')) {
-      banner.classList.add('chatterino-moved-banner-inline');
-      banner.classList.remove('chatterino-moved-banner-floating');
+    sendPredictionMessage(channelName);
+    if (activePredictionSource && activePredictionSource !== source) {
+      releaseVotingSource(activePredictionSource);
     }
+    activePredictionSource = source;
+    const banner = ensureVotingReplica(source, "prediction", 1);
+    activeBanner = banner;
 
-    mountInSlot(banner, 1);
-
-    let minBtn = banner.querySelector('.chatterino-prediction-minimize-btn');
+    let minBtn = banner.querySelector(".chatterino-prediction-minimize-btn");
     if (!minBtn) {
-      minBtn = document.createElement('button');
-      minBtn.className = 'chatterino-prediction-minimize-btn';
-      minBtn.textContent = '—';
-      minBtn.title = 'Minimize';
-      minBtn.addEventListener('click', (e) => {
+      minBtn = document.createElement("button");
+      minBtn.className = "chatterino-prediction-minimize-btn";
+      minBtn.textContent = "—";
+      minBtn.title = "Minimize";
+      minBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         e.preventDefault();
         isMinimized = true;
@@ -1581,25 +1929,25 @@
     updateDisplayState(banner);
 
     if (pointsText) {
-      let badge = banner.querySelector('.chatterino-points-badge');
+      let badge = banner.querySelector(".chatterino-points-badge");
       if (!badge) {
-        badge = document.createElement('div');
-        badge.className = 'chatterino-points-badge';
-        badge.style.position = 'absolute';
-        badge.style.top = '8px';
-        badge.style.right = '40px';
-        badge.style.background = '#9146ff';
-        badge.style.color = '#ffffff';
-        badge.style.padding = '3px 8px';
-        badge.style.borderRadius = '4px';
-        badge.style.fontSize = '11px';
-        badge.style.fontWeight = 'bold';
-        badge.style.zIndex = '100000';
-        badge.style.pointerEvents = 'none';
-        badge.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+        badge = document.createElement("div");
+        badge.className = "chatterino-points-badge";
+        badge.style.position = "absolute";
+        badge.style.top = "8px";
+        badge.style.right = "40px";
+        badge.style.background = "#9146ff";
+        badge.style.color = "#ffffff";
+        badge.style.padding = "3px 8px";
+        badge.style.borderRadius = "4px";
+        badge.style.fontSize = "11px";
+        badge.style.fontWeight = "bold";
+        badge.style.zIndex = "100000";
+        badge.style.pointerEvents = "none";
+        badge.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
         banner.appendChild(badge);
-        if (getComputedStyle(banner).position === 'static') {
-          banner.style.position = 'relative';
+        if (getComputedStyle(banner).position === "static") {
+          banner.style.position = "relative";
         }
       }
       badge.textContent = `${pointsText} pts`;
@@ -1607,83 +1955,109 @@
   }
 
   function handlePredictionFallback(channelName) {
-    const prediction = gqlState?.prediction;
+    activityStore.removeDom("prediction");
+    activityStore.applyGraphql(gqlState);
+    const prediction = activityStore.current("prediction");
     if (!prediction?.title) {
-      document.getElementById('chatterino-prediction-fallback')?.remove();
+      document.getElementById("chatterino-prediction-fallback")?.remove();
       return;
     }
 
-    let pill = document.getElementById('chatterino-prediction-fallback');
+    let pill = document.getElementById("chatterino-prediction-fallback");
     if (!pill) {
-      pill = document.createElement('div');
-      pill.id = 'chatterino-prediction-fallback';
-      pill.className = 'chatterino-prediction-fallback-pill';
+      pill = document.createElement("button");
+      pill.id = "chatterino-prediction-fallback";
+      pill.className = "chatterino-prediction-fallback-pill";
+      pill.type = "button";
+      pill.title = "Open Twitch prediction voting";
       pill.innerHTML = '<span class="dot"></span><span class="label"></span>';
+      pill.addEventListener("click", () => {
+        if (
+          window.ChatterinoVotingUi?.activateVotingTrigger(
+            document,
+            "prediction",
+            pill
+          )
+        ) {
+          requestAnimationFrame(scheduleSync);
+          setTimeout(scheduleSync, 100);
+          setTimeout(scheduleSync, 300);
+        }
+      });
     }
 
-    pill.querySelector('.label').textContent = prediction.title;
+    pill.setAttribute("aria-label", `Vote on prediction: ${prediction.title}`);
+    pill.querySelector(".label").textContent = `Vote: ${prediction.title}`;
     mountInSlot(pill, 1);
-    sendPredictionMessage(channelName, {
-      title: prediction.title,
-      options: prediction.options || [],
-      status: prediction.status || 'started',
-      durationSeconds: prediction.duration || 0,
-      winner: prediction.winner || ''
-    });
+    sendPredictionMessage(channelName);
   }
 
   function cleanupPredictionUi() {
-    document.getElementById('chatterino-prediction-min-icon')?.remove();
-    document.getElementById('chatterino-prediction-fallback')?.remove();
-    lastPredictionTitle = '';
+    document.getElementById("chatterino-prediction-min-icon")?.remove();
+    document.getElementById("chatterino-prediction-fallback")?.remove();
+    document.getElementById("chatterino-prediction-replica")?.remove();
+    releaseVotingSource(activePredictionSource);
+    activePredictionSource = null;
+    lastPredictionTitle = "";
     isMinimized = false;
     activeBanner = null;
   }
 
-  function handlePollBanner(banner) {
-    document.getElementById('chatterino-poll-fallback')?.remove();
-
-    if (!banner.classList.contains('chatterino-moved-poll-inline')) {
-      banner.classList.add('chatterino-moved-poll-inline');
+  function handlePollBanner(source, channelName) {
+    document.getElementById("chatterino-poll-fallback")?.remove();
+    const details = mergeVotingDetails("poll", parseBannerDetails(source));
+    sendPollMessage(channelName);
+    if (activePollSource && activePollSource !== source) {
+      releaseVotingSource(activePollSource);
     }
-
-    mountInSlot(banner, 0);
+    activePollSource = source;
+    ensureVotingReplica(source, "poll", 0);
   }
 
-  function handlePollFallback() {
-    const poll = gqlState?.poll;
+  function handlePollFallback(channelName) {
+    activityStore.removeDom("poll");
+    activityStore.applyGraphql(gqlState);
+    const poll = activityStore.current("poll");
     if (!poll?.title) {
-      document.getElementById('chatterino-poll-fallback')?.remove();
+      document.getElementById("chatterino-poll-fallback")?.remove();
       return;
     }
 
-    let pill = document.getElementById('chatterino-poll-fallback');
+    let pill = document.getElementById("chatterino-poll-fallback");
     if (!pill) {
-      pill = document.createElement('div');
-      pill.id = 'chatterino-poll-fallback';
-      pill.className = 'chatterino-poll-fallback-pill';
+      pill = document.createElement("div");
+      pill.id = "chatterino-poll-fallback";
+      pill.className = "chatterino-poll-fallback-pill";
       pill.innerHTML = '<span class="dot"></span><span class="label"></span>';
     }
 
-    pill.querySelector('.label').textContent = poll.title;
+    pill.querySelector(".label").textContent = poll.title;
     mountInSlot(pill, 0);
+    sendPollMessage(channelName);
   }
 
   function cleanupPollUi() {
-    document.getElementById('chatterino-poll-fallback')?.remove();
+    document.getElementById("chatterino-poll-fallback")?.remove();
+    document.getElementById("chatterino-poll-replica")?.remove();
+    releaseVotingSource(activePollSource);
+    activePollSource = null;
   }
 
   function syncCompanionState() {
-    if (document.documentElement.classList.contains('chatterino-companion-active')) {
+    if (
+      document.documentElement.classList.contains("chatterino-companion-active")
+    ) {
       companionActive = true;
       return;
     }
     if (isChatShellWiped()) {
       companionActive = true;
-      document.documentElement.classList.add('chatterino-companion-active');
+      document.documentElement.classList.add("chatterino-companion-active");
       return;
     }
-    companionActive = document.documentElement.hasAttribute('data-chatterino-companion-active');
+    companionActive = document.documentElement.hasAttribute(
+      "data-chatterino-companion-active"
+    );
   }
 
   function runSync() {
@@ -1697,75 +2071,94 @@
     syncInProgress = true;
     observer.disconnect();
     try {
-    syncGqlFromDomAttributes();
-    syncCompanionState();
+      syncGqlFromDomAttributes();
+      syncCompanionState();
 
-    const channelName = getTwitchChannelName();
-    if (channelName !== currentChannel) {
-      currentChannel = channelName;
-      domPointsLastSeen = 0;
-      lastPinFingerprint = '';
-      resetFingerprints();
-      cleanupPredictionUi();
-      cleanupPollUi();
-      resetChannelScopedUi();
-      window.dispatchEvent(
-        new CustomEvent('chatterino-companion-channel-change', { detail: { channel: channelName } })
-      );
-      scheduleClaimBootstrap();
-      setTimeout(resetFingerprints, 1000);
-      setTimeout(resetFingerprints, 2000);
-      setTimeout(resetFingerprints, 5000);
-    }
-
-    scheduleAutoClaimAttempt();
-    handlePinnedMessages(channelName);
-
-    if (findChatBadgeCarousel() || findNativeChatBadgeButton()) {
-      ensureBadgeReplica();
-    } else if (channelName === '') {
-      removeBadgeReplica();
-    } else if (document.getElementById('chatterino-badge-replica')) {
-      ensureBadgeReplica();
-    }
-
-    const pointsSummary = findPointsSummary();
-    if (pointsSummary) {
-      domPointsLastSeen = Date.now();
-    }
-
-    const pointsText = scrapePointsText(pointsSummary) || gqlState?.channelPoints?.balance || '';
-    if (pointsSummary) {
-      ensurePointsReplica();
-    } else if (channelName === '') {
-      removePointsReplica();
-    } else {
-      // Native summary was destroyed (e.g. Chatterino chat wipe) — keep the
-      // existing clone alive and refresh its balance from GQL data.
-      updateReplicaBalanceFromGql();
-    }
-
-    const pollBanner = findPollBanner();
-    if (pollBanner) {
-      handlePollBanner(pollBanner);
-    } else {
-      cleanupPollUi();
-      if (gqlState?.poll?.title && (companionActive || isChatShellWiped() || channelName)) {
-        handlePollFallback();
+      const channelName = getTwitchChannelName();
+      if (channelName !== currentChannel) {
+        removeVotingMessages(currentChannel);
+        currentChannel = channelName;
+        activityStore.setChannel(channelName);
+        domPointsLastSeen = 0;
+        lastPinFingerprint = "";
+        resetFingerprints();
+        cleanupPredictionUi();
+        cleanupPollUi();
+        resetChannelScopedUi();
+        window.dispatchEvent(
+          new CustomEvent("chatterino-companion-channel-change", {
+            detail: { channel: channelName },
+          })
+        );
+        scheduleClaimBootstrap();
+        setTimeout(resetFingerprints, 1000);
+        setTimeout(resetFingerprints, 2000);
+        setTimeout(resetFingerprints, 5000);
       }
-    }
 
-    const banner = findBanner();
-    if (banner) {
-      handlePredictionBanner(banner, channelName, pointsText);
-    } else {
-      cleanupPredictionUi();
-      if (gqlState?.prediction?.title && (companionActive || isChatShellWiped() || channelName)) {
-        handlePredictionFallback(channelName);
+      scheduleAutoClaimAttempt();
+      handlePinnedMessages(channelName);
+
+      if (findChatBadgeCarousel() || findNativeChatBadgeButton()) {
+        ensureBadgeReplica();
+      } else if (channelName === "") {
+        removeBadgeReplica();
+      } else if (document.getElementById("chatterino-badge-replica")) {
+        ensureBadgeReplica();
       }
-    }
 
-    positionToolbarPortal();
+      const pointsSummary = findPointsSummary();
+      if (pointsSummary) {
+        domPointsLastSeen = Date.now();
+      }
+
+      const pointsText =
+        scrapePointsText(pointsSummary) ||
+        gqlState?.channelPoints?.balance ||
+        "";
+      if (pointsSummary) {
+        ensurePointsReplica();
+      } else if (channelName === "") {
+        removePointsReplica();
+      } else {
+        // Native summary was destroyed (e.g. Chatterino chat wipe) — keep the
+        // existing clone alive and refresh its balance from GQL data.
+        updateReplicaBalanceFromGql();
+      }
+
+      const pollBanner = findPollBanner();
+      if (pollBanner) {
+        handlePollBanner(pollBanner, channelName);
+      } else {
+        activityStore.removeDom("poll");
+        cleanupPollUi();
+        if (
+          gqlState?.poll?.title &&
+          (companionActive || isChatShellWiped() || channelName)
+        ) {
+          handlePollFallback(channelName);
+        } else {
+          sendPollMessage(channelName);
+        }
+      }
+
+      const banner = findBanner();
+      if (banner) {
+        handlePredictionBanner(banner, channelName, pointsText);
+      } else {
+        activityStore.removeDom("prediction");
+        cleanupPredictionUi();
+        if (
+          gqlState?.prediction?.title &&
+          (companionActive || isChatShellWiped() || channelName)
+        ) {
+          handlePredictionFallback(channelName);
+        } else {
+          sendPredictionMessage(channelName);
+        }
+      }
+
+      positionToolbarPortal();
     } finally {
       syncInProgress = false;
       observeTarget();
@@ -1782,19 +2175,22 @@
     }
   });
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
       resetFingerprints();
       scheduleSync();
     }
   });
 
-  window.addEventListener('focus', () => {
+  window.addEventListener("focus", () => {
     resetFingerprints();
     scheduleSync();
   });
 
-  window.addEventListener('chatterino-companion-active', () => {
+  document.addEventListener("fullscreenchange", scheduleSync);
+  document.addEventListener("webkitfullscreenchange", scheduleSync);
+
+  window.addEventListener("chatterino-companion-active", () => {
     companionActive = true;
     // Re-send prediction/pin state when Chatterino attaches so mid-flight
     // predictions show up even if we already sent them earlier.
@@ -1802,9 +2198,10 @@
     scheduleSync();
   });
 
-  window.addEventListener('chatterino-companion-gql', (event) => {
+  window.addEventListener("chatterino-companion-gql", (event) => {
     const prevClaimAvailable = gqlState?.channelPoints?.claimAvailable;
     gqlState = event.detail;
+    activityStore.applyGraphql(gqlState);
     if (gqlState?.channelPoints?.claimAvailable) {
       scheduleAutoClaimAttempt();
     } else if (prevClaimAvailable) {
@@ -1813,23 +2210,38 @@
     scheduleSync();
   });
 
-  window.addEventListener('chatterino-companion-dismiss-reward-dialog', () => {
+  window.addEventListener("chatterino-companion-dismiss-reward-dialog", () => {
     scheduleDismissUnintendedRewardDialog();
   });
 
-  window.addEventListener('chatterino-companion-reward-pending', (event) => {
+  window.addEventListener("chatterino-companion-reward-pending", (event) => {
     forwardRewardPending(event.detail);
   });
 
-  window.addEventListener('chatterino-companion-reward-cancelled', (event) => {
-    forwardRewardClear(event.detail?.reason || 'cancelled');
+  window.addEventListener("chatterino-companion-reward-cancelled", (event) => {
+    forwardRewardClear(event.detail?.reason || "cancelled");
   });
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.action === 'sendNativeChat') {
+    if (message?.action === "getIntegrationHealth") {
+      sendResponse({
+        channel: currentChannel,
+        companionActive,
+        fullscreen: window.ChatterinoVotingUi.isFullscreenActive(
+          document,
+          window
+        ),
+        graphqlUpdatedAt: Number(
+          document.documentElement.getAttribute("data-cc-gql-updated") || 0
+        ),
+        activities: activityStore.snapshot(),
+      });
+      return true;
+    }
+    if (message?.action === "sendNativeChat") {
       const result = sendNativeChatMessage(message.message);
       if (result.ok) {
-        forwardRewardClear('sent');
+        forwardRewardClear("sent");
       }
       sendResponse(result);
       return true;
@@ -1848,8 +2260,8 @@
   let streamChatObserved = false;
 
   const observeTarget = () => {
-    const shell = document.querySelector('.chat-shell');
-    const streamChat = document.querySelector('.stream-chat');
+    const shell = document.querySelector(".chat-shell");
+    const streamChat = document.querySelector(".stream-chat");
     if (shell && !shellObserved) {
       observer.observe(shell, { childList: true, subtree: true });
       shellObserved = true;
@@ -1877,16 +2289,22 @@
       }
     }, 1000);
   });
-  bootstrapObserver.observe(document.documentElement, { childList: true, subtree: true });
+  bootstrapObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
 
   const claimBonusObserver = new MutationObserver(() => {
     if (findClaimBonusButton()) {
       scheduleAutoClaimAttempt();
     }
   });
-  claimBonusObserver.observe(document.documentElement, { childList: true, subtree: true });
+  claimBonusObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
 
   scheduleClaimBootstrap();
   scheduleSync();
-  console.log('[Chatterino Companion] Extension script active.');
+  console.log("[Chatterino Companion] Extension script active.");
 })();

@@ -6,6 +6,7 @@
 
 #include "common/Args.hpp"
 #include "common/Channel.hpp"
+#include "common/Common.hpp"
 #include "common/Version.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/Command.hpp"
@@ -206,7 +207,8 @@ Application::~Application()
     INSTANCE = nullptr;
 }
 
-void Application::initialize(Settings &settings, const Paths &paths)
+void Application::initialize(Settings &settings, const Modes &modes,
+                             const Paths &paths)
 {
     assert(!this->initialized);
 
@@ -215,14 +217,16 @@ void Application::initialize(Settings &settings, const Paths &paths)
         getSettings()->currentVersion.getValue() != "" &&
         getSettings()->currentVersion.getValue() != CHATTERINO_VERSION)
     {
-        auto *box = new QMessageBox(QMessageBox::Information, "Chatterino 2",
-                                    "Show changelog?",
-                                    QMessageBox::Yes | QMessageBox::No);
+        auto *box =
+            new QMessageBox(QMessageBox::Information, CHATTERINO_PRODUCT_NAME,
+                            "View Chatterino Better Browser release "
+                            "notes on GitHub?",
+                            QMessageBox::Yes | QMessageBox::No);
         box->setAttribute(Qt::WA_DeleteOnClose);
         if (box->exec() == QMessageBox::Yes)
         {
             QDesktopServices::openUrl(
-                QUrl("https://www.chatterino.com/changelog"));
+                QUrl(LINK_CHATTERINO_RELEASES.toString()));
         }
     }
 
@@ -283,7 +287,7 @@ void Application::initialize(Settings &settings, const Paths &paths)
 
     if (!this->args_.isFramelessEmbed)
     {
-        this->initNm(paths);
+        this->initNm(modes, paths);
     }
 
     this->twitch->initEventAPIs(this->bttvLiveUpdates.get(),
@@ -667,12 +671,13 @@ void Application::stop()
     STOPPED.store(true);
 }
 
-void Application::initNm(const Paths &paths)
+void Application::initNm(const Modes &modes, const Paths &paths)
 {
+    (void)modes;
     (void)paths;
 
 #if defined QT_NO_DEBUG || defined CHATTERINO_DEBUG_NM
-    registerNmHost(paths);
+    registerNmHost(modes, paths);
     this->nmServer->start();
 #endif
 }

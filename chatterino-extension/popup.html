@@ -1,177 +1,235 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
 
-    body {
-      font-family: 'Inter', sans-serif;
-      width: 300px;
-      margin: 0;
-      padding: 16px;
-      background: linear-gradient(135deg, #0e0e13 0%, #171725 100%);
-      color: #e4e4e7;
-      user-select: none;
-    }
+      body {
+        font-family: "Inter", sans-serif;
+        width: 300px;
+        margin: 0;
+        padding: 16px;
+        background: linear-gradient(135deg, #0e0e13 0%, #171725 100%);
+        color: #e4e4e7;
+        user-select: none;
+      }
 
-    body:not(.chatterino-windows) .chatterino-if-windows,
-    body.chatterino-windows .chatterino-if-not-windows {
-      display: none;
-    }
+      body:not(.chatterino-windows) .chatterino-if-windows,
+      body.chatterino-windows .chatterino-if-not-windows {
+        display: none;
+      }
 
-    h3 {
-      margin-top: 0;
-      margin-bottom: 16px;
-      font-size: 16px;
-      font-weight: 600;
-      color: #a970ff;
-      letter-spacing: -0.01em;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+      h3 {
+        margin-top: 0;
+        margin-bottom: 16px;
+        font-size: 16px;
+        font-weight: 600;
+        color: #a970ff;
+        letter-spacing: -0.01em;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
 
-    .card {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      border-radius: 10px;
-      padding: 12px;
-      margin-bottom: 12px;
-      backdrop-filter: blur(10px);
-    }
+      .card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 12px;
+        backdrop-filter: blur(10px);
+      }
 
-    .setting-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-    }
+      .setting-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
 
-    .setting-row:last-child {
-      margin-bottom: 0;
-    }
+      .setting-row:last-child {
+        margin-bottom: 0;
+      }
 
-    .label-group {
-      display: flex;
-      flex-direction: column;
-    }
+      .label-group {
+        display: flex;
+        flex-direction: column;
+      }
 
-    .title {
-      font-size: 13px;
-      font-weight: 500;
-      color: #f4f4f5;
-    }
+      .title {
+        font-size: 13px;
+        font-weight: 500;
+        color: #f4f4f5;
+      }
 
-    .description {
-      font-size: 11px;
-      color: #71717a;
-      margin-top: 2px;
-    }
+      .description {
+        font-size: 11px;
+        color: #71717a;
+        margin-top: 2px;
+      }
 
-    .switch {
-      position: relative;
-      display: inline-block;
-      width: 36px;
-      height: 20px;
-      flex-shrink: 0;
-    }
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 36px;
+        height: 20px;
+        flex-shrink: 0;
+      }
 
-    .switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
 
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #27272a;
-      transition: .3s;
-      border-radius: 20px;
-    }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #27272a;
+        transition: 0.3s;
+        border-radius: 20px;
+      }
 
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 14px;
-      width: 14px;
-      left: 3px;
-      bottom: 3px;
-      background-color: #e4e4e7;
-      transition: .3s;
-      border-radius: 50%;
-    }
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background-color: #e4e4e7;
+        transition: 0.3s;
+        border-radius: 50%;
+      }
 
-    input:checked + .slider {
-      background-color: #a970ff;
-    }
+      input:checked + .slider {
+        background-color: #a970ff;
+      }
 
-    input:checked + .slider:before {
-      transform: translateX(16px);
-      background-color: #ffffff;
-    }
+      input:checked + .slider:before {
+        transform: translateX(16px);
+        background-color: #ffffff;
+      }
 
-    .hint {
-      font-size: 11px;
-      color: #71717a;
-      line-height: 1.4;
-      margin: 0;
-    }
-  </style>
-</head>
-<body>
-  <h3>
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-    </svg>
-    Chatterino Better Browser
-  </h3>
+      .hint {
+        font-size: 11px;
+        color: #71717a;
+        line-height: 1.4;
+        margin: 0;
+      }
 
-  <div class="card">
-    <div class="setting-row chatterino-if-windows">
-      <div class="label-group">
-        <span class="title">Replace Twitch chat</span>
-        <span class="description">Overlay Chatterino on Twitch (reload required)</span>
+      .health-heading {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-bottom: 8px;
+      }
+
+      .health-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #71717a;
+        box-shadow: 0 0 0 3px rgba(113, 113, 122, 0.15);
+      }
+
+      .health-dot.ok {
+        background: #10b981;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+      }
+
+      .health-dot.warning {
+        background: #f59e0b;
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+      }
+
+      .health-dot.error {
+        background: #ef4444;
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+      }
+    </style>
+  </head>
+  <body>
+    <h3>
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+        />
+      </svg>
+      Chatterino Better Browser
+    </h3>
+
+    <div class="card">
+      <div class="setting-row chatterino-if-windows">
+        <div class="label-group">
+          <span class="title">Replace Twitch chat</span>
+          <span class="description"
+            >Overlay Chatterino on Twitch (reload required)</span
+          >
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="replaceTwitchCheckbox" />
+          <span class="slider"></span>
+        </label>
       </div>
-      <label class="switch">
-        <input type="checkbox" id="replaceTwitchCheckbox">
-        <span class="slider"></span>
-      </label>
+      <p class="hint chatterino-if-not-windows">
+        Chat replacement is only supported on Windows.
+      </p>
     </div>
-    <p class="hint chatterino-if-not-windows">Chat replacement is only supported on Windows.</p>
-  </div>
 
-  <div class="card">
-    <div class="setting-row">
-      <div class="label-group">
-        <span class="title">Channel points claimer</span>
-        <span class="description">Auto-claim green chest rewards</span>
+    <div class="card">
+      <div class="setting-row">
+        <div class="label-group">
+          <span class="title">Channel points claimer</span>
+          <span class="description">Auto-claim green chest rewards</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="autoClaimCheckbox" checked />
+          <span class="slider"></span>
+        </label>
       </div>
-      <label class="switch">
-        <input type="checkbox" id="autoClaimCheckbox" checked>
-        <span class="slider"></span>
-      </label>
     </div>
-  </div>
 
-  <div class="card">
-    <div class="label-group" style="margin-bottom: 8px;">
-      <span class="title">Debug Status</span>
-      <span class="description">Live state from the active Twitch tab</span>
+    <div class="card">
+      <div class="health-heading">
+        <span id="healthDot" class="health-dot"></span>
+        <div class="label-group">
+          <span id="healthHeadline" class="title">Checking integration...</span>
+          <span class="description">Live state from Chatterino and Twitch</span>
+        </div>
+      </div>
+      <div
+        id="debugPanel"
+        class="description"
+        style="
+          font-family: monospace;
+          font-size: 10px;
+          line-height: 1.5;
+          white-space: pre-wrap;
+        "
+      ></div>
     </div>
-    <div id="debugPanel" class="description" style="font-family: monospace; font-size: 10px; line-height: 1.5; white-space: pre-wrap;"></div>
-  </div>
 
-  <p class="hint">
-    Make sure <strong>Chatterino Better Browser</strong> is running.
-    Restart the app after loading this extension for native messaging.
-  </p>
+    <p class="hint">
+      Make sure <strong>Chatterino Better Browser</strong> is running. Restart
+      the app after loading this extension for native messaging.
+    </p>
 
-  <script src="popup.js"></script>
-</body>
+    <script src="integration-health.js"></script>
+    <script src="popup.js"></script>
+  </body>
 </html>
