@@ -38,6 +38,11 @@ public:
     using ActionCallback = std::function<void(const QString &)>;
     using EmoteStrategy = Strategy<EmoteItem>;
 
+    enum class ProviderMode {
+        All,
+        SeventvOnly,
+    };
+
     /// @brief Initializes a source for EmoteItems from the given channel
     /// @param channel Channel to initialize emotes from
     /// @param strategy Strategy to apply
@@ -45,6 +50,8 @@ public:
     /// See InputCompletionItem::action(). Can be nullptr.
     EmoteSource(const Channel *channel, std::unique_ptr<EmoteStrategy> strategy,
                 ActionCallback callback = nullptr);
+    EmoteSource(const Channel *channel, std::unique_ptr<EmoteStrategy> strategy,
+                ProviderMode providerMode, ActionCallback callback = nullptr);
 
     void update(const QString &query) override;
     void addToListModel(GenericListModel &model,
@@ -55,7 +62,8 @@ public:
     const std::vector<EmoteItem> &output() const;
 
 private:
-    void initializeFromChannel(const Channel *channel);
+    void initializeFromChannel(const Channel *channel,
+                               ProviderMode providerMode);
 
     std::unique_ptr<EmoteStrategy> strategy_;
     ActionCallback callback_;

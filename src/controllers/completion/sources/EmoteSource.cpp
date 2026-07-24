@@ -57,10 +57,18 @@ void addEmojis(std::vector<EmoteItem> &out, const std::vector<EmojiPtr> &map)
 EmoteSource::EmoteSource(const Channel *channel,
                          std::unique_ptr<EmoteStrategy> strategy,
                          ActionCallback callback)
+    : EmoteSource(channel, std::move(strategy), ProviderMode::All,
+                  std::move(callback))
+{
+}
+
+EmoteSource::EmoteSource(const Channel *channel,
+                         std::unique_ptr<EmoteStrategy> strategy,
+                         ProviderMode providerMode, ActionCallback callback)
     : strategy_(std::move(strategy))
     , callback_(std::move(callback))
 {
-    this->initializeFromChannel(channel);
+    this->initializeFromChannel(channel, providerMode);
 }
 
 void EmoteSource::update(const QString &query)
@@ -90,7 +98,8 @@ void EmoteSource::addToStringList(QStringList &list, size_t maxCount,
     });
 }
 
-void EmoteSource::initializeFromChannel(const Channel *channel)
+void EmoteSource::initializeFromChannel(const Channel *channel,
+                                        ProviderMode providerMode)
 {
     auto *app = getApp();
 
@@ -100,6 +109,25 @@ void EmoteSource::initializeFromChannel(const Channel *channel)
     // /whispers, etc.).
     if (channel->isTwitchChannel())
     {
+        if (providerMode == ProviderMode::SeventvOnly)
+        {
+            if (tc)
+            {
+                if (auto seventv = tc->seventvEmotes())
+                {
+                    addEmotes(emotes, *seventv, "Channel 7TV");
+                }
+            }
+
+            if (auto seventv = app->getSeventvEmotes()->globalEmotes())
+            {
+                addEmotes(emotes, *seventv, "Global 7TV");
+            }
+
+            this->items_ = std::move(emotes);
+            return;
+        }
+
         if (tc)
         {
             if (auto twitch = tc->localTwitchEmotes())

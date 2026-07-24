@@ -76,11 +76,13 @@ std::unique_ptr<completion::Source> InputCompletionPopup::getSource() const
                 return std::make_unique<completion::EmoteSource>(
                     this->currentChannel_.get(),
                     std::make_unique<completion::SmartEmoteStrategy>(),
+                    completion::EmoteSource::ProviderMode::SeventvOnly,
                     this->callback_);
             }
             return std::make_unique<completion::EmoteSource>(
                 this->currentChannel_.get(),
                 std::make_unique<completion::ClassicEmoteStrategy>(),
+                completion::EmoteSource::ProviderMode::SeventvOnly,
                 this->callback_);
         case CompletionKind::User:
             return std::make_unique<completion::UserSource>(

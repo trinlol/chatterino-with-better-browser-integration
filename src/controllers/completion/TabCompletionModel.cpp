@@ -177,12 +177,14 @@ std::unique_ptr<completion::Source> TabCompletionModel::buildEmoteSource() const
     {
         return std::make_unique<completion::EmoteSource>(
             &this->channel_,
-            std::make_unique<completion::SmartTabEmoteStrategy>());
+            std::make_unique<completion::SmartTabEmoteStrategy>(),
+            completion::EmoteSource::ProviderMode::SeventvOnly);
     }
 
     return std::make_unique<completion::EmoteSource>(
         &this->channel_,
-        std::make_unique<completion::ClassicTabEmoteStrategy>());
+        std::make_unique<completion::ClassicTabEmoteStrategy>(),
+        completion::EmoteSource::ProviderMode::SeventvOnly);
 }
 
 std::unique_ptr<completion::Source> TabCompletionModel::buildUserSource(
