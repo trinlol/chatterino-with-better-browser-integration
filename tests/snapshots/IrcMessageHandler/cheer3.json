@@ -106,8 +106,8 @@
                     },
                     "flags": "BitsStatic",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "cheer emote"
                     },
                     "tooltip": "Cheer1<br>Twitch Cheer Emote",
                     "trailingSpace": true,
@@ -125,8 +125,8 @@
                     },
                     "flags": "BitsAnimated",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "cheer emote"
                     },
                     "tooltip": "Cheer1<br>Twitch Cheer Emote",
                     "trailingSpace": true,

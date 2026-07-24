@@ -85,8 +85,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "Kappa"
                     },
                     "tooltip": "Kappa Tooltip",
                     "trailingSpace": true,

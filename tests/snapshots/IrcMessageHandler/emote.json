@@ -104,8 +104,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "Keepo"
                     },
                     "tooltip": "Keepo<br>Twitch Emote",
                     "trailingSpace": true,

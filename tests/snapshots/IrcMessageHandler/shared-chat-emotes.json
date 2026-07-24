@@ -105,8 +105,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "Kappa"
                     },
                     "tooltip": "Kappa<br>Twitch Emote",
                     "trailingSpace": true,
@@ -139,8 +139,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "BTTVGlobal"
                     },
                     "tooltip": "BTTVGlobal Tooltip",
                     "trailingSpace": true,
@@ -174,8 +174,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "7TVGlobal"
                     },
                     "tooltip": "7TVGlobal Tooltip",
                     "trailingSpace": true,
@@ -208,8 +208,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "FFZGlobal"
                     },
                     "tooltip": "FFZGlobal Tooltip",
                     "trailingSpace": true,
@@ -227,8 +227,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "BTTVTwitchDev"
                     },
                     "tooltip": "BTTVTwitchDev Tooltip",
                     "trailingSpace": true,
@@ -247,8 +247,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "7TVTwitchDev"
                     },
                     "tooltip": "7TVTwitchDev Tooltip",
                     "trailingSpace": true,
@@ -266,8 +266,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "FFZTwitchDev"
                     },
                     "tooltip": "FFZTwitchDev Tooltip",
                     "trailingSpace": true,

@@ -122,8 +122,8 @@
                     },
                     "flags": "EmojiImage|EmojiText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "🫣"
                     },
                     "tooltip": ":face_with_peeking_eye:<br/>Emoji",
                     "trailingSpace": true,

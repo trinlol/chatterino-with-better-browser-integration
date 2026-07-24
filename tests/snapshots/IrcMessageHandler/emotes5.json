@@ -85,8 +85,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "fo"
                     },
                     "tooltip": "fo<br>Twitch Emote",
                     "trailingSpace": false,

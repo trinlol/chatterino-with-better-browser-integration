@@ -137,7 +137,12 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
 
     getSettings()->spellCheckingDefaultDictionary.connect(
         [this](const QString &path) {
-            getApp()->getSpellChecker()->loadDictionary(path);
+            auto *spellChecker = getApp()->getSpellChecker();
+            if (!spellChecker)
+            {
+                return;
+            }
+            spellChecker->loadDictionary(path);
             if (this->inputHighlighter)
             {
                 this->inputHighlighter->rehighlight();

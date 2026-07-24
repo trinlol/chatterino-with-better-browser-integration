@@ -109,8 +109,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "Kreygasm"
                     },
                     "tooltip": "Kreygasm<br>Twitch Emote",
                     "trailingSpace": false,
@@ -143,8 +143,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "Kreygasm"
                     },
                     "tooltip": "Kreygasm<br>Twitch Emote",
                     "trailingSpace": true,

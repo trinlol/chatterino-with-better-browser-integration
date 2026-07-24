@@ -85,8 +85,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "BTTVEmote"
                     },
                     "tooltip": "BTTVEmote Tooltip",
                     "trailingSpace": true,
@@ -104,8 +104,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "Kappa"
                     },
                     "tooltip": "Kappa<br>Twitch Emote",
                     "trailingSpace": true,
@@ -159,8 +159,8 @@
                     ],
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "7TVEmote 7TVEmote0w 7TVEmote0w"
                     },
                     "text": {
                         "color": "Text",
@@ -196,8 +196,8 @@
                     },
                     "flags": "EmojiImage|EmojiText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "😂"
                     },
                     "tooltip": ":joy:<br/>Emoji",
                     "trailingSpace": true,
@@ -213,8 +213,8 @@
                     },
                     "flags": "EmojiImage|EmojiText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "😂"
                     },
                     "tooltip": ":joy:<br/>Emoji",
                     "trailingSpace": true,
@@ -232,8 +232,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "PogChamp"
                     },
                     "tooltip": "PogChamp<br>Twitch Emote",
                     "trailingSpace": true,
@@ -252,8 +252,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "7TVGlobal"
                     },
                     "tooltip": "7TVGlobal Tooltip",
                     "trailingSpace": true,
@@ -271,8 +271,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "Keepo"
                     },
                     "tooltip": "Keepo<br>Twitch Emote",
                     "trailingSpace": true,
@@ -290,8 +290,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "FFZEmote"
                     },
                     "tooltip": "FFZEmote Tooltip",
                     "trailingSpace": true,
@@ -309,8 +309,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "FFZGlobal"
                     },
                     "tooltip": "FFZGlobal Tooltip",
                     "trailingSpace": true,

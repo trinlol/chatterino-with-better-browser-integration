@@ -35,6 +35,23 @@ void addEmotes(std::vector<EmoteItem> &out, const EmoteMap &map,
     }
 }
 
+void addEmojis(std::vector<EmoteItem> &out, const std::vector<EmojiPtr> &map)
+{
+    for (const auto &emoji : map)
+    {
+        for (auto &&shortCode : emoji->shortCodes)
+        {
+            out.push_back(
+                {.emote = emoji->emote,
+                 .searchName = shortCode,
+                 .tabCompletionName = QStringLiteral(":%1:").arg(shortCode),
+                 .displayName = shortCode,
+                 .providerName = "Emoji",
+                 .isEmoji = true});
+        }
+    }
+}
+
 }  // namespace
 
 EmoteSource::EmoteSource(const Channel *channel,
@@ -79,18 +96,49 @@ void EmoteSource::initializeFromChannel(const Channel *channel)
 
     std::vector<EmoteItem> emotes;
     const auto *tc = dynamic_cast<const TwitchChannel *>(channel);
-    if (channel->isTwitchChannel() && tc)
+    // Returns true also for special Twitch channels (/live, /mentions,
+    // /whispers, etc.).
+    if (channel->isTwitchChannel())
     {
-        if (auto seventv = tc->seventvEmotes())
+        if (tc)
         {
-            addEmotes(emotes, *seventv, "Channel 7TV");
+            if (auto twitch = tc->localTwitchEmotes())
+            {
+                addEmotes(emotes, *twitch, "Local Twitch Emotes");
+            }
+
+            auto user = app->getAccounts()->twitch.getCurrent();
+            addEmotes(emotes, **user->accessEmotes(), "Twitch Emote");
+
+            if (auto bttv = tc->bttvEmotes())
+            {
+                addEmotes(emotes, *bttv, "Channel BetterTTV");
+            }
+            if (auto ffz = tc->ffzEmotes())
+            {
+                addEmotes(emotes, *ffz, "Channel FrankerFaceZ");
+            }
+            if (auto seventv = tc->seventvEmotes())
+            {
+                addEmotes(emotes, *seventv, "Channel 7TV");
+            }
+        }
+
+        if (auto bttvG = app->getBttvEmotes()->emotes())
+        {
+            addEmotes(emotes, *bttvG, "Global BetterTTV");
+        }
+        if (auto ffzG = app->getFfzEmotes()->emotes())
+        {
+            addEmotes(emotes, *ffzG, "Global FrankerFaceZ");
+        }
+        if (auto seventvG = app->getSeventvEmotes()->globalEmotes())
+        {
+            addEmotes(emotes, *seventvG, "Global 7TV");
         }
     }
 
-    if (auto seventvG = app->getSeventvEmotes()->globalEmotes())
-    {
-        addEmotes(emotes, *seventvG, "Global 7TV");
-    }
+    addEmojis(emotes, app->getEmotes()->getEmojis()->getEmojis());
 
     this->items_ = std::move(emotes);
 }
