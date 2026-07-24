@@ -133,6 +133,75 @@ EmotePtr findEmoteByName(const QString &name, const Channel *channel)
     return nullptr;
 }
 
+EmotePtr findSeventvEmoteByName(const QString &name, const Channel *channel)
+{
+    if (name.isEmpty())
+    {
+        return nullptr;
+    }
+
+    const auto *tc = dynamic_cast<const TwitchChannel *>(channel);
+    if (tc)
+    {
+        if (auto seventv = tc->seventvEmotes())
+        {
+            auto it = seventv->find(EmoteName{name});
+            if (it != seventv->end())
+            {
+                return it->second;
+            }
+        }
+    }
+
+    if (auto global = getApp()->getSeventvEmotes()->globalEmotes())
+    {
+        auto it = global->find(EmoteName{name});
+        if (it != global->end())
+        {
+            return it->second;
+        }
+    }
+
+    return nullptr;
+}
+
+namespace {
+
+bool selectPreviousInlineEmote(QTextCursor &cursor)
+{
+    const auto end = cursor.position();
+    if (end < 2)
+    {
+        return false;
+    }
+
+    auto trailingSpace = cursor;
+    trailingSpace.setPosition(end - 1, QTextCursor::KeepAnchor);
+    if (trailingSpace.selectedText() != QStringLiteral(" "))
+    {
+        return false;
+    }
+
+    auto image = cursor;
+    image.setPosition(end - 1);
+    image.setPosition(end - 2, QTextCursor::KeepAnchor);
+    if (!image.charFormat().isImageFormat())
+    {
+        return false;
+    }
+
+    const auto format = image.charFormat().toImageFormat();
+    if (!format.name().startsWith(u"emote://"))
+    {
+        return false;
+    }
+
+    cursor.setPosition(end - 2, QTextCursor::KeepAnchor);
+    return true;
+}
+
+}  // namespace
+
 ResizingTextEdit::ResizingTextEdit()
 {
     auto sizePolicy = this->sizePolicy();
@@ -533,36 +602,23 @@ void ResizingTextEdit::keyPressEvent(QKeyEvent *event)
     if (event->key() == Qt::Key_Space &&
         (event->modifiers() & Qt::ControlModifier) == Qt::NoModifier)
     {
-        QString word = this->textUnderCursor();
-        if (!word.isEmpty())
+        auto existingEmote = this->textCursor();
+        if (!selectPreviousInlineEmote(existingEmote))
         {
-            EmotePtr emote = nullptr;
-            if (this->getChannel)
-            {
-                auto channel = this->getChannel();
-                const auto *tc =
-                    dynamic_cast<const TwitchChannel *>(channel.get());
-                if (tc)
-                {
-                    if (auto seventv = tc->seventvEmotes())
-                    {
-                        auto it = seventv->find(EmoteName{word});
-                        if (it != seventv->end())
-                        {
-                            emote = it->second;
-                        }
-                    }
-                }
-            }
-
+            bool hadSpace = false;
+            const auto word = this->textUnderCursor(&hadSpace);
+            auto channel = this->getChannel ? this->getChannel() : nullptr;
+            auto emote = findSeventvEmoteByName(word, channel.get());
             if (emote)
             {
-                QTextCursor tc = this->textCursor();
-                tc.setPosition(tc.position() - word.size(),
-                               QTextCursor::KeepAnchor);
-                tc.removeSelectedText();
-                this->setTextCursor(tc);
+                auto cursor = this->textCursor();
+                auto replaceLength = word.size() + (hadSpace ? 1 : 0);
+                cursor.setPosition(cursor.position() - replaceLength,
+                                   QTextCursor::KeepAnchor);
+                cursor.removeSelectedText();
+                this->setTextCursor(cursor);
                 this->insertEmote(emote);
+                this->completionInProgress_ = false;
                 event->accept();
                 return;
             }
@@ -602,7 +658,8 @@ void ResizingTextEdit::keyPressEvent(QKeyEvent *event)
             this->completer_->setModel(completionModel);
             completionModel->updateResults(
                 currentCompletion, this->toPlainText(),
-                this->textCursor().position(), this->isFirstWord());
+                this->textUpToPosition(this->textCursor().position()).size(),
+                this->isFirstWord());
             this->completionInProgress_ = true;
             {
                 // this blocks cursor movement events from resetting tab completion
@@ -721,23 +778,15 @@ void ResizingTextEdit::insertCompletion(const QString &completion)
     }
 
     QTextCursor tc = this->textCursor();
-    int completionStart = tc.position() - prefixSize;
-    tc.setPosition(completionStart, QTextCursor::KeepAnchor);
-
-    QString emoteName = completion.trimmed();
-    EmotePtr emote = nullptr;
-    if (this->getChannel)
+    if (!selectPreviousInlineEmote(tc))
     {
-        auto channel = this->getChannel();
-        if (channel)
-        {
-            emote = findEmoteByName(emoteName, channel.get());
-        }
+        int completionStart = tc.position() - prefixSize;
+        tc.setPosition(completionStart, QTextCursor::KeepAnchor);
     }
 
-    if (emote && (emote->homePage.string.contains("7tv") ||
-                  (emote->images.getImage1() &&
-                   emote->images.getImage1()->url().string.contains("7tv"))))
+    auto channel = this->getChannel ? this->getChannel() : nullptr;
+    auto emote = findSeventvEmoteByName(completion.trimmed(), channel.get());
+    if (emote)
     {
         tc.removeSelectedText();
         this->setTextCursor(tc);

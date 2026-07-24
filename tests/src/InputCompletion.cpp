@@ -11,6 +11,7 @@
 #include "controllers/completion/strategies/SmartEmoteStrategy.hpp"
 #include "controllers/completion/strategies/Strategy.hpp"
 #include "messages/Emote.hpp"
+#include "messages/Image.hpp"
 #include "mocks/BaseApplication.hpp"
 #include "mocks/Channel.hpp"
 #include "mocks/EmoteController.hpp"
@@ -20,8 +21,10 @@
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
 #include "Test.hpp"
+#include "widgets/helper/ResizingTextEdit.hpp"
 #include "widgets/splits/InputCompletionPopup.hpp"
 
+#include <QCompleter>
 #include <QDir>
 #include <QFile>
 #include <QModelIndex>
@@ -119,7 +122,7 @@ EmotePtr namedEmote(const EmoteName &name)
 {
     return std::shared_ptr<Emote>(new Emote{
         .name{name},
-        .images{},
+        .images{Image::getEmpty()},
         .tooltip{},
         .zeroWidth{},
         .id{},
@@ -263,6 +266,36 @@ protected:
                                                          isFirstWord);
     }
 };
+
+TEST_F(InputCompletionTest, CompletionRendersAndCyclesInlineEmotes)
+{
+    ResizingTextEdit edit;
+    QStringListModel model({QStringLiteral("pajaW ")});
+    QCompleter completer(&model);
+    edit.setCompleter(&completer);
+    edit.getChannel = [this] {
+        return this->channelPtr;
+    };
+    edit.setPlainText(QStringLiteral("paj"));
+    auto cursor = edit.textCursor();
+    cursor.movePosition(QTextCursor::End);
+    edit.setTextCursor(cursor);
+
+    Q_EMIT completer.highlighted(QStringLiteral("pajaW "));
+
+    EXPECT_EQ(edit.toPlainText(), QStringLiteral("pajaW "));
+    EXPECT_EQ(edit.document()->toPlainText(),
+              QString(QChar::ObjectReplacementCharacter) + ' ');
+
+    Q_EMIT completer.highlighted(QStringLiteral("PAJAW "));
+
+    EXPECT_EQ(edit.toPlainText(), QStringLiteral("PAJAW "));
+    EXPECT_EQ(edit.document()->toPlainText(),
+              QString(QChar::ObjectReplacementCharacter) + ' ');
+
+    edit.insertPlainText(QStringLiteral(":pa"));
+    EXPECT_EQ(edit.textUnderCursor(), QStringLiteral(":pa"));
+}
 
 TEST_F(InputCompletionTest, SeventvOnlyPopupCompletion)
 {

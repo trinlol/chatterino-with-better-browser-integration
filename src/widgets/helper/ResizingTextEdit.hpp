@@ -19,6 +19,7 @@ struct Emote;
 using EmotePtr = std::shared_ptr<const Emote>;
 
 EmotePtr findEmoteByName(const QString &name, const Channel *channel);
+EmotePtr findSeventvEmoteByName(const QString &name, const Channel *channel);
 
 class ResizingTextEdit : public QTextEdit
 {
