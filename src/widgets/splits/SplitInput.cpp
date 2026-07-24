@@ -1094,16 +1094,16 @@ void SplitInput::installTextEditEvents()
 
         if (event->key() == Qt::Key_Tab && event->modifiers() == Qt::NoModifier)
         {
-            QString word = this->ui_.textEdit->textUnderCursor();
+            const auto word = this->ui_.textEdit->textUnderCursor();
             if (word.length() >= 2)
             {
-                CompletionKind kind = CompletionKind::Emote;
-                if (word.startsWith('@'))
-                {
-                    kind = CompletionKind::User;
-                }
+                const auto kind = word.startsWith('@') ? CompletionKind::User
+                                                       : CompletionKind::Emote;
                 if (this->showCompletionPopup(word, kind))
                 {
+                    // The popup owns this Tab press. Clear any previous inline
+                    // completion so it cannot resume with a stale prefix.
+                    this->ui_.textEdit->resetCompletion();
                     event->accept();
                     return;
                 }
@@ -1259,53 +1259,24 @@ void SplitInput::updateCompletionPopup()
         return;
     }
 
-    // check if in completion prefix
     auto &edit = *this->ui_.textEdit;
-
-    auto text = edit.toPlainText();
-    auto position = edit.textCursor().position() - 1;
-
-    if (text.length() == 0 || position == -1)
+    const auto word = edit.textUnderCursor();
+    if (word.isEmpty())
     {
         this->hideCompletionPopup();
         return;
     }
 
-    for (int i = std::clamp(position, 0, (int)text.length() - 1); i >= 0; i--)
+    if (word.startsWith(':') && showEmoteCompletion)
     {
-        if (text[i] == ' ')
-        {
-            this->hideCompletionPopup();
-            return;
-        }
+        this->showCompletionPopup(word, CompletionKind::Emote);
+        return;
+    }
 
-        if (text[i] == ':' && showEmoteCompletion)
-        {
-            if (i == 0 || text[i - 1].isSpace())
-            {
-                this->showCompletionPopup(text.mid(i, position - i + 1),
-                                          CompletionKind::Emote);
-            }
-            else
-            {
-                this->hideCompletionPopup();
-            }
-            return;
-        }
-
-        if (text[i] == '@' && showUsernameCompletion)
-        {
-            if (i == 0 || text[i - 1].isSpace())
-            {
-                this->showCompletionPopup(text.mid(i, position - i + 1),
-                                          CompletionKind::User);
-            }
-            else
-            {
-                this->hideCompletionPopup();
-            }
-            return;
-        }
+    if (word.startsWith('@') && showUsernameCompletion)
+    {
+        this->showCompletionPopup(word, CompletionKind::User);
+        return;
     }
 
     this->hideCompletionPopup();
@@ -1358,43 +1329,12 @@ void SplitInput::insertCompletionText(const QString &input_) const
     auto &edit = *this->ui_.textEdit;
     auto input = input_ + ' ';
 
-    auto text = edit.toPlainText();
+    bool hadSpace = false;
+    const auto prefix = edit.textUnderCursor(&hadSpace);
     auto originalPosition = edit.textCursor().position();
-    auto position = originalPosition - 1;
-
-    int replaceStart = -1;
-    bool prependAt = false;
-
-    for (int i = std::clamp(position, 0, (int)text.length() - 1); i >= 0; i--)
-    {
-        if (text[i] == ' ')
-        {
-            break;
-        }
-        if (text[i] == ':')
-        {
-            replaceStart = i;
-            break;
-        }
-        if (text[i] == '@')
-        {
-            replaceStart = i;
-            prependAt = true;
-            break;
-        }
-    }
-
-    if (replaceStart == -1)
-    {
-        // No prefix found, find the start of the word
-        int i = std::clamp(position, 0, (int)text.length() - 1);
-        while (i >= 0 && text[i] != ' ')
-        {
-            i--;
-        }
-        replaceStart = i + 1;
-    }
-    else if (prependAt)
+    auto replaceLength = prefix.size() + (hadSpace ? 1 : 0);
+    bool userCompletion = prefix.startsWith('@');
+    if (userCompletion)
     {
         const auto userMention = formatUserMention(
             input_, edit.isFirstWord(), getSettings()->mentionUsersWithComma);
@@ -1402,16 +1342,12 @@ void SplitInput::insertCompletionText(const QString &input_) const
     }
 
     auto cursor = edit.textCursor();
-    cursor.setPosition(replaceStart);
+    cursor.setPosition(originalPosition - replaceLength);
     cursor.setPosition(originalPosition, QTextCursor::KeepAnchor);
 
-    EmotePtr emote = nullptr;
     auto channel = this->split_->getChannel();
-    if (channel)
-    {
-        emote = findEmoteByName(input_, channel.get());
-    }
-
+    auto emote = userCompletion ? nullptr
+                                : findSeventvEmoteByName(input_, channel.get());
     if (emote)
     {
         cursor.removeSelectedText();
@@ -1427,6 +1363,11 @@ void SplitInput::insertCompletionText(const QString &input_) const
 
 void SplitInput::insertEmote(const EmotePtr &emote)
 {
+    if (!emote)
+    {
+        return;
+    }
+
     this->ui_.textEdit->insertEmote(emote);
 }
 

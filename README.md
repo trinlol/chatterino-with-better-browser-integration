@@ -22,7 +22,7 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
     <td rowspan="2" valign="top" align="center" width="42%">
       <img src="./docs/showcase/chatterino-overlay.gif" width="300" alt="Full Chatterino chat overlay on Twitch with pinned banner, replies, and emotes">
       <br>
-      <sub><b>Full chat preview</b> — pinned messages, input field inline emotes, and ctrl+click to input emotes directly from user messages.</sub>
+      <sub><b>Full chat preview</b> — pinned messages, inline input emotes, and ctrl+click to input emotes directly from user messages.</sub>
     </td>
     <td valign="top" align="center" width="58%">
       <img src="./docs/showcase/emote-picker.gif" width="300" alt="Emote favourites picker with channel, 7TV, and search tabs">
@@ -79,10 +79,12 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 - ⚡ **Stable browser overlay** — fixes flicker, disappearing chat, and runaway CPU from native messaging
 - 🔄 **Fork-only updates** — update prompts and first-run release notes use this repository, never the upstream Chatterino download site
 
-### 💬 Rich emote input (fork-exclusive)
+### 💬 Better emote input (fork-exclusive)
 
-- 🖼️ **Inline emotes in the input field** — typed emotes render as images inside your message box, not just plain text
-- ⌨️ **Tab completion menu** — press **Tab** while typing to open an emote autocomplete popup with previews
+- 7️⃣ **7TV-only autocomplete** — both Tab completion and the visual `:` menu exclude Twitch, BTTV, FFZ, and emoji entries
+- ⌨️ **Reliable Tab cycling** — press **Tab** or **Shift+Tab** to cycle forward or backward through matching 7TV emotes without losing your typed text
+- 🔎 **Visual emote menu** — type `:` at the start of a word to browse 7TV emotes with previews; choosing one inserts editable text
+- 🖼️ **Inline emotes in the input** — typed, completed, and clicked 7TV emotes render as images; Tab and Shift+Tab still cycle safely
 - ⭐ **Emote favourites tab** — **Ctrl+click** any emote in chat to add it to your Favourites; open the emote picker to find them quickly
 - 👆 **Click-to-type emotes** — click a single emote from another user's message to insert it straight into your input
 
