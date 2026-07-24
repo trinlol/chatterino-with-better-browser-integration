@@ -5,7 +5,6 @@
 #include "messages/layouts/MessageLayoutElement.hpp"
 
 #include "Application.hpp"
-#include "common/Channel.hpp"
 #include "messages/Emote.hpp"
 #include "messages/Image.hpp"
 #include "messages/layouts/MessageLayoutContext.hpp"
@@ -13,13 +12,8 @@
 #include "providers/twitch/TwitchEmotes.hpp"
 #include "singletons/Settings.hpp"
 #include "util/DebugCount.hpp"
-#include "widgets/dialogs/EmotePopup.hpp"
-#include "widgets/helper/ChannelView.hpp"
 
 #include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QPainter>
 #include <QPainterPath>
 #include <QWidget>
@@ -71,54 +65,16 @@ std::optional<EmotePtr> emoteFromLayoutElement(MessageLayoutElement *element)
 }
 
 void drawFavouriteStar(QPainter &painter, const QRectF &rect,
-                       MessageLayoutElement *element, QWidget *hostWidget)
+                       MessageLayoutElement *element, QWidget * /*hostWidget*/)
 {
-    if (hostWidget == nullptr)
-    {
-        return;
-    }
-
-    auto *channelView = dynamic_cast<ChannelView *>(hostWidget);
-    if (channelView == nullptr)
-    {
-        return;
-    }
-
-    auto *popup = dynamic_cast<EmotePopup *>(channelView->window());
-    if (popup == nullptr)
-    {
-        return;
-    }
-
     auto emote = emoteFromLayoutElement(element);
     if (!emote)
     {
         return;
     }
 
-    auto activeChannel = popup->getChannel();
-    if (!activeChannel)
-    {
-        return;
-    }
-
-    QString channelName = activeChannel->getName().toLower();
-    auto favsStr = getSettings()->favouriteEmotes.getValue();
-    QJsonDocument doc = QJsonDocument::fromJson(favsStr.toUtf8());
-    QJsonObject root = doc.object();
-    QJsonArray favsArr = root[channelName].toArray();
-
-    bool isFavourited = false;
-    for (const auto &val : favsArr)
-    {
-        if (val.toString() == (*emote)->name.string)
-        {
-            isFavourited = true;
-            break;
-        }
-    }
-
-    if (!isFavourited)
+    if (!getSettings()->favouriteEmotes.getValue().contains(
+            (*emote)->name.string))
     {
         return;
     }

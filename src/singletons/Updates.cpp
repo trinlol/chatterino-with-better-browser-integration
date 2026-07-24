@@ -92,8 +92,9 @@ std::optional<GithubRelease> latestGithubRelease(const QJsonArray &releases,
 
 namespace chatterino {
 
-Updates::Updates(const Paths &paths_, Settings &settings)
+Updates::Updates(const Modes &modes_, const Paths &paths_, Settings &settings)
     : paths(paths_)
+    , modes(modes_)
     , currentVersion_(CHATTERINO_VERSION)
     , updateGuideLink_(RELEASES_URL)
 {
@@ -246,9 +247,9 @@ Updates::Status Updates::getStatus() const
     return this->status_;
 }
 
-QString Updates::portableUpdaterPath()
+QString Updates::portableUpdaterPath(const Paths &paths)
 {
-    return combinePath(QCoreApplication::applicationDirPath(),
+    return combinePath(paths.rootAppDataDirectory,
                        "updater.1/ChatterinoUpdater.exe");
 }
 
