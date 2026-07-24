@@ -51,11 +51,11 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 ## 🚀 Quick start (prebuilt)
 
 1. 📦 Download the latest **Chatterino Better Browser Windows** archive from [Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest)
-2. 🗑️ **Uninstall** the old Chatterino app from Windows if you have it *(your settings are safe — see below)*
+2. 🗑️ **Uninstall** the old Chatterino app from Windows if you have it _(your settings are safe — see below)_
 3. 📂 Extract the zip **anywhere you like** (e.g. `C:\Apps\Chatterino Better Browser\`)
-4. 🔗 Right-click **`Chatterino Better Browser.exe`** → **Send to** → **Desktop (create shortcut)** *(or pin to Start / taskbar)*
+4. 🔗 Right-click **`Chatterino Better Browser.exe`** → **Send to** → **Desktop (create shortcut)** _(or pin to Start / taskbar)_
 5. ▶️ Launch from your new shortcut
-6. 🧩 Install the **one** browser extension below *(required)*
+6. 🧩 Install the **one** browser extension below _(required)_
 7. 🔄 Restart the app after loading the extension so native messaging registers
 
 > 💡 **Already use Chatterino?** Your existing settings, accounts, and window layout load automatically — uninstalling the old app does **not** delete them. See [Settings & migration](#-settings--migration) below.
@@ -101,10 +101,10 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 
 **Yes.** Chatterino Better Browser uses the **same settings location** as the official Chatterino 2 installer and portable builds:
 
-| Mode | Config location |
-|------|-----------------|
-| **Installed / zip (default)** | `%APPDATA%\Chatterino2\` |
-| **Portable** (empty `portable` file next to the `.exe`) | Next to the executable |
+| Mode                                                    | Config location          |
+| ------------------------------------------------------- | ------------------------ |
+| **Installed / zip (default)**                           | `%APPDATA%\Chatterino2\` |
+| **Portable** (empty `portable` file next to the `.exe`) | Next to the executable   |
 
 That folder contains everything: `Settings/settings.json`, accounts, window layout, favourite emotes, plugins, themes, and logs.
 
@@ -113,19 +113,19 @@ That folder contains everything: `Settings/settings.json`, accounts, window layo
 You do **not** need the official Chatterino installed to run this fork. Your settings live in `%APPDATA%\Chatterino2\` — **not** inside the old install folder — so uninstalling Chatterino is safe.
 
 1. ⏹️ **Close** Chatterino completely
-2. 🗑️ **Uninstall** the official Chatterino app from Windows *(Settings → Apps → Chatterino → Uninstall)*  
-   ✅ Your splits, accounts, favourite emotes, themes, and window layout **stay saved** in `%APPDATA%\Chatterino2\`
+2. 🗑️ **Uninstall** the official Chatterino app from Windows _(Settings → Apps → Chatterino → Uninstall)_
+   - ✅ Your splits, accounts, favourite emotes, themes, and window layout **stay saved** in `%APPDATA%\Chatterino2\`
 3. 📥 Download and extract **Chatterino Better Browser** to **any folder** you want
 4. 🔗 **Create a shortcut** — Desktop, Start, or taskbar
 5. ▶️ Launch from your shortcut — everything loads from the same `settings.json` as before
 
 ### 📦 Portable vs installed
 
-| | Portable zip | Installed (future) |
-|--|--------------|------------------|
-| Config | `%APPDATA%\Chatterino2\` (shared) | `%APPDATA%\Chatterino2\` (shared) |
-| Updates | Re-download zip | Installer overwrites `.exe` only |
-| Best for | Trying the fork, no admin rights | Daily driver, Start Menu shortcut |
+|          | Portable zip                      | Installed (future)                |
+| -------- | --------------------------------- | --------------------------------- |
+| Config   | `%APPDATA%\Chatterino2\` (shared) | `%APPDATA%\Chatterino2\` (shared) |
+| Updates  | Re-download zip                   | Installer overwrites `.exe` only  |
+| Best for | Trying the fork, no admin rights  | Daily driver, Start Menu shortcut |
 
 ---
 
@@ -181,13 +181,13 @@ windeployqt "bin/Chatterino Better Browser.exe" --release --no-compiler-runtime 
 
 ## 📂 Repository layout
 
-| Path | Description |
-|------|-------------|
-| [`src/`](./src/) | 🖥️ Chatterino Better Browser C++ application |
-| [`chatterino-extension/`](./chatterino-extension/) | 🧩 Unified browser extension *(the only one you need)* |
-| [`lib/`](./lib/) | 📚 Vendored dependencies (git submodules) |
-| [`resources/`](./resources/) | 🎨 Icons, themes, assets |
-| [`docs/showcase/`](./docs/showcase/) | 📸 README screenshots |
+| Path                                               | Description                                            |
+| -------------------------------------------------- | ------------------------------------------------------ |
+| [`src/`](./src/)                                   | 🖥️ Chatterino Better Browser C++ application           |
+| [`chatterino-extension/`](./chatterino-extension/) | 🧩 Unified browser extension _(the only one you need)_ |
+| [`lib/`](./lib/)                                   | 📚 Vendored dependencies (git submodules)              |
+| [`resources/`](./resources/)                       | 🎨 Icons, themes, assets                               |
+| [`docs/showcase/`](./docs/showcase/)               | 📸 README screenshots                                  |
 
 ---
 

@@ -4,11 +4,6 @@
 
 #include "widgets/helper/ChannelView.hpp"
 
-#include "widgets/dialogs/EmotePopup.hpp"
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-
 #include "Application.hpp"
 #include "common/Common.hpp"
 #include "common/QLogging.hpp"
@@ -44,6 +39,7 @@
 #include "util/QMagicEnum.hpp"
 #include "util/Twitch.hpp"
 #include "widgets/buttons/LabelButton.hpp"
+#include "widgets/dialogs/EmotePopup.hpp"
 #include "widgets/dialogs/ReplyThreadPopup.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
 #include "widgets/dialogs/UserInfoPopup.hpp"
@@ -66,7 +62,9 @@
 #include <QEasingCurve>
 #include <QGestureEvent>
 #include <QGraphicsBlurEffect>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QMessageBox>
 #include <QPainter>
 #include <QScreen>
@@ -199,7 +197,8 @@ std::optional<EmotePtr> getClickedEmote(const MessageLayoutElement *element)
         return std::nullopt;
     }
 
-    if (const auto *emoteElement = dynamic_cast<const EmoteElement *>(&element->getCreator()))
+    if (const auto *emoteElement =
+            dynamic_cast<const EmoteElement *>(&element->getCreator()))
     {
         return emoteElement->getEmote();
     }
@@ -737,9 +736,9 @@ void ChannelView::layoutVisibleMessages(
         {
             const auto &message = messages[i];
 
-            redrawRequired |= message->layout(
-                this->makeMessageLayoutContext(layoutWidth),
-                this->bufferInvalidationQueued_);
+            redrawRequired |=
+                message->layout(this->makeMessageLayoutContext(layoutWidth),
+                                this->bufferInvalidationQueued_);
 
             y += message->getHeight();
         }
@@ -1520,9 +1519,8 @@ void ChannelView::scrollToMessageIndexAtBottom(size_t messageIdx)
     auto &scrollbar = this->getScrollBar();
     const qreal target = scrollbar.getMinimum() + qreal(messageIdx) -
                          scrollbar.getPageSize() + 1;
-    scrollbar.setDesiredValue(
-        std::max(scrollbar.getMinimum(),
-                 std::min(scrollbar.getBottom(), target)));
+    scrollbar.setDesiredValue(std::max(
+        scrollbar.getMinimum(), std::min(scrollbar.getBottom(), target)));
 }
 
 bool ChannelView::scrollToMessageId(const QString &messageId)
@@ -2453,9 +2451,12 @@ void ChannelView::handleMouseClick(QMouseEvent *event,
                     auto activeChannel = popup->getChannel();
                     if (activeChannel)
                     {
-                        QString channelName = activeChannel->getName().toLower();
-                        auto favsStr = getSettings()->favouriteEmotes.getValue();
-                        QJsonDocument doc = QJsonDocument::fromJson(favsStr.toUtf8());
+                        QString channelName =
+                            activeChannel->getName().toLower();
+                        auto favsStr =
+                            getSettings()->favouriteEmotes.getValue();
+                        QJsonDocument doc =
+                            QJsonDocument::fromJson(favsStr.toUtf8());
                         QJsonObject root = doc.object();
                         QJsonArray favsArr = root[channelName].toArray();
 
@@ -2479,7 +2480,8 @@ void ChannelView::handleMouseClick(QMouseEvent *event,
                         root[channelName] = newArr;
                         doc.setObject(root);
                         getSettings()->favouriteEmotes.setValue(
-                            QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
+                            QString::fromUtf8(
+                                doc.toJson(QJsonDocument::Compact)));
 
                         popup->reloadEmotes();
                     }
@@ -3334,8 +3336,8 @@ MessageLayoutContext ChannelView::makeMessageLayoutContext(
         .flags = this->getFlags(),
         .width = layoutWidth,
         .scale = this->scale(),
-        .imageScale = this->scale() *
-                      static_cast<float>(this->devicePixelRatio()),
+        .imageScale =
+            this->scale() * static_cast<float>(this->devicePixelRatio()),
         .showDatePrefixWhenNotToday = this->context_ == Context::UserCard,
     };
 }

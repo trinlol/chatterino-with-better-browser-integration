@@ -216,8 +216,7 @@ void Application::initialize(Settings &settings, const Paths &paths)
         getSettings()->currentVersion.getValue() != CHATTERINO_VERSION)
     {
         auto *box = new QMessageBox(QMessageBox::Information,
-                                    CHATTERINO_PRODUCT_NAME,
-                                    "Show changelog?",
+                                    CHATTERINO_PRODUCT_NAME, "Show changelog?",
                                     QMessageBox::Yes | QMessageBox::No);
         box->setAttribute(Qt::WA_DeleteOnClose);
         if (box->exec() == QMessageBox::Yes)

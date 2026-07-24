@@ -5,25 +5,25 @@
 #include "messages/layouts/MessageLayoutElement.hpp"
 
 #include "Application.hpp"
+#include "common/Channel.hpp"
 #include "messages/Emote.hpp"
 #include "messages/Image.hpp"
 #include "messages/layouts/MessageLayoutContext.hpp"
 #include "messages/MessageElement.hpp"
 #include "providers/twitch/TwitchEmotes.hpp"
-#include "util/DebugCount.hpp"
-
-#include <QDebug>
-#include <QPainter>
-#include <QPainterPath>
-
 #include "singletons/Settings.hpp"
+#include "util/DebugCount.hpp"
 #include "widgets/dialogs/EmotePopup.hpp"
 #include "widgets/helper/ChannelView.hpp"
-#include "common/Channel.hpp"
+
+#include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPainter>
+#include <QPainterPath>
 #include <QWidget>
+
 #include <cmath>
 #include <optional>
 
@@ -128,7 +128,8 @@ void drawFavouriteStar(QPainter &painter, const QRectF &rect,
     painter.setRenderHint(QPainter::Antialiasing);
 
     double R = rect.height() * 0.18;
-    if (R < 4.0) R = 4.0;
+    if (R < 4.0)
+        R = 4.0;
     double r = R * 0.4;
     double cx = rect.right() - R - 1.0;
     double cy = rect.top() + R + 1.0;
@@ -162,8 +163,8 @@ void drawFavouriteStar(QPainter &painter, const QRectF &rect,
     }
     starPath.closeSubpath();
 
-    painter.setBrush(QColor(255, 215, 0)); // Gold
-    painter.setPen(QPen(QColor(218, 165, 32), 0.75)); // Darker gold outline
+    painter.setBrush(QColor(255, 215, 0));             // Gold
+    painter.setPen(QPen(QColor(218, 165, 32), 0.75));  // Darker gold outline
     painter.drawPath(starPath);
 
     painter.restore();

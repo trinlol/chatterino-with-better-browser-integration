@@ -932,7 +932,8 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
     {
         auto *note = layout.addDescription(
-            "A semicolon-separated list of Chrome, Edge, or Firefox extension IDs "
+            "A semicolon-separated list of Chrome, Edge, or Firefox extension "
+            "IDs "
             "allowed to interact with Chatterino's browser integration "
             "(requires restart).\n"
             "Using multiple extension IDs from different browsers may cause "

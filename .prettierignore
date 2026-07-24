@@ -9,6 +9,8 @@ tests/snapshots/**/*.json
 # Ignore submodule files
 lib/*/
 !lib/twitch-eventsub-ws
+lib/twitch-eventsub-ws/lib/date/
+lib/twitch-eventsub-ws/lib/fmt/
 conan-pkgs/*/
 cmake/sanitizers-cmake/
 tools/crash-handler

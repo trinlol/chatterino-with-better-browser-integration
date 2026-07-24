@@ -1,11 +1,11 @@
-import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const extensionDir = path.join(root, 'chatterino-extension');
-const manifestPath = path.join(extensionDir, 'manifest.json');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const extensionDir = path.join(root, "chatterino-extension");
+const manifestPath = path.join(extensionDir, "manifest.json");
 
 function fail(message) {
   console.error(`extension validation: ${message}`);
@@ -40,7 +40,7 @@ function referencedManifestFiles(manifest) {
 
 let manifest;
 try {
-  manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 } catch (error) {
   fail(`manifest.json is not valid JSON: ${error.message}`);
 }
@@ -56,29 +56,33 @@ if (manifest) {
   }
 }
 
-for (const file of walk(extensionDir).filter((item) => /\.(?:js|mjs)$/.test(item))) {
-  const checked = spawnSync(process.execPath, ['--check', file], {
+for (const file of walk(extensionDir).filter((item) =>
+  /\.(?:js|mjs)$/.test(item)
+)) {
+  const checked = spawnSync(process.execPath, ["--check", file], {
     cwd: root,
-    encoding: 'utf8',
+    encoding: "utf8",
   });
   if (checked.status !== 0) {
-    fail(`syntax check failed for ${path.relative(root, file)}\n${checked.stderr}`);
+    fail(
+      `syntax check failed for ${path.relative(root, file)}\n${checked.stderr}`
+    );
   }
 }
 
 if (process.exitCode) process.exit(process.exitCode);
 
-const testFiles = walk(path.join(extensionDir, 'tests'))
-  .filter((item) => item.endsWith('.test.mjs'))
+const testFiles = walk(path.join(extensionDir, "tests"))
+  .filter((item) => item.endsWith(".test.mjs"))
   .map((item) => path.relative(root, item));
-const tests = spawnSync(process.execPath, ['--test', ...testFiles], {
+const tests = spawnSync(process.execPath, ["--test", ...testFiles], {
   cwd: root,
-  encoding: 'utf8',
-  stdio: 'inherit',
+  encoding: "utf8",
+  stdio: "inherit",
 });
 
 if (tests.status !== 0) {
   process.exit(tests.status ?? 1);
 }
 
-console.log('extension validation: manifest, syntax, and tests passed');
+console.log("extension validation: manifest, syntax, and tests passed");

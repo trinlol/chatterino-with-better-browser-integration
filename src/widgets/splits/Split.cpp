@@ -35,12 +35,12 @@
 #include "widgets/OverlayWindow.hpp"
 #include "widgets/Scrollbar.hpp"
 #include "widgets/splits/DraggedSplit.hpp"
+#include "widgets/splits/PinnedMessageWidget.hpp"
+#include "widgets/splits/PredictionBannerWidget.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 #include "widgets/splits/SplitHeader.hpp"
 #include "widgets/splits/SplitInput.hpp"
 #include "widgets/splits/SplitOverlay.hpp"
-#include "widgets/splits/PinnedMessageWidget.hpp"
-#include "widgets/splits/PredictionBannerWidget.hpp"
 #include "widgets/Window.hpp"
 
 #include <QApplication>

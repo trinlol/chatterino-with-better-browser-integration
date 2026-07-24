@@ -192,7 +192,8 @@ void InputHighlighter::highlightBlock(const QString &text)
     this->visitWords(
         text, [&](const QString &word, qsizetype start, qsizetype count) {
             // Skip highlighting if the cursor is currently inside or at the end of this word
-            if (this->cursorPosition >= start && this->cursorPosition <= start + count)
+            if (this->cursorPosition >= start &&
+                this->cursorPosition <= start + count)
             {
                 return;
             }

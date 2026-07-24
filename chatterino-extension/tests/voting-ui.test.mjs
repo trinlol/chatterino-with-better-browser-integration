@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import test from 'node:test';
-import vm from 'node:vm';
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import vm from "node:vm";
 
 class FakeElement {
   constructor({ interactive = false } = {}) {
@@ -28,13 +28,16 @@ class FakeElement {
 }
 
 async function loadVotingUi() {
-  const source = await readFile(new URL('../voting-ui.js', import.meta.url), 'utf8');
+  const source = await readFile(
+    new URL("../voting-ui.js", import.meta.url),
+    "utf8"
+  );
   const window = {};
   vm.runInNewContext(source, { window });
   return window.ChatterinoVotingUi;
 }
 
-test('replica activation is forwarded to the matching native Twitch control', async () => {
+test("replica activation is forwarded to the matching native Twitch control", async () => {
   const votingUi = await loadVotingUi();
 
   const sourceRoot = new FakeElement();
@@ -66,7 +69,7 @@ test('replica activation is forwarded to the matching native Twitch control', as
       },
     },
     replicaRoot,
-    sourceRoot,
+    sourceRoot
   );
 
   assert.equal(forwarded, true);
@@ -75,26 +78,42 @@ test('replica activation is forwarded to the matching native Twitch control', as
   assert.equal(stopped, true);
 });
 
-test('fullscreen detection covers the Fullscreen API and viewport-filling video', async () => {
+test("fullscreen detection covers the Fullscreen API and viewport-filling video", async () => {
   const votingUi = await loadVotingUi();
 
   assert.equal(
-    votingUi.isFullscreenActive({ fullscreenElement: {} }, { innerWidth: 1920, innerHeight: 1080 }),
-    true,
+    votingUi.isFullscreenActive(
+      { fullscreenElement: {} },
+      { innerWidth: 1920, innerHeight: 1080 }
+    ),
+    true
   );
 
   const video = {
     getBoundingClientRect() {
-      return { left: 0, top: 0, right: 1920, bottom: 1080, width: 1920, height: 1080 };
+      return {
+        left: 0,
+        top: 0,
+        right: 1920,
+        bottom: 1080,
+        width: 1920,
+        height: 1080,
+      };
     },
   };
   const document = {
     fullscreenElement: null,
     webkitFullscreenElement: null,
     querySelector(selector) {
-      return selector === 'video' ? video : null;
+      return selector === "video" ? video : null;
     },
   };
 
-  assert.equal(votingUi.isFullscreenActive(document, { innerWidth: 1920, innerHeight: 1080 }), true);
+  assert.equal(
+    votingUi.isFullscreenActive(document, {
+      innerWidth: 1920,
+      innerHeight: 1080,
+    }),
+    true
+  );
 });

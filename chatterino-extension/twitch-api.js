@@ -1,15 +1,15 @@
 (function () {
-  'use strict';
+  "use strict";
 
   const DEFAULT_CLAIM_COMMUNITY_POINTS_HASH =
-    '46aaeebe02c99afdf4fc97c7c0cba964124bf6b0af229395f1f6d1feed05b3d0';
+    "46aaeebe02c99afdf4fc97c7c0cba964124bf6b0af229395f1f6d1feed05b3d0";
 
-  let gqlClientId = 'kimne78zx3cx6dzkoethbq4z55auq1';
+  let gqlClientId = "kimne78zx3cx6dzkoethbq4z55auq1";
   let claimInFlight = false;
   let pendingRewardTimeoutId = null;
   let contextPollTimer = null;
   let lastClaimAttemptAt = 0;
-  let channelPointsContextHash = '';
+  let channelPointsContextHash = "";
   let claimCommunityPointsHash = DEFAULT_CLAIM_COMMUNITY_POINTS_HASH;
   const PENDING_REWARD_TIMEOUT_MS = 90000;
   const CONTEXT_POLL_MS = 45000;
@@ -17,10 +17,10 @@
   const CLAIM_RETRY_MIN_MS = 30000;
 
   const CHANNEL_POINTS_CONTEXT_HASHES = [
-    '7fe050e3761eb2cf258d70ee1a21cbd76fa8cf3d7e7b12fc437e7029d446b5e3',
-    '374314de591e69925fce3ddc2bcf085796f56ebb8cad67a0daa3165c03adc345',
-    '9988086babc615a918a1e9a722ff41d98847acac822645209ac7379eecb27152',
-    '1530a003a7d374b0380b79db0be0534f30ff46e61cffa2bc0e2468a909fbc024'
+    "7fe050e3761eb2cf258d70ee1a21cbd76fa8cf3d7e7b12fc437e7029d446b5e3",
+    "374314de591e69925fce3ddc2bcf085796f56ebb8cad67a0daa3165c03adc345",
+    "9988086babc615a918a1e9a722ff41d98847acac822645209ac7379eecb27152",
+    "1530a003a7d374b0380b79db0be0534f30ff46e61cffa2bc0e2468a909fbc024",
   ];
 
   const gqlHeaders = {};
@@ -31,29 +31,37 @@
       claimAvailable: false,
       claimId: null,
       channelId: null,
-      channelLogin: null
+      channelLogin: null,
     },
     prediction: null,
     poll: null,
     rewards: [],
-    lastUpdate: 0
+    lastUpdate: 0,
   };
 
   function getCurrentChannelLogin() {
     const path = window.location.pathname.toLowerCase();
-    const parts = path.split('/').filter(Boolean);
+    const parts = path.split("/").filter(Boolean);
     if (parts.length === 0) {
-      return '';
+      return "";
     }
-    if (parts[0] === 'popout' && parts[1]) {
+    if (parts[0] === "popout" && parts[1]) {
       return parts[1];
     }
-    if (parts[0] === 'moderator' && parts[1]) {
+    if (parts[0] === "moderator" && parts[1]) {
       return parts[1];
     }
-    const staticPages = ['directory', 'videos', 'settings', 'subscriptions', 'wallet', 'drops', 'search'];
+    const staticPages = [
+      "directory",
+      "videos",
+      "settings",
+      "subscriptions",
+      "wallet",
+      "drops",
+      "search",
+    ];
     if (staticPages.includes(parts[0])) {
-      return '';
+      return "";
     }
     return parts[0];
   }
@@ -65,7 +73,7 @@
       claimAvailable: false,
       claimId: null,
       channelId: null,
-      channelLogin: channelLogin || null
+      channelLogin: channelLogin || null,
     };
     state.prediction = null;
     state.poll = null;
@@ -78,7 +86,10 @@
       return true;
     }
     if (!channelLogin) {
-      return !state.channelPoints.channelLogin || state.channelPoints.channelLogin === current;
+      return (
+        !state.channelPoints.channelLogin ||
+        state.channelPoints.channelLogin === current
+      );
     }
     return channelLogin.toLowerCase() === current;
   }
@@ -92,8 +103,12 @@
       state.channelPoints.claimId = null;
       return;
     }
-    if (typeof availableClaim === 'object') {
-      const claimId = availableClaim.id || availableClaim.claimID || availableClaim.claimId || '';
+    if (typeof availableClaim === "object") {
+      const claimId =
+        availableClaim.id ||
+        availableClaim.claimID ||
+        availableClaim.claimId ||
+        "";
       if (!claimId) {
         state.channelPoints.claimAvailable = false;
         state.channelPoints.claimId = null;
@@ -107,7 +122,11 @@
   }
 
   function applyCommunityPointsSnapshot(cp, channelLogin, channelId) {
-    if (!cp || typeof cp !== 'object' || !shouldApplyPointsForChannel(channelLogin)) {
+    if (
+      !cp ||
+      typeof cp !== "object" ||
+      !shouldApplyPointsForChannel(channelLogin)
+    ) {
       return;
     }
     if (channelId) {
@@ -132,22 +151,22 @@
     }
     const num = Number(value);
     if (num >= 1_000_000) {
-      return (num / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+      return (num / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
     }
     if (num >= 1_000) {
-      return (num / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+      return (num / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
     }
     return String(num);
   }
 
   function mapReward(r) {
     return {
-      id: r.id || r.rewardID || '',
-      title: r.title || r.name || 'Reward',
+      id: r.id || r.rewardID || "",
+      title: r.title || r.name || "Reward",
       cost: r.cost ?? r.defaultCost ?? 0,
-      prompt: r.prompt || r.defaultPrompt || '',
+      prompt: r.prompt || r.defaultPrompt || "",
       isUserInputRequired: Boolean(r.isUserInputRequired),
-      channelId: r.channelID || r.channel_id || ''
+      channelId: r.channelID || r.channel_id || "",
     };
   }
 
@@ -161,34 +180,37 @@
   function cancelPendingReward(reason) {
     clearPendingRewardTimeout();
     window.dispatchEvent(
-      new CustomEvent('chatterino-companion-reward-cancelled', { detail: { reason: reason || 'cancelled' } })
+      new CustomEvent("chatterino-companion-reward-cancelled", {
+        detail: { reason: reason || "cancelled" },
+      })
     );
   }
 
   function notifyPendingReward(detail) {
     clearPendingRewardTimeout();
     pendingRewardTimeoutId = setTimeout(() => {
-      cancelPendingReward('timeout');
+      cancelPendingReward("timeout");
     }, PENDING_REWARD_TIMEOUT_MS);
 
     window.dispatchEvent(
-      new CustomEvent('chatterino-companion-reward-pending', {
+      new CustomEvent("chatterino-companion-reward-pending", {
         detail: {
-          rewardId: detail.rewardId || '',
-          title: detail.title || '',
-          prompt: detail.prompt || '',
-          channelId: detail.channelId || state.channelPoints.channelId || ''
-        }
+          rewardId: detail.rewardId || "",
+          title: detail.title || "",
+          prompt: detail.prompt || "",
+          channelId: detail.channelId || state.channelPoints.channelId || "",
+        },
       })
     );
   }
 
   function handleRedemptionPayload(redemption, channelId) {
-    if (!redemption || typeof redemption !== 'object') {
+    if (!redemption || typeof redemption !== "object") {
       return;
     }
 
-    const reward = redemption.reward || redemption.communityPointsCustomReward || {};
+    const reward =
+      redemption.reward || redemption.communityPointsCustomReward || {};
     if (!reward.isUserInputRequired) {
       return;
     }
@@ -202,28 +224,39 @@
       return;
     }
 
-    const status = String(redemption.status || redemption.redemptionStatus || '').toUpperCase();
-    if (status === 'FULFILLED' || status === 'CANCELED' || status === 'CANCELLED') {
+    const status = String(
+      redemption.status || redemption.redemptionStatus || ""
+    ).toUpperCase();
+    if (
+      status === "FULFILLED" ||
+      status === "CANCELED" ||
+      status === "CANCELLED"
+    ) {
       return;
     }
 
     notifyPendingReward({
-      rewardId: reward.id || reward.rewardID || '',
-      title: reward.title || reward.name || '',
-      prompt: reward.prompt || '',
-      channelId: channelId || reward.channelID || reward.channel_id || state.channelPoints.channelId || ''
+      rewardId: reward.id || reward.rewardID || "",
+      title: reward.title || reward.name || "",
+      prompt: reward.prompt || "",
+      channelId:
+        channelId ||
+        reward.channelID ||
+        reward.channel_id ||
+        state.channelPoints.channelId ||
+        "",
     });
   }
 
   function extractRedemptionFromPayload(obj) {
-    if (!obj || typeof obj !== 'object') {
+    if (!obj || typeof obj !== "object") {
       return;
     }
 
     const redeemKeys = [
-      'redeemCommunityPointsCustomReward',
-      'redeemCommunityPointsCommunityPointsAutomaticReward',
-      'redeemCommunityPointsAutomaticReward'
+      "redeemCommunityPointsCustomReward",
+      "redeemCommunityPointsCommunityPointsAutomaticReward",
+      "redeemCommunityPointsAutomaticReward",
     ];
 
     for (const key of redeemKeys) {
@@ -245,26 +278,49 @@
     state.lastUpdate = Date.now();
 
     const root = document.documentElement;
-    root.setAttribute('data-cc-gql-balance', state.channelPoints.balance || '');
-    root.setAttribute('data-cc-gql-claim', state.channelPoints.claimAvailable ? '1' : '0');
-    root.setAttribute('data-cc-gql-claim-id', state.channelPoints.claimId || '');
-    root.setAttribute('data-cc-gql-channel-id', state.channelPoints.channelId || '');
+    root.setAttribute("data-cc-gql-balance", state.channelPoints.balance || "");
     root.setAttribute(
-      'data-cc-gql-prediction',
-      state.prediction?.title ? JSON.stringify(state.prediction) : ''
+      "data-cc-gql-claim",
+      state.channelPoints.claimAvailable ? "1" : "0"
     );
-    root.setAttribute('data-cc-gql-poll', state.poll?.title ? JSON.stringify(state.poll) : '');
-    root.setAttribute('data-cc-gql-rewards', JSON.stringify(state.rewards.slice(0, 80)));
-    root.setAttribute('data-cc-gql-updated', String(state.lastUpdate));
+    root.setAttribute(
+      "data-cc-gql-claim-id",
+      state.channelPoints.claimId || ""
+    );
+    root.setAttribute(
+      "data-cc-gql-channel-id",
+      state.channelPoints.channelId || ""
+    );
+    root.setAttribute(
+      "data-cc-gql-prediction",
+      state.prediction?.title ? JSON.stringify(state.prediction) : ""
+    );
+    root.setAttribute(
+      "data-cc-gql-poll",
+      state.poll?.title ? JSON.stringify(state.poll) : ""
+    );
+    root.setAttribute(
+      "data-cc-gql-rewards",
+      JSON.stringify(state.rewards.slice(0, 80))
+    );
+    root.setAttribute("data-cc-gql-updated", String(state.lastUpdate));
 
     window.dispatchEvent(
-      new CustomEvent('chatterino-companion-gql', { detail: structuredClone(state) })
+      new CustomEvent("chatterino-companion-gql", {
+        detail: structuredClone(state),
+      })
     );
 
     const claimId = state.channelPoints.claimId;
-    if (state.channelPoints.claimAvailable && claimId && claimId !== lastKnownClaimId) {
+    if (
+      state.channelPoints.claimAvailable &&
+      claimId &&
+      claimId !== lastKnownClaimId
+    ) {
       lastKnownClaimId = claimId;
-      window.dispatchEvent(new CustomEvent('chatterino-companion-claim-request'));
+      window.dispatchEvent(
+        new CustomEvent("chatterino-companion-claim-request")
+      );
     }
     if (!state.channelPoints.claimAvailable) {
       lastKnownClaimId = null;
@@ -272,15 +328,23 @@
   }
 
   function parsePredictionEvent(event) {
-    if (!event || typeof event !== 'object') {
+    if (!event || typeof event !== "object") {
       return null;
     }
-    const statusRaw = (event.status || event.predictionStatus || '').toLowerCase();
-    let status = 'started';
-    if (statusRaw.includes('lock') || statusRaw.includes('close')) {
-      status = 'locked';
-    } else if (statusRaw.includes('end') || statusRaw.includes('resolve') || statusRaw.includes('cancel')) {
-      status = 'ended';
+    const statusRaw = (
+      event.status ||
+      event.predictionStatus ||
+      ""
+    ).toLowerCase();
+    let status = "started";
+    if (statusRaw.includes("lock") || statusRaw.includes("close")) {
+      status = "locked";
+    } else if (
+      statusRaw.includes("end") ||
+      statusRaw.includes("resolve") ||
+      statusRaw.includes("cancel")
+    ) {
+      status = "ended";
     }
 
     const outcomes = event.outcomes || event.predictionOutcomes || [];
@@ -289,40 +353,43 @@
       .filter(Boolean);
 
     return {
-      title: event.title || event.predictionTitle || 'Prediction',
+      title: event.title || event.predictionTitle || "Prediction",
       options,
       status,
       duration: event.durationSeconds || event.predictionWindowSeconds || 0,
-      winner: event.winningOutcome?.title || event.winner || ''
+      winner: event.winningOutcome?.title || event.winner || "",
     };
   }
 
   function parsePollEvent(event) {
-    if (!event || typeof event !== 'object') {
+    if (!event || typeof event !== "object") {
       return null;
     }
-    const statusRaw = (event.status || event.pollStatus || '').toLowerCase();
-    let status = 'started';
-    if (statusRaw.includes('lock') || statusRaw.includes('close')) {
-      status = 'locked';
+    const statusRaw = (event.status || event.pollStatus || "").toLowerCase();
+    let status = "started";
+    if (statusRaw.includes("lock") || statusRaw.includes("close")) {
+      status = "locked";
     } else if (
-      statusRaw.includes('end') ||
-      statusRaw.includes('complete') ||
-      statusRaw.includes('cancel')
+      statusRaw.includes("end") ||
+      statusRaw.includes("complete") ||
+      statusRaw.includes("cancel")
     ) {
-      status = 'ended';
+      status = "ended";
     }
 
     const choices = event.choices || event.pollChoices || event.outcomes || [];
     const options = choices
-      .map((choice) => choice.title || choice.name || choice.label || choice.choiceText)
+      .map(
+        (choice) =>
+          choice.title || choice.name || choice.label || choice.choiceText
+      )
       .filter(Boolean);
 
     return {
-      title: event.title || event.pollTitle || 'Poll',
+      title: event.title || event.pollTitle || "Poll",
       options,
       status,
-      duration: event.durationSeconds || event.remainingDurationSeconds || 0
+      duration: event.durationSeconds || event.remainingDurationSeconds || 0,
     };
   }
 
@@ -334,29 +401,29 @@
       container?.operationName,
       event?.__typename,
       event?.type,
-      event?.eventType
+      event?.eventType,
     ]
       .filter(Boolean)
-      .join(' ')
+      .join(" ")
       .toLowerCase();
 
-    if (typeHint.includes('poll')) {
-      return 'poll';
+    if (typeHint.includes("poll")) {
+      return "poll";
     }
-    if (typeHint.includes('prediction')) {
-      return 'prediction';
+    if (typeHint.includes("prediction")) {
+      return "prediction";
     }
     if (event?.pollChoices || event?.choices) {
-      return 'poll';
+      return "poll";
     }
     if (event?.predictionOutcomes) {
-      return 'prediction';
+      return "prediction";
     }
-    return event?.outcomes ? 'prediction' : '';
+    return event?.outcomes ? "prediction" : "";
   }
 
   function walkJson(node, visitor) {
-    if (!node || typeof node !== 'object') {
+    if (!node || typeof node !== "object") {
       return;
     }
     visitor(node);
@@ -368,21 +435,28 @@
   }
 
   function extractFromBody(body) {
-    if (!body || typeof body !== 'object') {
+    if (!body || typeof body !== "object") {
       return;
     }
 
     walkJson(body, (obj) => {
       const responseChannelLogin = obj.channel?.login?.toLowerCase?.() || null;
 
-      if (obj.community?.channel != null && typeof obj.community.channel === 'object') {
+      if (
+        obj.community?.channel != null &&
+        typeof obj.community.channel === "object"
+      ) {
         const channel = obj.community.channel;
-        const channelLogin = channel.login?.toLowerCase?.() || responseChannelLogin;
+        const channelLogin =
+          channel.login?.toLowerCase?.() || responseChannelLogin;
         const cp = channel.self?.communityPoints ?? channel.communityPoints;
         applyCommunityPointsSnapshot(cp, channelLogin, channel.id);
       }
 
-      if (obj.self?.communityPoints != null && typeof obj.self.communityPoints === 'object') {
+      if (
+        obj.self?.communityPoints != null &&
+        typeof obj.self.communityPoints === "object"
+      ) {
         applyCommunityPointsSnapshot(
           obj.self.communityPoints,
           responseChannelLogin || state.channelPoints.channelLogin,
@@ -390,16 +464,29 @@
         );
       }
 
-      if (obj.communityPoints != null && typeof obj.communityPoints === 'object') {
+      if (
+        obj.communityPoints != null &&
+        typeof obj.communityPoints === "object"
+      ) {
         const cp = obj.communityPoints;
-        if (shouldApplyPointsForChannel(responseChannelLogin || state.channelPoints.channelLogin)) {
+        if (
+          shouldApplyPointsForChannel(
+            responseChannelLogin || state.channelPoints.channelLogin
+          )
+        ) {
           if (cp.balance != null) {
             state.channelPoints.balance = formatBalance(cp.balance);
           }
           if (cp.availableClaim != null) {
-            applyAvailableClaim(cp.availableClaim, responseChannelLogin || state.channelPoints.channelLogin);
+            applyAvailableClaim(
+              cp.availableClaim,
+              responseChannelLogin || state.channelPoints.channelLogin
+            );
           } else if (cp.claimAvailable != null) {
-            applyAvailableClaim(cp.claimAvailable, responseChannelLogin || state.channelPoints.channelLogin);
+            applyAvailableClaim(
+              cp.claimAvailable,
+              responseChannelLogin || state.channelPoints.channelLogin
+            );
           }
         }
       }
@@ -407,13 +494,18 @@
       if (
         obj.balance != null &&
         (obj.claimAvailable != null || obj.availableClaim != null) &&
-        shouldApplyPointsForChannel(responseChannelLogin || state.channelPoints.channelLogin)
+        shouldApplyPointsForChannel(
+          responseChannelLogin || state.channelPoints.channelLogin
+        )
       ) {
         state.channelPoints.balance = formatBalance(obj.balance);
-        applyAvailableClaim(obj.availableClaim ?? obj.claimAvailable, responseChannelLogin || state.channelPoints.channelLogin);
+        applyAvailableClaim(
+          obj.availableClaim ?? obj.claimAvailable,
+          responseChannelLogin || state.channelPoints.channelLogin
+        );
       }
 
-      if (obj.channel != null && typeof obj.channel === 'object') {
+      if (obj.channel != null && typeof obj.channel === "object") {
         const channelLogin = obj.channel.login?.toLowerCase?.() || null;
         if (channelLogin && !shouldApplyPointsForChannel(channelLogin)) {
           return;
@@ -425,7 +517,9 @@
           state.channelPoints.channelLogin = obj.channel.login.toLowerCase();
         }
         if (obj.channel.communityPoints?.balance != null) {
-          state.channelPoints.balance = formatBalance(obj.channel.communityPoints.balance);
+          state.channelPoints.balance = formatBalance(
+            obj.channel.communityPoints.balance
+          );
         }
         if (obj.channel.communityPoints?.availableClaim != null) {
           applyAvailableClaim(
@@ -457,30 +551,32 @@
       }
 
       const genericEventKind =
-        obj.event != null && typeof obj.event === 'object' ? getEventKind(obj, obj.event) : '';
+        obj.event != null && typeof obj.event === "object"
+          ? getEventKind(obj, obj.event)
+          : "";
 
-      if (genericEventKind === 'prediction') {
+      if (genericEventKind === "prediction") {
         const parsed = parsePredictionEvent(obj.event);
         if (parsed) {
           state.prediction = parsed;
         }
       }
 
-      if (genericEventKind === 'poll') {
+      if (genericEventKind === "poll") {
         const parsed = parsePollEvent(obj.event);
         if (parsed) {
           state.poll = parsed;
         }
       }
 
-      if (obj.prediction != null && typeof obj.prediction === 'object') {
+      if (obj.prediction != null && typeof obj.prediction === "object") {
         const parsed = parsePredictionEvent(obj.prediction);
         if (parsed) {
           state.prediction = parsed;
         }
       }
 
-      if (obj.poll != null && typeof obj.poll === 'object') {
+      if (obj.poll != null && typeof obj.poll === "object") {
         const parsed = parsePollEvent(obj.poll);
         if (parsed) {
           state.poll = parsed;
@@ -528,7 +624,7 @@
 
   function handleGqlPayload(payload) {
     try {
-      const body = typeof payload === 'string' ? JSON.parse(payload) : payload;
+      const body = typeof payload === "string" ? JSON.parse(payload) : payload;
       extractFromBody(body);
       emitUpdate();
     } catch (_) {
@@ -541,16 +637,16 @@
       return;
     }
     if (headers instanceof Headers) {
-      const clientId = headers.get('Client-Id') || headers.get('client-id');
+      const clientId = headers.get("Client-Id") || headers.get("client-id");
       if (clientId) {
         gqlClientId = clientId;
       }
       for (const name of [
-        'Client-Integrity',
-        'X-Device-Id',
-        'Client-Session-Id',
-        'Client-Version',
-        'Authorization'
+        "Client-Integrity",
+        "X-Device-Id",
+        "Client-Session-Id",
+        "Client-Version",
+        "Authorization",
       ]) {
         const value = headers.get(name);
         if (value) {
@@ -559,7 +655,7 @@
       }
       return;
     }
-    const clientId = headers['Client-Id'] || headers['client-id'];
+    const clientId = headers["Client-Id"] || headers["client-id"];
     if (clientId) {
       gqlClientId = clientId;
     }
@@ -568,15 +664,15 @@
         continue;
       }
       const normalized = key.toLowerCase();
-      if (normalized === 'client-integrity') {
-        gqlHeaders['Client-Integrity'] = value;
-      } else if (normalized === 'x-device-id') {
-        gqlHeaders['X-Device-Id'] = value;
-      } else if (normalized === 'client-session-id') {
-        gqlHeaders['Client-Session-Id'] = value;
-      } else if (normalized === 'client-version') {
-        gqlHeaders['Client-Version'] = value;
-      } else if (normalized === 'authorization') {
+      if (normalized === "client-integrity") {
+        gqlHeaders["Client-Integrity"] = value;
+      } else if (normalized === "x-device-id") {
+        gqlHeaders["X-Device-Id"] = value;
+      } else if (normalized === "client-session-id") {
+        gqlHeaders["Client-Session-Id"] = value;
+      } else if (normalized === "client-version") {
+        gqlHeaders["Client-Version"] = value;
+      } else if (normalized === "authorization") {
         gqlHeaders.Authorization = value;
       }
     }
@@ -589,13 +685,13 @@
     const entries = Array.isArray(payload) ? payload : [payload];
     for (const entry of entries) {
       if (
-        entry?.operationName === 'ChannelPointsContext' &&
+        entry?.operationName === "ChannelPointsContext" &&
         entry?.extensions?.persistedQuery?.sha256Hash
       ) {
         channelPointsContextHash = entry.extensions.persistedQuery.sha256Hash;
       }
       if (
-        entry?.operationName === 'ClaimCommunityPoints' &&
+        entry?.operationName === "ClaimCommunityPoints" &&
         entry?.extensions?.persistedQuery?.sha256Hash
       ) {
         claimCommunityPointsHash = entry.extensions.persistedQuery.sha256Hash;
@@ -605,17 +701,23 @@
 
   function buildGqlHeaders() {
     return {
-      'Content-Type': 'text/plain;charset=UTF-8',
-      'Client-Id': gqlHeaders['Client-Id'] || gqlClientId,
-      ...(gqlHeaders['Client-Integrity']
-        ? { 'Client-Integrity': gqlHeaders['Client-Integrity'] }
+      "Content-Type": "text/plain;charset=UTF-8",
+      "Client-Id": gqlHeaders["Client-Id"] || gqlClientId,
+      ...(gqlHeaders["Client-Integrity"]
+        ? { "Client-Integrity": gqlHeaders["Client-Integrity"] }
         : {}),
-      ...(gqlHeaders['X-Device-Id'] ? { 'X-Device-Id': gqlHeaders['X-Device-Id'] } : {}),
-      ...(gqlHeaders['Client-Session-Id']
-        ? { 'Client-Session-Id': gqlHeaders['Client-Session-Id'] }
+      ...(gqlHeaders["X-Device-Id"]
+        ? { "X-Device-Id": gqlHeaders["X-Device-Id"] }
         : {}),
-      ...(gqlHeaders['Client-Version'] ? { 'Client-Version': gqlHeaders['Client-Version'] } : {}),
-      ...(gqlHeaders.Authorization ? { Authorization: gqlHeaders.Authorization } : {})
+      ...(gqlHeaders["Client-Session-Id"]
+        ? { "Client-Session-Id": gqlHeaders["Client-Session-Id"] }
+        : {}),
+      ...(gqlHeaders["Client-Version"]
+        ? { "Client-Version": gqlHeaders["Client-Version"] }
+        : {}),
+      ...(gqlHeaders.Authorization
+        ? { Authorization: gqlHeaders.Authorization }
+        : {}),
     };
   }
 
@@ -624,8 +726,8 @@
     return entries.some((entry) =>
       entry?.errors?.some(
         (error) =>
-          error?.message?.includes('PersistedQueryNotFound') ||
-          error?.extensions?.code === 'PERSISTED_QUERY_NOT_FOUND'
+          error?.message?.includes("PersistedQueryNotFound") ||
+          error?.extensions?.code === "PERSISTED_QUERY_NOT_FOUND"
       )
     );
   }
@@ -651,20 +753,20 @@
 
     for (const sha256Hash of getChannelPointsContextHashes()) {
       try {
-        const response = await fetch('https://gql.twitch.tv/gql', {
-          method: 'POST',
-          credentials: 'include',
+        const response = await fetch("https://gql.twitch.tv/gql", {
+          method: "POST",
+          credentials: "include",
           headers: buildGqlHeaders(),
           body: JSON.stringify({
-            operationName: 'ChannelPointsContext',
+            operationName: "ChannelPointsContext",
             variables: { channelLogin },
             extensions: {
               persistedQuery: {
                 version: 1,
-                sha256Hash
-              }
-            }
-          })
+                sha256Hash,
+              },
+            },
+          }),
         });
         if (!response.ok) {
           continue;
@@ -706,25 +808,25 @@
     }
     claimInFlight = true;
     try {
-      const response = await fetch('https://gql.twitch.tv/gql', {
-        method: 'POST',
-        credentials: 'include',
+      const response = await fetch("https://gql.twitch.tv/gql", {
+        method: "POST",
+        credentials: "include",
         headers: buildGqlHeaders(),
         body: JSON.stringify({
-          operationName: 'ClaimCommunityPoints',
+          operationName: "ClaimCommunityPoints",
           variables: {
             input: {
               channelID: String(channelId),
-              claimID: claimId
-            }
+              claimID: claimId,
+            },
           },
           extensions: {
             persistedQuery: {
               version: 1,
-              sha256Hash: claimCommunityPointsHash
-            }
-          }
-        })
+              sha256Hash: claimCommunityPointsHash,
+            },
+          },
+        }),
       });
       if (!response.ok) {
         return false;
@@ -733,7 +835,8 @@
       handleGqlPayload(body);
       const entries = Array.isArray(body) ? body : [body];
       const claimFailed = entries.some(
-        (entry) => entry?.errors?.length || entry?.data?.claimCommunityPoints?.error
+        (entry) =>
+          entry?.errors?.length || entry?.data?.claimCommunityPoints?.error
       );
       if (claimFailed) {
         return false;
@@ -789,7 +892,7 @@
       return;
     }
     try {
-      const payload = typeof body === 'string' ? JSON.parse(body) : body;
+      const payload = typeof body === "string" ? JSON.parse(body) : body;
       captureOperationHash(payload);
     } catch (_) {
       // ignore malformed bodies
@@ -806,10 +909,13 @@
     }
     const response = await originalFetch.apply(this, args);
     try {
-      const url = typeof args[0] === 'string' ? args[0] : args[0]?.url;
-      if (url && url.includes('gql.twitch.tv')) {
+      const url = typeof args[0] === "string" ? args[0] : args[0]?.url;
+      if (url && url.includes("gql.twitch.tv")) {
         const clone = response.clone();
-        clone.text().then(handleGqlPayload).catch(() => {});
+        clone
+          .text()
+          .then(handleGqlPayload)
+          .catch(() => {});
       }
     } catch (_) {
       // ignore hook errors
@@ -831,9 +937,13 @@
     } catch (_) {
       // ignore
     }
-    this.addEventListener('load', function () {
+    this.addEventListener("load", function () {
       try {
-        if (this.__ccGqlUrl && String(this.__ccGqlUrl).includes('gql.twitch.tv') && this.responseText) {
+        if (
+          this.__ccGqlUrl &&
+          String(this.__ccGqlUrl).includes("gql.twitch.tv") &&
+          this.responseText
+        ) {
           handleGqlPayload(this.responseText);
         }
       } catch (_) {
@@ -852,31 +962,33 @@
     },
     redeemReward(rewardId, channelId) {
       window.dispatchEvent(
-        new CustomEvent('chatterino-companion-redeem', { detail: { rewardId, channelId } })
+        new CustomEvent("chatterino-companion-redeem", {
+          detail: { rewardId, channelId },
+        })
       );
-    }
+    },
   };
 
-  window.addEventListener('chatterino-companion-claim-request', () => {
+  window.addEventListener("chatterino-companion-claim-request", () => {
     void window.__chatterinoCompanionGql.claimChannelPoints();
   });
 
-  window.addEventListener('chatterino-companion-channel-change', (event) => {
-    cancelPendingReward('channel-change');
+  window.addEventListener("chatterino-companion-channel-change", (event) => {
+    cancelPendingReward("channel-change");
     resetStateForChannel(event.detail?.channel || getCurrentChannelLogin());
     emitUpdate();
     restartContextPolling();
   });
 
-  window.addEventListener('chatterino-companion-reward-cancelled', () => {
+  window.addEventListener("chatterino-companion-reward-cancelled", () => {
     clearPendingRewardTimeout();
   });
 
   document.addEventListener(
-    'keydown',
+    "keydown",
     (event) => {
-      if (event.key === 'Escape' && pendingRewardTimeoutId) {
-        cancelPendingReward('escape');
+      if (event.key === "Escape" && pendingRewardTimeoutId) {
+        cancelPendingReward("escape");
       }
     },
     true

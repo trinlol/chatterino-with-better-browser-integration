@@ -28,7 +28,7 @@
     if (!url) return undefined;
 
     const match = url.match(
-      /^https?:\/\/(?:www\.)?twitch\.tv\/(\w+)\/?(?:\?.*)?$/,
+      /^https?:\/\/(?:www\.)?twitch\.tv\/(\w+)\/?(?:\?.*)?$/
     );
 
     let channelName;
@@ -39,19 +39,19 @@
     return undefined;
   }
 
-  let findChatDiv = () => document.getElementsByClassName('chat-shell')[0];
+  let findChatDiv = () => document.getElementsByClassName("chat-shell")[0];
   let findRightCollapse = () =>
-    document.getElementsByClassName('right-column__toggle-visibility')[0]
+    document.getElementsByClassName("right-column__toggle-visibility")[0]
       .children[0];
   let findRightColumn = () =>
-    document.getElementsByClassName('channel-page__right-column')[0];
-  let findNavBar = () => document.getElementsByClassName('top-nav')[0];
+    document.getElementsByClassName("channel-page__right-column")[0];
+  let findNavBar = () => document.getElementsByClassName("top-nav")[0];
   let findInfoBar = () =>
-    document.getElementsByClassName('channel-info-bar__content-right')[0];
+    document.getElementsByClassName("channel-info-bar__content-right")[0];
 
   // logging function
   function log(obj) {
-    console.log('Chatterino: ', obj);
+    console.log("Chatterino: ", obj);
   }
 
   // install events
@@ -63,12 +63,12 @@
       }
     } else {
       showingChat = false;
-      chrome.runtime.sendMessage({ type: 'detach' });
+      chrome.runtime.sendMessage({ type: "detach" });
     }
   }
 
   function replaceChat() {
-    log('attempting to replace chat');
+    log("attempting to replace chat");
 
     let retry = false;
 
@@ -98,7 +98,7 @@
       if (x === undefined) {
         retry = true;
       } else {
-        x.addEventListener('mouseup', () => {
+        x.addEventListener("mouseup", () => {
           if (findChatDiv() && findChatDiv().clientWidth != 0) {
             findRightCollapse().click();
           }
@@ -138,7 +138,7 @@
     if (retry) {
       setTimeout(installChatterino, 1000);
     } else {
-      log('installed all events');
+      log("installed all events");
     }
 
     queryChatRect();
@@ -151,7 +151,7 @@
     // mozInnerScreenX to calculate that.
     //
     // See https://github.com/w3c/csswg-drafts/issues/809
-    if ('mozInnerScreenX' in window) {
+    if ("mozInnerScreenX" in window) {
       let x =
         window.devicePixelRatio * (window.mozInnerScreenX - window.screenX);
       // (Windows only)
@@ -187,7 +187,7 @@
     }
 
     if (document.fullscreenElement != null) {
-      chrome.runtime.sendMessage({ type: 'detach' });
+      chrome.runtime.sendMessage({ type: "detach" });
       return;
     }
 
@@ -211,7 +211,7 @@
     lastRect = rect;
 
     let data = {
-      type: 'chat-resized',
+      type: "chat-resized",
       rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
       dpr: window.devicePixelRatio,
       viewportX: calcViewportX(),
@@ -232,7 +232,7 @@
 
     if (errors.osUnsupported) {
       errorDiv.innerHTML =
-        'The Chatterino Native Host browser extension currently only works on Windows.';
+        "The Chatterino Native Host browser extension currently only works on Windows.";
 
       return;
     }
@@ -243,36 +243,36 @@
     if (errors.sendMessage) {
       errorDiv.innerHTML =
         closeButton +
-        'Connection to the Chatterino extension lost!<br><br>' +
-        'Please reload the page.';
+        "Connection to the Chatterino extension lost!<br><br>" +
+        "Please reload the page.";
     } else {
       errorDiv.innerHTML =
         closeButton +
-        'Chatterino should show here:<br><br>' +
-        'Try deselecting and selecting the page.<br>' +
-        'Chatterino also needs to be running.<br><br>' +
-        'You can temporarily disable the extension in the extension.';
+        "Chatterino should show here:<br><br>" +
+        "Try deselecting and selecting the page.<br>" +
+        "Chatterino also needs to be running.<br><br>" +
+        "You can temporarily disable the extension in the extension.";
     }
   }
 
   function updatePopupChatLink() {
     if (popupChatLink !== null) {
       popupChatLink.href =
-        '/popout/' + matchChannelName(window.location.href) + '/chat';
+        "/popout/" + matchChannelName(window.location.href) + "/chat";
     }
   }
 
-  log('hello there in the dev tools 👋');
+  log("hello there in the dev tools 👋");
 
   try {
     chrome.runtime.sendMessage(
-      { type: 'get-setting', key: 'replaceTwitchChat' },
-      replaceTwitchChat => {
+      { type: "get-setting", key: "replaceTwitchChat" },
+      (replaceTwitchChat) => {
         log({ replaceTwitchChat });
 
         settings = { replaceTwitchChat };
         installChatterino();
-      },
+      }
     );
   } catch {
     errors.sendMessage = true;
@@ -280,10 +280,10 @@
   }
 
   try {
-    chrome.runtime.sendMessage({ type: 'get-os' }, os => {
+    chrome.runtime.sendMessage({ type: "get-os" }, (os) => {
       // Available OS string are documented here:
       // https://developer.chrome.com/docs/extensions/reference/runtime/#type-PlatformOs
-      if (os !== 'win') {
+      if (os !== "win") {
         errors.osUnsupported = true;
       }
 
@@ -295,20 +295,20 @@
   }
 
   // event listeners
-  window.addEventListener('load', () => setTimeout(queryChatRect, 1000));
-  window.addEventListener('resize', () => {
+  window.addEventListener("load", () => setTimeout(queryChatRect, 1000));
+  window.addEventListener("resize", () => {
     queryChatRect;
     setTimeout(queryChatRect, 475);
   });
-  window.addEventListener('focus', queryChatRect);
-  window.addEventListener('mouseup', () => setTimeout(queryChatRect, 10));
+  window.addEventListener("focus", queryChatRect);
+  window.addEventListener("mouseup", () => setTimeout(queryChatRect, 10));
 
   // The background script asks for a fresh measurement whenever this Twitch
   // tab becomes active. This covers tabs that finished loading while they
   // were in the background, when their initial chat-resized message is
   // correctly ignored to avoid attaching over an inactive window.
-  chrome.runtime.onMessage.addListener(message => {
-    if (message?.action === 'requestChatRect') {
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.action === "requestChatRect") {
       queryChatRect();
     }
   });
@@ -318,7 +318,7 @@
     if (location.pathname != path) {
       path = location.pathname;
 
-      log('path changed');
+      log("path changed");
 
       installedObjects = {};
       installChatterino();
@@ -326,7 +326,7 @@
         updatePopupChatLink();
       }
       if (matchChannelName(window.location.href)) {
-        chrome.runtime.sendMessage({ type: 'location-updated' });
+        chrome.runtime.sendMessage({ type: "location-updated" });
       }
     }
   }, 1000);

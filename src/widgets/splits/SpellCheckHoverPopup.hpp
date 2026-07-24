@@ -9,6 +9,7 @@
 
 #include <pajlada/signals/signal.hpp>
 #include <QString>
+
 #include <vector>
 
 class QLabel;
@@ -26,8 +27,8 @@ public:
     ~SpellCheckHoverPopup() override = default;
 
     void showSuggestions(const QPoint &globalPos, const QString &word,
-                         const std::vector<QString> &suggestions,
-                         int wordStart, int wordEnd);
+                         const std::vector<QString> &suggestions, int wordStart,
+                         int wordEnd);
     void hidePopup();
 
     /// Forward key events from the text input to the suggestions list without

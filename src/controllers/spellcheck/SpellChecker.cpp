@@ -12,9 +12,10 @@
 #include "util/FilesystemHelpers.hpp"
 #include "util/XDGDirectory.hpp"
 
-#include <algorithm>
 #include <QDir>
 #include <QLocale>
+
+#include <algorithm>
 
 #ifdef CHATTERINO_WITH_SPELLCHECK
 #    include <hunspell/hunspell.hxx>
@@ -126,8 +127,8 @@ void addLibreOfficeExtensionDirectories(
     for (const auto &entry :
          extensionsDir.entryList({"dict-*"}, QDir::Dirs | QDir::NoDotAndDotDot))
     {
-        searchDirectories.emplace_back(
-            extensionsDir.absoluteFilePath(entry), true);
+        searchDirectories.emplace_back(extensionsDir.absoluteFilePath(entry),
+                                       true);
     }
 }
 
@@ -149,12 +150,12 @@ void addLibreOfficeInstallDirectories(
         return;
     }
 
-    for (const auto &entry :
-         installDir.entryList({"LibreOffice*"}, QDir::Dirs | QDir::NoDotAndDotDot))
+    for (const auto &entry : installDir.entryList(
+             {"LibreOffice*"}, QDir::Dirs | QDir::NoDotAndDotDot))
     {
         addLibreOfficeExtensionDirectories(
-            searchDirectories,
-            combinePath(installDir.absoluteFilePath(entry), "share/extensions"));
+            searchDirectories, combinePath(installDir.absoluteFilePath(entry),
+                                           "share/extensions"));
     }
 }
 
@@ -174,8 +175,10 @@ void addWindowsDictionarySearchDirectories(
 
     for (const auto &root : installRoots)
     {
-        addLibreOfficeInstallDirectories(searchDirectories, root + "/LibreOffice");
-        addLibreOfficeInstallDirectories(searchDirectories, root + "/Programs/LibreOffice");
+        addLibreOfficeInstallDirectories(searchDirectories,
+                                         root + "/LibreOffice");
+        addLibreOfficeInstallDirectories(searchDirectories,
+                                         root + "/Programs/LibreOffice");
 
         searchDirectories.emplace_back(root + "/Hunspell/Dictionaries", true);
         searchDirectories.emplace_back(root + "/Hunspell/dic", true);
@@ -411,9 +414,8 @@ std::vector<DictionaryInfo> SpellChecker::getAvailableDictionaries() const
                                  std::tie(rhs.isSystem, rhs.name, rhs.path);
                       });
 
-    const auto uniqueEnd = std::ranges::unique(
-                               dictionaries, {}, &DictionaryInfo::path)
-                               .begin();
+    const auto uniqueEnd =
+        std::ranges::unique(dictionaries, {}, &DictionaryInfo::path).begin();
     dictionaries.erase(uniqueEnd, dictionaries.end());
 
     return dictionaries;

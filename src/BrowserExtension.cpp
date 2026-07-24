@@ -8,9 +8,9 @@
 #include "util/IpcQueue.hpp"
 #include "util/RenameThread.hpp"
 
+#include <atomic>
 #include <iostream>
 #include <memory>
-#include <atomic>
 #include <thread>
 
 #ifdef Q_OS_WIN

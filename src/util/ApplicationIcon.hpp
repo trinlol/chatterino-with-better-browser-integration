@@ -81,12 +81,10 @@ inline void applyApplicationIcon(QWidget *widget)
             return icon;
         };
 
-        HICON bigIcon =
-            loadSizedIcon(GetSystemMetrics(SM_CXICON),
-                          GetSystemMetrics(SM_CYICON));
-        HICON smallIcon =
-            loadSizedIcon(GetSystemMetrics(SM_CXSMICON),
-                          GetSystemMetrics(SM_CYSMICON));
+        HICON bigIcon = loadSizedIcon(GetSystemMetrics(SM_CXICON),
+                                      GetSystemMetrics(SM_CYICON));
+        HICON smallIcon = loadSizedIcon(GetSystemMetrics(SM_CXSMICON),
+                                        GetSystemMetrics(SM_CYSMICON));
 
         if (bigIcon != nullptr)
         {

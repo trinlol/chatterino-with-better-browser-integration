@@ -97,9 +97,8 @@ void SpellCheckHoverPopup::themeChangedEvent()
 void SpellCheckHoverPopup::initLayout()
 {
     LayoutCreator creator = {this};
-    auto layoutCreator = creator.setLayoutType<QVBoxLayout>()
-                               .withoutMargin()
-                               .withoutSpacing();
+    auto layoutCreator =
+        creator.setLayoutType<QVBoxLayout>().withoutMargin().withoutSpacing();
     layoutCreator->setContentsMargins(4, 4, 4, 4);
 
     auto header = layoutCreator.emplace<QLabel>().assign(&this->headerLabel_);

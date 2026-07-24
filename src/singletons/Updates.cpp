@@ -224,8 +224,8 @@ void Updates::checkForUpdates()
 
             this->onlineVersion_ = release->version;
             this->updateGuideLink_ = release->pageUrl;
-            this->isDowngrade_ = Updates::isDowngradeOf(
-                this->onlineVersion_, this->currentVersion_);
+            this->isDowngrade_ = Updates::isDowngradeOf(this->onlineVersion_,
+                                                        this->currentVersion_);
             if (Updates::isNewerThan(this->onlineVersion_,
                                      this->currentVersion_))
             {

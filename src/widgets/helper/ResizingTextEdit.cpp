@@ -4,14 +4,12 @@
 
 #include "widgets/helper/ResizingTextEdit.hpp"
 
-#include "common/Common.hpp"
-#include "singletons/helper/GifTimer.hpp"
-#include "common/QLogging.hpp"
-#include "controllers/completion/TabCompletionModel.hpp"
-#include "singletons/Settings.hpp"
 #include "Application.hpp"
 #include "common/Channel.hpp"
+#include "common/Common.hpp"
+#include "common/QLogging.hpp"
 #include "controllers/accounts/AccountController.hpp"
+#include "controllers/completion/TabCompletionModel.hpp"
 #include "controllers/emotes/EmoteController.hpp"
 #include "messages/Emote.hpp"
 #include "messages/Image.hpp"
@@ -20,14 +18,16 @@
 #include "providers/seventv/SeventvEmotes.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
+#include "singletons/helper/GifTimer.hpp"
+#include "singletons/Settings.hpp"
 
+#include <QAbstractTextDocumentLayout>
 #include <QMenu>
 #include <QMimeData>
 #include <QMimeDatabase>
 #include <QObject>
 #include <QSizeF>
 #include <QTextBlock>
-#include <QAbstractTextDocumentLayout>
 #include <QTextDocument>
 #include <QTextFragment>
 #include <QTimer>
@@ -169,24 +169,33 @@ ResizingTextEdit::ResizingTextEdit()
     this->gifTimerConnection_ =
         getApp()->getEmotes()->getGIFTimer()->signal.connect([this] {
             bool anyAnimated = false;
-            for (QTextBlock block = this->document()->begin(); block.isValid(); block = block.next())
+            for (QTextBlock block = this->document()->begin(); block.isValid();
+                 block = block.next())
             {
                 for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it)
                 {
                     QTextFragment fragment = it.fragment();
-                    if (fragment.isValid() && fragment.charFormat().isImageFormat())
+                    if (fragment.isValid() &&
+                        fragment.charFormat().isImageFormat())
                     {
-                        QTextImageFormat imageFormat = fragment.charFormat().toImageFormat();
+                        QTextImageFormat imageFormat =
+                            fragment.charFormat().toImageFormat();
                         QString url = imageFormat.name();
                         if (url.startsWith("emote://"))
                         {
                             QString emoteName = url.mid(8);
-                            auto emote = findEmoteByName(emoteName, this->getChannel ? this->getChannel().get() : nullptr);
+                            auto emote = findEmoteByName(
+                                emoteName, this->getChannel
+                                               ? this->getChannel().get()
+                                               : nullptr);
                             if (emote && emote->images.getImage1()->animated())
                             {
-                                if (auto pixmap = emote->images.getImage1()->pixmapOrLoad())
+                                if (auto pixmap = emote->images.getImage1()
+                                                      ->pixmapOrLoad())
                                 {
-                                    this->document()->addResource(QTextDocument::ImageResource, QUrl(url), *pixmap);
+                                    this->document()->addResource(
+                                        QTextDocument::ImageResource, QUrl(url),
+                                        *pixmap);
                                     anyAnimated = true;
                                 }
                             }
@@ -215,7 +224,8 @@ bool ResizingTextEdit::hasHeightForWidth() const
 
 bool ResizingTextEdit::isFirstWord() const
 {
-    QString portionBeforeCursor = this->textUpToPosition(this->textCursor().position());
+    QString portionBeforeCursor =
+        this->textUpToPosition(this->textCursor().position());
     return !portionBeforeCursor.contains(' ');
 };
 
@@ -229,7 +239,8 @@ int ResizingTextEdit::heightForWidth(int) const
 
 QString ResizingTextEdit::textUnderCursor(bool *hadSpace) const
 {
-    auto textUpToCursor = this->textUpToPosition(this->textCursor().selectionStart());
+    auto textUpToCursor =
+        this->textUpToPosition(this->textCursor().selectionStart());
 
     auto words = QStringView{textUpToCursor}.split(' ');
     if (words.size() == 0)
@@ -269,7 +280,8 @@ QString ResizingTextEdit::toPlainText() const
 {
     QString result;
     QTextDocument *doc = this->document();
-    for (QTextBlock block = doc->begin(); block != doc->end(); block = block.next())
+    for (QTextBlock block = doc->begin(); block != doc->end();
+         block = block.next())
     {
         if (!result.isEmpty())
         {
@@ -309,7 +321,8 @@ QString ResizingTextEdit::textUpToPosition(int pos) const
     QString result;
     QTextDocument *doc = this->document();
     int currentPos = 0;
-    for (QTextBlock block = doc->begin(); block != doc->end(); block = block.next())
+    for (QTextBlock block = doc->begin(); block != doc->end();
+         block = block.next())
     {
         if (currentPos >= pos)
         {
@@ -318,7 +331,7 @@ QString ResizingTextEdit::textUpToPosition(int pos) const
         if (currentPos > 0)
         {
             result += "\n";
-            currentPos++; // for the newline character
+            currentPos++;  // for the newline character
         }
         for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it)
         {
@@ -403,7 +416,8 @@ void ResizingTextEdit::insertEmote(const EmotePtr &emote)
     auto pixmapOpt = image->pixmapOrLoad();
     if (pixmapOpt.has_value())
     {
-        this->document()->addResource(QTextDocument::ImageResource, QUrl(resourceUrl), *pixmapOpt);
+        this->document()->addResource(QTextDocument::ImageResource,
+                                      QUrl(resourceUrl), *pixmapOpt);
     }
     else
     {
@@ -414,14 +428,16 @@ void ResizingTextEdit::insertEmote(const EmotePtr &emote)
         }
         QPixmap placeholder(size);
         placeholder.fill(Qt::transparent);
-        this->document()->addResource(QTextDocument::ImageResource, QUrl(resourceUrl), placeholder);
+        this->document()->addResource(QTextDocument::ImageResource,
+                                      QUrl(resourceUrl), placeholder);
 
         this->loadingEmotes_.append({emoteName, image});
 
         if (!this->loadingTimer_)
         {
             this->loadingTimer_ = new QTimer(this);
-            QObject::connect(this->loadingTimer_, &QTimer::timeout, this, &ResizingTextEdit::checkLoadingEmotes);
+            QObject::connect(this->loadingTimer_, &QTimer::timeout, this,
+                             &ResizingTextEdit::checkLoadingEmotes);
             this->loadingTimer_->setInterval(100);
         }
         if (!this->loadingTimer_->isActive())
@@ -453,13 +469,16 @@ void ResizingTextEdit::insertEmote(const EmotePtr &emote)
 void ResizingTextEdit::checkLoadingEmotes()
 {
     bool anyLoaded = false;
-    for (auto it = this->loadingEmotes_.begin(); it != this->loadingEmotes_.end(); )
+    for (auto it = this->loadingEmotes_.begin();
+         it != this->loadingEmotes_.end();)
     {
         if (it->second->loaded())
         {
             if (auto pixmap = it->second->pixmapOrLoad())
             {
-                this->document()->addResource(QTextDocument::ImageResource, QUrl("emote://" + it->first), *pixmap);
+                this->document()->addResource(QTextDocument::ImageResource,
+                                              QUrl("emote://" + it->first),
+                                              *pixmap);
                 anyLoaded = true;
             }
             it = this->loadingEmotes_.erase(it);
@@ -511,7 +530,8 @@ void ResizingTextEdit::keyPressEvent(QKeyEvent *event)
 
     this->keyPressed.invoke(event);
 
-    if (event->key() == Qt::Key_Space && (event->modifiers() & Qt::ControlModifier) == Qt::NoModifier)
+    if (event->key() == Qt::Key_Space &&
+        (event->modifiers() & Qt::ControlModifier) == Qt::NoModifier)
     {
         QString word = this->textUnderCursor();
         if (!word.isEmpty())
@@ -520,7 +540,8 @@ void ResizingTextEdit::keyPressEvent(QKeyEvent *event)
             if (this->getChannel)
             {
                 auto channel = this->getChannel();
-                const auto *tc = dynamic_cast<const TwitchChannel *>(channel.get());
+                const auto *tc =
+                    dynamic_cast<const TwitchChannel *>(channel.get());
                 if (tc)
                 {
                     if (auto seventv = tc->seventvEmotes())
@@ -537,7 +558,8 @@ void ResizingTextEdit::keyPressEvent(QKeyEvent *event)
             if (emote)
             {
                 QTextCursor tc = this->textCursor();
-                tc.setPosition(tc.position() - word.size(), QTextCursor::KeepAnchor);
+                tc.setPosition(tc.position() - word.size(),
+                               QTextCursor::KeepAnchor);
                 tc.removeSelectedText();
                 this->setTextCursor(tc);
                 this->insertEmote(emote);
@@ -713,7 +735,9 @@ void ResizingTextEdit::insertCompletion(const QString &completion)
         }
     }
 
-    if (emote && (emote->homePage.string.contains("7tv") || (emote->images.getImage1() && emote->images.getImage1()->url().string.contains("7tv"))))
+    if (emote && (emote->homePage.string.contains("7tv") ||
+                  (emote->images.getImage1() &&
+                   emote->images.getImage1()->url().string.contains("7tv"))))
     {
         tc.removeSelectedText();
         this->setTextCursor(tc);

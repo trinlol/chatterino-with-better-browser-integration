@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "widgets/splits/SplitInput.hpp"
-#include "widgets/splits/SpellCheckHoverPopup.hpp"
-#include <algorithm>
 
 #include "Application.hpp"
 #include "common/enums/MessageOverflow.hpp"
@@ -34,16 +32,18 @@
 #include "widgets/Scrollbar.hpp"
 #include "widgets/splits/InputCompletionPopup.hpp"
 #include "widgets/splits/InputHighlighter.hpp"
+#include "widgets/splits/SpellCheckHoverPopup.hpp"
 #include "widgets/splits/Split.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 
 #include <QActionGroup>
 #include <QCompleter>
-#include <QPainter>
 #include <QJsonObject>
+#include <QPainter>
 #include <QSignalBlocker>
 #include <QTimer>
 
+#include <algorithm>
 #include <functional>
 #include <ranges>
 
@@ -191,14 +191,14 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
                     this->replaceHoveredWord(suggestion);
                 });
 
-            std::ignore = this->spellCheckPopup_->mouseEnteredPopup.connect(
-                [this]() {
+            std::ignore =
+                this->spellCheckPopup_->mouseEnteredPopup.connect([this]() {
                     this->mouseInPopup_ = true;
                     this->closeTimer_.stop();
                 });
 
-            std::ignore = this->spellCheckPopup_->mouseLeftPopup.connect(
-                [this]() {
+            std::ignore =
+                this->spellCheckPopup_->mouseLeftPopup.connect([this]() {
                     this->mouseInPopup_ = false;
                     this->closeTimer_.start(200);
                 });
@@ -208,9 +208,12 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
         auto tempCursor = this->ui_.textEdit->textCursor();
         tempCursor.setPosition(this->hoveredWordStart_);
         QRect startRect = this->ui_.textEdit->cursorRect(tempCursor);
-        QPoint globalPos = this->ui_.textEdit->viewport()->mapToGlobal(QPoint(startRect.left(), startRect.bottom() + 2));
+        QPoint globalPos = this->ui_.textEdit->viewport()->mapToGlobal(
+            QPoint(startRect.left(), startRect.bottom() + 2));
 
-        this->spellCheckPopup_->showSuggestions(globalPos, this->hoveredWord_, qSuggestions, this->hoveredWordStart_, this->hoveredWordEnd_);
+        this->spellCheckPopup_->showSuggestions(
+            globalPos, this->hoveredWord_, qSuggestions,
+            this->hoveredWordStart_, this->hoveredWordEnd_);
     });
 
     this->closeTimer_.setSingleShot(true);
@@ -226,13 +229,15 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
         this->ui_.textEdit->viewport()->installEventFilter(this);
         this->ui_.textEdit->viewport()->setMouseTracking(true);
 
-        connect(this->ui_.textEdit, &QTextEdit::cursorPositionChanged, this, [this]() {
-            this->hideSpellCheckPopup();
-            if (this->inputHighlighter)
-            {
-                this->inputHighlighter->setCursorPosition(this->ui_.textEdit->textCursor().position());
-            }
-        });
+        connect(this->ui_.textEdit, &QTextEdit::cursorPositionChanged, this,
+                [this]() {
+                    this->hideSpellCheckPopup();
+                    if (this->inputHighlighter)
+                    {
+                        this->inputHighlighter->setCursorPosition(
+                            this->ui_.textEdit->textCursor().position());
+                    }
+                });
     }
 
     // misc
@@ -365,7 +370,8 @@ void SplitInput::initLayout()
         },
         this->managedConnections_);
 
-    if (auto *tc = dynamic_cast<TwitchChannel *>(this->split_->getChannel().get()))
+    if (auto *tc =
+            dynamic_cast<TwitchChannel *>(this->split_->getChannel().get()))
     {
         tc->pendingRewardChanged.connect([this] {
             this->updatePendingRewardPlaceholder();
@@ -909,7 +915,8 @@ void SplitInput::addShortcuts()
 
 bool SplitInput::eventFilter(QObject *obj, QEvent *event)
 {
-    if (this->initialized_ && this->ui_.textEdit && obj == this->ui_.textEdit->viewport())
+    if (this->initialized_ && this->ui_.textEdit &&
+        obj == this->ui_.textEdit->viewport())
     {
         if (event->type() == QEvent::MouseMove)
         {
@@ -945,61 +952,60 @@ void SplitInput::installTextEditEvents()
 {
     // We can safely ignore this signal's connection because SplitInput owns
     // the textEdit object, so it will always be deleted before SplitInput
-    std::ignore =
-        this->ui_.textEdit->keyPressed.connect([this](QKeyEvent *event) {
-            if (auto *popup = this->inputCompletionPopup_.data())
+    std::ignore = this->ui_.textEdit->keyPressed.connect([this](
+                                                             QKeyEvent *event) {
+        if (auto *popup = this->inputCompletionPopup_.data())
+        {
+            if (popup->isVisible())
             {
-                if (popup->isVisible())
-                {
-                    if (popup->eventFilter(nullptr, event))
-                    {
-                        event->accept();
-                        return;
-                    }
-                }
-            }
-
-            if (this->spellCheckPopup_ &&
-                this->spellCheckPopup_->isVisible())
-            {
-                if (this->spellCheckPopup_->eventFilter(nullptr, event))
+                if (popup->eventFilter(nullptr, event))
                 {
                     event->accept();
                     return;
                 }
             }
+        }
 
-            if (event->key() == Qt::Key_Tab && event->modifiers() == Qt::NoModifier)
+        if (this->spellCheckPopup_ && this->spellCheckPopup_->isVisible())
+        {
+            if (this->spellCheckPopup_->eventFilter(nullptr, event))
             {
-                QString word = this->ui_.textEdit->textUnderCursor();
-                if (word.length() >= 2)
-                {
-                    CompletionKind kind = CompletionKind::Emote;
-                    if (word.startsWith('@'))
-                    {
-                        kind = CompletionKind::User;
-                    }
-                    if (this->showCompletionPopup(word, kind))
-                    {
-                        event->accept();
-                        return;
-                    }
-                }
+                event->accept();
+                return;
             }
+        }
 
-            // One of the last remaining of it's kind, the copy shortcut.
-            // For some bizarre reason Qt doesn't want this key be rebound.
-            // TODO(Mm2PL): Revisit in Qt6, maybe something changed?
-            if ((event->key() == Qt::Key_C || event->key() == Qt::Key_Insert) &&
-                event->modifiers() == Qt::ControlModifier)
+        if (event->key() == Qt::Key_Tab && event->modifiers() == Qt::NoModifier)
+        {
+            QString word = this->ui_.textEdit->textUnderCursor();
+            if (word.length() >= 2)
             {
-                if (this->channelView_->hasSelection())
+                CompletionKind kind = CompletionKind::Emote;
+                if (word.startsWith('@'))
                 {
-                    this->channelView_->copySelectedText();
+                    kind = CompletionKind::User;
+                }
+                if (this->showCompletionPopup(word, kind))
+                {
                     event->accept();
+                    return;
                 }
             }
-        });
+        }
+
+        // One of the last remaining of it's kind, the copy shortcut.
+        // For some bizarre reason Qt doesn't want this key be rebound.
+        // TODO(Mm2PL): Revisit in Qt6, maybe something changed?
+        if ((event->key() == Qt::Key_C || event->key() == Qt::Key_Insert) &&
+            event->modifiers() == Qt::ControlModifier)
+        {
+            if (this->channelView_->hasSelection())
+            {
+                this->channelView_->copySelectedText();
+                event->accept();
+            }
+        }
+    });
 
     std::ignore = this->ui_.textEdit->contextMenuRequested.connect(
         [this](QMenu *menu, QPoint pos) {
@@ -1026,24 +1032,26 @@ void SplitInput::installTextEditEvents()
                     languageGroup->setExclusive(true);
 
                     const auto currentDictionary =
-                        getSettings()->spellCheckingDefaultDictionary.getValue();
+                        getSettings()
+                            ->spellCheckingDefaultDictionary.getValue();
 
-                    auto addDictionaryAction =
-                        [this, languageMenu, languageGroup,
-                         currentDictionary](const QString &label,
-                                            const QString &path) {
-                            auto *action = languageMenu->addAction(label);
-                            action->setToolTip(path);
-                            action->setCheckable(true);
-                            action->setChecked(path == currentDictionary);
-                            languageGroup->addAction(action);
-                            QObject::connect(action, &QAction::triggered, this,
-                                             [path]() {
-                                                 getSettings()
-                                                     ->spellCheckingDefaultDictionary
-                                                     .setValue(path);
-                                             });
-                        };
+                    auto addDictionaryAction = [this, languageMenu,
+                                                languageGroup,
+                                                currentDictionary](
+                                                   const QString &label,
+                                                   const QString &path) {
+                        auto *action = languageMenu->addAction(label);
+                        action->setToolTip(path);
+                        action->setCheckable(true);
+                        action->setChecked(path == currentDictionary);
+                        languageGroup->addAction(action);
+                        QObject::connect(
+                            action, &QAction::triggered, this, [path]() {
+                                getSettings()
+                                    ->spellCheckingDefaultDictionary.setValue(
+                                        path);
+                            });
+                    };
 
                     addDictionaryAction("None", QString{});
 
@@ -1271,9 +1279,8 @@ void SplitInput::insertCompletionText(const QString &input_) const
     }
     else if (prependAt)
     {
-        const auto userMention =
-            formatUserMention(input_, edit.isFirstWord(),
-                              getSettings()->mentionUsersWithComma);
+        const auto userMention = formatUserMention(
+            input_, edit.isFirstWord(), getSettings()->mentionUsersWithComma);
         input = "@" + userMention + " ";
     }
 
@@ -1822,7 +1829,8 @@ void SplitInput::handleMouseMove(const QPoint &pos)
 
     auto cursor = this->ui_.textEdit->cursorForPosition(pos);
     QString text = this->ui_.textEdit->toPlainText();
-    QStringView word = this->inputHighlighter->getWordAt(text, cursor.position());
+    QStringView word =
+        this->inputHighlighter->getWordAt(text, cursor.position());
 
     if (word.isEmpty())
     {
@@ -1838,7 +1846,8 @@ void SplitInput::handleMouseMove(const QPoint &pos)
 
     // Check if the word is misspelled and is in the spell-checked words list
     auto checkedWords = this->inputHighlighter->getSpellCheckedWords(text);
-    bool isSpellChecked = std::find(checkedWords.begin(), checkedWords.end(), wordStr) != checkedWords.end();
+    bool isSpellChecked = std::find(checkedWords.begin(), checkedWords.end(),
+                                    wordStr) != checkedWords.end();
     bool isMisspelled = isSpellChecked && !spellChecker->check(wordStr);
 
     if (!isMisspelled)
@@ -1864,13 +1873,16 @@ void SplitInput::handleMouseMove(const QPoint &pos)
     bool hovering = false;
     if (startRect.top() == endRect.top())
     {
-        QRect wordRect(startRect.left(), startRect.top(), endRect.right() - startRect.left(), startRect.height());
+        QRect wordRect(startRect.left(), startRect.top(),
+                       endRect.right() - startRect.left(), startRect.height());
         wordRect.adjust(-2, -2, 2, 2);
         hovering = wordRect.contains(pos);
     }
     else
     {
-        QRect rect1(startRect.left(), startRect.top(), this->ui_.textEdit->viewport()->width() - startRect.left(), startRect.height());
+        QRect rect1(startRect.left(), startRect.top(),
+                    this->ui_.textEdit->viewport()->width() - startRect.left(),
+                    startRect.height());
         rect1.adjust(-2, -2, 2, 2);
         QRect rect2(0, endRect.top(), endRect.right(), endRect.height());
         rect2.adjust(-2, -2, 2, 2);
@@ -1879,7 +1891,9 @@ void SplitInput::handleMouseMove(const QPoint &pos)
 
     if (hovering)
     {
-        if (this->spellCheckPopup_ && this->spellCheckPopup_->isVisible() && this->hoveredWord_ == wordStr && this->hoveredWordStart_ == wordStart)
+        if (this->spellCheckPopup_ && this->spellCheckPopup_->isVisible() &&
+            this->hoveredWord_ == wordStr &&
+            this->hoveredWordStart_ == wordStart)
         {
             // Same word, cancel close timer
             this->closeTimer_.stop();
@@ -1891,7 +1905,7 @@ void SplitInput::handleMouseMove(const QPoint &pos)
         this->hoveredWordStart_ = wordStart;
         this->hoveredWordEnd_ = wordEnd;
         this->closeTimer_.stop();
-        this->hoverTimer_.start(300); // 300ms hover delay
+        this->hoverTimer_.start(300);  // 300ms hover delay
     }
     else
     {

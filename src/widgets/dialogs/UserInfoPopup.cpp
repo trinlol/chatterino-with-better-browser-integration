@@ -13,20 +13,20 @@
 #include "controllers/highlights/HighlightBlacklistUser.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/userdata/UserDataController.hpp"
-#include "messages/Message.hpp"
-#include "messages/layouts/MessageLayout.hpp"
-#include "messages/MessageBuilder.hpp"
 #include "messages/Emote.hpp"
-#include "providers/IvrApi.hpp"
-#include "providers/pronouns/Pronouns.hpp"
+#include "messages/layouts/MessageLayout.hpp"
+#include "messages/Message.hpp"
+#include "messages/MessageBuilder.hpp"
 #include "providers/bttv/BttvBadges.hpp"
 #include "providers/chatterino/ChatterinoBadges.hpp"
 #include "providers/ffz/FfzBadges.hpp"
+#include "providers/IvrApi.hpp"
+#include "providers/pronouns/Pronouns.hpp"
 #include "providers/seventv/SeventvBadges.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
-#include "providers/twitch/TwitchBadges.hpp"
 #include "providers/twitch/TwitchBadge.hpp"
+#include "providers/twitch/TwitchBadges.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Resources.hpp"
@@ -47,8 +47,8 @@
 #include "widgets/helper/InvisibleSizeGrip.hpp"
 #include "widgets/helper/Line.hpp"
 #include "widgets/helper/LiveIndicator.hpp"
-#include "widgets/helper/UserBadgeGridWidget.hpp"
 #include "widgets/helper/ScalingSpacerItem.hpp"
+#include "widgets/helper/UserBadgeGridWidget.hpp"
 #include "widgets/Label.hpp"
 #include "widgets/MarkdownLabel.hpp"
 #include "widgets/Notebook.hpp"
@@ -66,6 +66,7 @@
 #include <QPointer>
 #include <QStringBuilder>
 #include <QTimer>
+
 #include <unordered_set>
 
 namespace {
@@ -378,8 +379,8 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         avatarColumn.getElement()->setAlignment(Qt::AlignHCenter);
 
         // avatar
-        auto avatar = avatarColumn.emplace<PixmapButton>(nullptr)
-                          .assign(&this->ui_.avatarButton);
+        auto avatar = avatarColumn.emplace<PixmapButton>(nullptr).assign(
+            &this->ui_.avatarButton);
         avatar->setScaleIndependentSize(100, 100);
         avatar->setDim(DimButton::Dim::None);
         QObject::connect(
@@ -692,12 +693,10 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
 
     layout.emplace<Line>(false);
 
-    layout.emplace<Label>("Messages")
-        .assign(&this->ui_.messagesHeaderLabel);
+    layout.emplace<Label>("Messages").assign(&this->ui_.messagesHeaderLabel);
     this->ui_.messagesHeaderLabel->setFontStyle(FontStyle::UiMediumBold);
 
-    layout.emplace<LabelButton>("")
-        .assign(&this->ui_.loadOlderMessagesButton);
+    layout.emplace<LabelButton>("").assign(&this->ui_.loadOlderMessagesButton);
     this->ui_.loadOlderMessagesButton->setVisible(false);
     this->ui_.loadOlderMessagesButton->setPadding({0, 0});
     QObject::connect(this->ui_.loadOlderMessagesButton,
@@ -1030,8 +1029,9 @@ void UserInfoPopup::updateLatestMessages()
 
     this->scrollConnection_ =
         std::make_unique<pajlada::Signals::ScopedConnection>(
-            this->ui_.latestMessages->getScrollBar().getCurrentValueChanged().connect(
-                [this] {
+            this->ui_.latestMessages->getScrollBar()
+                .getCurrentValueChanged()
+                .connect([this] {
                     this->updateLoadOlderVisibility();
                 }));
 
@@ -1052,8 +1052,8 @@ void UserInfoPopup::updateLatestMessages()
                         return;
                     }
 
-                    this->userMessagesChannel_->addMessage(message,
-                                                         MessageContext::Repost);
+                    this->userMessagesChannel_->addMessage(
+                        message, MessageContext::Repost);
                     this->ui_.latestMessages->setVisible(true);
                     this->ui_.noMessagesLabel->setVisible(false);
                 }));
@@ -1109,8 +1109,8 @@ void UserInfoPopup::loadUserLogsForDay(const QDate &day, bool prepend,
                     }
                     else
                     {
-                        const auto existingIds = existingUserMessageIds(
-                            this->userMessagesChannel_);
+                        const auto existingIds =
+                            existingUserMessageIds(this->userMessagesChannel_);
                         auto newMessages =
                             filterNewLogMessages(messages, existingIds);
 
@@ -1200,8 +1200,7 @@ void UserInfoPopup::mergeLocalScrollbackMessages(const QDate &day)
 
     auto localMessages =
         filterMessages(this->userName_, this->underlyingChannel_);
-    const auto existingIds =
-        existingUserMessageIds(this->userMessagesChannel_);
+    const auto existingIds = existingUserMessageIds(this->userMessagesChannel_);
 
     for (const auto &message : localMessages->getMessageSnapshot())
     {
@@ -1678,8 +1677,9 @@ QVector<UserBadgeDisplayEntry> UserInfoPopup::buildUserBadges(
             for (const auto &badge :
                  twitchChannel->ffzChannelBadges(this->userId_))
             {
-                addBadge(QString("ffz-channel/%1").arg(badge.emote->name.string),
-                         badge.emote, badge.emote->tooltip.string);
+                addBadge(
+                    QString("ffz-channel/%1").arg(badge.emote->name.string),
+                    badge.emote, badge.emote->tooltip.string);
             }
         }
 
@@ -1696,7 +1696,8 @@ QVector<UserBadgeDisplayEntry> UserInfoPopup::buildUserBadges(
                      *badge, (*badge)->tooltip.string);
         }
 
-        if (auto badge = getApp()->getSeventvBadges()->getBadge({this->userId_}))
+        if (auto badge =
+                getApp()->getSeventvBadges()->getBadge({this->userId_}))
         {
             addBadge(QString("7tv/%1").arg((*badge)->name.string), *badge,
                      (*badge)->tooltip.string);

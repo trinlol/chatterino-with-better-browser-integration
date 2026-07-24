@@ -4,11 +4,6 @@
 
 #include "widgets/dialogs/EmotePopup.hpp"
 
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include "widgets/helper/ResizingTextEdit.hpp"
-
 #include "Application.hpp"
 #include "common/enums/MessageContext.hpp"
 #include "common/QLogging.hpp"
@@ -31,12 +26,16 @@
 #include "singletons/WindowManager.hpp"
 #include "util/Helpers.hpp"
 #include "widgets/helper/ChannelView.hpp"
+#include "widgets/helper/ResizingTextEdit.hpp"
 #include "widgets/helper/TrimRegExpValidator.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/Scrollbar.hpp"
 
 #include <QAbstractButton>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QStringBuilder>
 #include <QTabWidget>

@@ -1,5 +1,5 @@
 (function (global) {
-  'use strict';
+  "use strict";
 
   const INTERACTIVE_SELECTOR =
     'button, a, input, label, select, textarea, [role="button"], [role="radio"], [role="option"]';
@@ -7,7 +7,10 @@
   function closestInteractive(node, root) {
     let current = node;
     while (current && current !== root.parentElement) {
-      if (typeof current.matches === 'function' && current.matches(INTERACTIVE_SELECTOR)) {
+      if (
+        typeof current.matches === "function" &&
+        current.matches(INTERACTIVE_SELECTOR)
+      ) {
         return current;
       }
       if (current === root) {
@@ -63,7 +66,7 @@
     }
     const path = getElementPath(replicaControl, replicaRoot);
     const sourceControl = path ? resolveElementPath(sourceRoot, path) : null;
-    if (!sourceControl || typeof sourceControl.click !== 'function') {
+    if (!sourceControl || typeof sourceControl.click !== "function") {
       return false;
     }
 
@@ -84,7 +87,7 @@
       return false;
     }
 
-    const video = document?.querySelector?.('video');
+    const video = document?.querySelector?.("video");
     const rect = video?.getBoundingClientRect?.();
     if (!rect) {
       return false;

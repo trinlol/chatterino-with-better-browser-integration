@@ -1,4 +1,5 @@
 #include "widgets/splits/PinnedMessageWidget.hpp"
+
 #include "common/Channel.hpp"
 
 #include <QFontMetrics>
@@ -13,12 +14,10 @@ namespace {
 
 QString joinWrappedUrls(QString text)
 {
-    text.replace(
-        QRegularExpression(QStringLiteral(R"((https?://)\s*\n\s*)")),
-        QStringLiteral(R"(\1)"));
-    text.replace(
-        QRegularExpression(QStringLiteral(R"((www\.)\s*\n\s*)")),
-        QStringLiteral(R"(\1)"));
+    text.replace(QRegularExpression(QStringLiteral(R"((https?://)\s*\n\s*)")),
+                 QStringLiteral(R"(\1)"));
+    text.replace(QRegularExpression(QStringLiteral(R"((www\.)\s*\n\s*)")),
+                 QStringLiteral(R"(\1)"));
 
     const QRegularExpression splitUrlContinuation(
         QStringLiteral(R"((https?://[^\s\n]*)\n([^\s\n]+))"));
@@ -118,8 +117,7 @@ QString trimTrailingUrlPunctuation(QString *url)
 QString linkifyPlainLine(const QString &line)
 {
     static const QRegularExpression urlRx(
-        QStringLiteral(
-            R"((https?://[^\s<>"']+|www\.[^\s<>"']+))"),
+        QStringLiteral(R"((https?://[^\s<>"']+|www\.[^\s<>"']+))"),
         QRegularExpression::CaseInsensitiveOption);
 
     QString html;
@@ -174,7 +172,7 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
     this->textLabel_->setTextInteractionFlags(Qt::TextBrowserInteraction);
     this->textLabel_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     this->textLabel_->setSizePolicy(QSizePolicy::Expanding,
-                                     QSizePolicy::Preferred);
+                                    QSizePolicy::Preferred);
     this->textLabel_->setStyleSheet(
         "QLabel { color: #ffffff; font-weight: 600; font-size: 12px; "
         "background: transparent; margin: 0; padding: 0; }"
@@ -184,9 +182,10 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
     this->closeButton_->setText("✕");
     this->closeButton_->setFlat(true);
     this->closeButton_->setStyleSheet(
-        "QPushButton { color: #ffffff; border: none; font-weight: bold; font-size: 14px; background: transparent; }"
-        "QPushButton:hover { color: #f4f4f5; background: rgba(255, 255, 255, 0.2); border-radius: 4px; }"
-    );
+        "QPushButton { color: #ffffff; border: none; font-weight: bold; "
+        "font-size: 14px; background: transparent; }"
+        "QPushButton:hover { color: #f4f4f5; background: rgba(255, 255, 255, "
+        "0.2); border-radius: 4px; }");
     this->closeButton_->setFixedSize(20, 20);
     this->closeButton_->setCursor(Qt::PointingHandCursor);
 
@@ -212,9 +211,10 @@ void PinnedMessageWidget::setChannel(const ChannelPtr &channel)
 
     if (channel)
     {
-        this->channelConnection_ = channel->pinnedMessageChanged.connect([this]() {
-            this->updateState();
-        });
+        this->channelConnection_ =
+            channel->pinnedMessageChanged.connect([this]() {
+                this->updateState();
+            });
     }
     this->updateState();
 }
@@ -227,16 +227,17 @@ void PinnedMessageWidget::updateTextLayout()
     }
 
     const auto *boxLayout = qobject_cast<QHBoxLayout *>(this->layout());
-    const int horizontalMargins =
-        boxLayout ? boxLayout->contentsMargins().left() +
-                        boxLayout->contentsMargins().right()
-                  : 18;
-    const int verticalMargins =
-        boxLayout ? boxLayout->contentsMargins().top() +
-                        boxLayout->contentsMargins().bottom()
-                  : 8;
+    const int horizontalMargins = boxLayout
+                                      ? boxLayout->contentsMargins().left() +
+                                            boxLayout->contentsMargins().right()
+                                      : 18;
+    const int verticalMargins = boxLayout
+                                    ? boxLayout->contentsMargins().top() +
+                                          boxLayout->contentsMargins().bottom()
+                                    : 8;
     const int spacing = boxLayout ? boxLayout->spacing() : 6;
-    const int closeWidth = this->closeButton_ ? this->closeButton_->width() : 20;
+    const int closeWidth =
+        this->closeButton_ ? this->closeButton_->width() : 20;
 
     int width = this->width() - horizontalMargins - spacing - closeWidth;
     if (width <= 0)
@@ -251,11 +252,10 @@ void PinnedMessageWidget::updateTextLayout()
 
     const QFontMetrics fm(this->textLabel_->font());
     const int lineHeight = fm.height();
-    const QRect bounds = fm.boundingRect(
-        QRect(0, 0, width, lineHeight * 12),
-        Qt::AlignLeft | Qt::TextWordWrap, this->plainText_);
-    this->contentHeight_ =
-        qBound(lineHeight, bounds.height(), lineHeight * 8);
+    const QRect bounds =
+        fm.boundingRect(QRect(0, 0, width, lineHeight * 12),
+                        Qt::AlignLeft | Qt::TextWordWrap, this->plainText_);
+    this->contentHeight_ = qBound(lineHeight, bounds.height(), lineHeight * 8);
 
     this->textLabel_->setFixedHeight(this->contentHeight_);
     const int totalHeight = this->contentHeight_ + verticalMargins;

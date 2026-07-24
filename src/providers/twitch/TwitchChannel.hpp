@@ -382,8 +382,7 @@ public:
     };
 
     void setPendingRewardRedemption(const QString &rewardId,
-                                    const QString &title,
-                                    const QString &prompt,
+                                    const QString &title, const QString &prompt,
                                     int timeoutSeconds = 90);
     void clearPendingRewardRedemption();
     bool hasPendingRewardRedemption() const;

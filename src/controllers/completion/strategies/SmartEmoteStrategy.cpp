@@ -135,46 +135,46 @@ void completeEmotes(
         }
     }
 
-    std::sort(output.begin(), output.end(),
-              [query, prioritizeUpper, ignoreColonForCost, ignoreTildeForCost](
-                  const EmoteItem &a, const EmoteItem &b) -> bool {
-                  auto tempA = a.searchName;
-                  auto tempB = b.searchName;
-                  if (ignoreColonForCost && tempA.startsWith(":"))
-                  {
-                      tempA = tempA.mid(1);
-                  }
-                  if (ignoreTildeForCost && tempA.startsWith("~"))
-                  {
-                      tempA = tempA.mid(1);
-                  }
-                  if (ignoreColonForCost && tempB.startsWith(":"))
-                  {
-                      tempB = tempB.mid(1);
-                  }
-                  if (ignoreTildeForCost && tempB.startsWith("~"))
-                  {
-                      tempB = tempB.mid(1);
-                  }
+    std::sort(
+        output.begin(), output.end(),
+        [query, prioritizeUpper, ignoreColonForCost, ignoreTildeForCost](
+            const EmoteItem &a, const EmoteItem &b) -> bool {
+            auto tempA = a.searchName;
+            auto tempB = b.searchName;
+            if (ignoreColonForCost && tempA.startsWith(":"))
+            {
+                tempA = tempA.mid(1);
+            }
+            if (ignoreTildeForCost && tempA.startsWith("~"))
+            {
+                tempA = tempA.mid(1);
+            }
+            if (ignoreColonForCost && tempB.startsWith(":"))
+            {
+                tempB = tempB.mid(1);
+            }
+            if (ignoreTildeForCost && tempB.startsWith("~"))
+            {
+                tempB = tempB.mid(1);
+            }
 
-                  bool aStartsWith = tempA.startsWith(query, Qt::CaseInsensitive);
-                  bool bStartsWith = tempB.startsWith(query, Qt::CaseInsensitive);
-                  if (aStartsWith != bStartsWith)
-                  {
-                      return aStartsWith;
-                  }
+            bool aStartsWith = tempA.startsWith(query, Qt::CaseInsensitive);
+            bool bStartsWith = tempB.startsWith(query, Qt::CaseInsensitive);
+            if (aStartsWith != bStartsWith)
+            {
+                return aStartsWith;
+            }
 
-                  auto costA = costOfEmote(query, tempA, prioritizeUpper);
-                  auto costB = costOfEmote(query, tempB, prioritizeUpper);
-                  if (costA == costB)
-                  {
-                      // Case difference and length came up tied for (a, b), break the tie
-                      return QString::compare(tempA, tempB,
-                                              Qt::CaseInsensitive) < 0;
-                  }
+            auto costA = costOfEmote(query, tempA, prioritizeUpper);
+            auto costB = costOfEmote(query, tempB, prioritizeUpper);
+            if (costA == costB)
+            {
+                // Case difference and length came up tied for (a, b), break the tie
+                return QString::compare(tempA, tempB, Qt::CaseInsensitive) < 0;
+            }
 
-                  return costA < costB;
-              });
+            return costA < costB;
+        });
 }
 }  // namespace
 

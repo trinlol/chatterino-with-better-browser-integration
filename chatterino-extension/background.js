@@ -1,24 +1,24 @@
-if (typeof importScripts === 'function') {
-  importScripts('protocol.js');
+if (typeof importScripts === "function") {
+  importScripts("protocol.js");
 }
 
 const ignoredPages = new Set([
-  'directory',
-  'downloads',
-  'friends',
-  'inventory',
-  'jobs',
-  'messages',
-  'p',
-  'payments',
-  'popout',
-  'prime',
-  'settings',
-  'store',
-  'subscriptions',
-  'turbo',
-  'videos',
-  'wallet',
+  "directory",
+  "downloads",
+  "friends",
+  "inventory",
+  "jobs",
+  "messages",
+  "p",
+  "payments",
+  "popout",
+  "prime",
+  "settings",
+  "store",
+  "subscriptions",
+  "turbo",
+  "videos",
+  "wallet",
 ]);
 
 class AttachedWindows {
@@ -52,7 +52,7 @@ class AttachedWindows {
   /** @returns {Promise<Record<number, boolean>} */
   static #load() {
     return chrome.storage.session
-      .get('attachedWindows')
+      .get("attachedWindows")
       .then(({ attachedWindows }) => attachedWindows ?? {})
       .catch(() => ({}));
   }
@@ -73,7 +73,7 @@ class Settings {
   static #defaults = {
     replaceTwitchChat: async () => {
       const platform = await chrome.runtime.getPlatformInfo();
-      return platform.os === 'win';
+      return platform.os === "win";
     },
   };
 
@@ -133,11 +133,11 @@ function matchChannelName(url) {
   return undefined;
 }
 
-const appName = 'com.chatterino.chatterino';
+const appName = "com.chatterino.chatterino";
 let port = null;
 let portConnectBlocked = false;
 let lastPortConnectAttempt = 0;
-let lastNativeError = '';
+let lastNativeError = "";
 let lastNativeConnectedAt = 0;
 const PORT_CONNECT_COOLDOWN_MS = 5000;
 
@@ -177,22 +177,22 @@ function connectPort() {
 
   try {
     port = chrome.runtime.connectNative(appName);
-    lastNativeError = '';
+    lastNativeError = "";
     lastNativeConnectedAt = Date.now();
   } catch (error) {
     portConnectBlocked = true;
     port = null;
     lastNativeError = error?.message || String(error);
-    console.warn('[Chatterino] Native messaging connect failed:', error);
+    console.warn("[Chatterino] Native messaging connect failed:", error);
     return;
   }
 
-  port.onMessage.addListener(msg => {
-    if (typeof msg === 'object' && msg.type === 'status') {
+  port.onMessage.addListener((msg) => {
+    if (typeof msg === "object" && msg.type === "status") {
       switch (msg.status) {
-        case 'exiting-host':
+        case "exiting-host":
           console.info(
-            `Native host is exiting: '${msg.reason ?? '<unknown>'}'`,
+            `Native host is exiting: '${msg.reason ?? "<unknown>"}'`
           );
           break;
         default:
@@ -201,25 +201,25 @@ function connectPort() {
       return;
     }
 
-    if (msg?.action === 'sendNativeChat') {
+    if (msg?.action === "sendNativeChat") {
       void routeSendNativeChat(msg);
     }
   });
   port.onDisconnect.addListener(() => {
-    const lastError = chrome.runtime.lastError?.message ?? '';
+    const lastError = chrome.runtime.lastError?.message ?? "";
     lastNativeError = lastError;
 
     port = null;
 
     if (
-      lastError.includes('forbidden') ||
-      lastError.includes('not found') ||
-      lastError.includes('Specified native messaging host')
+      lastError.includes("forbidden") ||
+      lastError.includes("not found") ||
+      lastError.includes("Specified native messaging host")
     ) {
       portConnectBlocked = true;
       console.warn(
-        '[Chatterino] Native messaging is blocked. Restart Chatterino after loading this extension, or add its extension ID under Settings → General → Extra extension IDs.',
-        lastError,
+        "[Chatterino] Native messaging is blocked. Restart Chatterino after loading this extension, or add its extension ID under Settings → General → Extra extension IDs.",
+        lastError
       );
     }
   });
@@ -234,7 +234,7 @@ function disconnectPort() {
 }
 
 // tab activated
-chrome.tabs.onActivated.addListener(async activeInfo => {
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
   const tab = await chrome.tabs.get(activeInfo.tabId).catch(() => null);
   if (!tab?.url) return;
 
@@ -260,12 +260,12 @@ chrome.tabs.onDetached.addListener(async (tabId, detachInfo) => {
 });
 
 // tab closed
-chrome.windows.onRemoved.addListener(async windowId => {
+chrome.windows.onRemoved.addListener(async (windowId) => {
   await tryDetach(windowId);
 });
 
 // window selected
-chrome.windows.onFocusChanged.addListener(async windowId => {
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
   if (windowId == -1) return;
 
   const window = await safeGetWindow(windowId);
@@ -301,7 +301,7 @@ async function onTabSelected(url, tab) {
   // until a later page focus or mouse event happens to trigger a measurement.
   if (tab.id !== undefined) {
     try {
-      await chrome.tabs.sendMessage(tab.id, { action: 'requestChatRect' });
+      await chrome.tabs.sendMessage(tab.id, { action: "requestChatRect" });
     } catch (error) {
       // The content script may not have loaded yet. Its initial measurement
       // will attach the chat once it does, so there is nothing to detach here.
@@ -311,13 +311,13 @@ async function onTabSelected(url, tab) {
 
 async function getIntegrationHealth() {
   const [tab] = await chrome.tabs
-    .query({ active: true, currentWindow: true, url: '*://*.twitch.tv/*' })
+    .query({ active: true, currentWindow: true, url: "*://*.twitch.tv/*" })
     .catch(() => []);
   let content = null;
   if (tab?.id) {
     try {
       content = await chrome.tabs.sendMessage(tab.id, {
-        action: 'getIntegrationHealth',
+        action: "getIntegrationHealth",
       });
     } catch (error) {
       content = null;
@@ -332,7 +332,7 @@ async function getIntegrationHealth() {
       protocolVersion: globalThis.ChatterinoProtocol.CURRENT_VERSION,
     },
     tab: tab
-      ? { id: tab.id, channel: matchChannelName(tab.url || '') || '' }
+      ? { id: tab.id, channel: matchChannelName(tab.url || "") || "" }
       : null,
     content,
     checkedAt: Date.now(),
@@ -341,7 +341,7 @@ async function getIntegrationHealth() {
 
 function isFirefox() {
   // Only Firefox has browser.*
-  return typeof browser !== 'undefined';
+  return typeof browser !== "undefined";
 }
 
 async function calcDisplayScaleFactor(tabId, dpr) {
@@ -367,7 +367,11 @@ function forwardNativeMessage(message) {
   try {
     outbound = globalThis.ChatterinoProtocol.normalizeOutbound(message);
   } catch (error) {
-    console.warn('[Chatterino] Invalid native message:', error.message, message);
+    console.warn(
+      "[Chatterino] Invalid native message:",
+      error.message,
+      message
+    );
     return;
   }
   const port = getPort();
@@ -379,19 +383,19 @@ function forwardNativeMessage(message) {
   chrome.runtime.sendNativeMessage(appName, outbound, () => {
     if (chrome.runtime.lastError) {
       console.warn(
-        '[Chatterino] Native messaging error:',
-        chrome.runtime.lastError.message,
+        "[Chatterino] Native messaging error:",
+        chrome.runtime.lastError.message
       );
     }
   });
 }
 
 async function findTwitchTabForChannel(channelName) {
-  const tabs = await chrome.tabs.query({ url: '*://*.twitch.tv/*' });
+  const tabs = await chrome.tabs.query({ url: "*://*.twitch.tv/*" });
   if (channelName) {
     const normalized = channelName.toLowerCase();
-    const matched = tabs.find(tab => {
-      const name = matchChannelName(tab.url || '');
+    const matched = tabs.find((tab) => {
+      const name = matchChannelName(tab.url || "");
       return name && name.toLowerCase() === normalized;
     });
     if (matched) {
@@ -399,7 +403,7 @@ async function findTwitchTabForChannel(channelName) {
     }
   }
 
-  const highlighted = tabs.filter(tab => tab.highlighted);
+  const highlighted = tabs.filter((tab) => tab.highlighted);
   return highlighted[0] || tabs[0] || null;
 }
 
@@ -411,36 +415,36 @@ async function routeSendNativeChat(message) {
 
   try {
     await chrome.tabs.sendMessage(tab.id, {
-      action: 'sendNativeChat',
+      action: "sendNativeChat",
       message: message.message,
       channel: message.channel,
     });
   } catch (error) {
-    console.warn('[Chatterino] Failed to route native chat send:', error);
+    console.warn("[Chatterino] Failed to route native chat send:", error);
   }
 }
 
 // receiving messages from content scripts and the popup
 chrome.runtime.onMessage.addListener((message, sender, callback) => {
   if (
-    message.action === 'engagement' ||
-    message.action === 'prediction' ||
-    message.action === 'pin' ||
-    message.action === 'rewardPending' ||
-    message.action === 'rewardClear'
+    message.action === "engagement" ||
+    message.action === "prediction" ||
+    message.action === "pin" ||
+    message.action === "rewardPending" ||
+    message.action === "rewardClear"
   ) {
     forwardNativeMessage(message);
     return;
   }
 
   switch (message.type) {
-    case 'get-integration-health':
+    case "get-integration-health":
       getIntegrationHealth().then(callback);
       return true;
-    case 'get-setting':
+    case "get-setting":
       Settings.get(message.key).then(callback);
       return true;
-    case 'set-setting':
+    case "set-setting":
       (async () => {
         await Settings.set(message.key, message.value);
 
@@ -451,21 +455,21 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
         await updateBadge();
       })();
       break;
-    case 'get-os':
-      chrome.runtime.getPlatformInfo(info => callback(info.os));
+    case "get-os":
+      chrome.runtime.getPlatformInfo((info) => callback(info.os));
 
       // We need to return true here so that `callback` will remain valid
       // after this function returns. This behavior is documented here:
       // https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/onMessage
       return true;
       break;
-    case 'location-updated':
-      safeGetWindow(sender.tab.windowId).then(window => {
+    case "location-updated":
+      safeGetWindow(sender.tab.windowId).then((window) => {
         if (!window?.focused) return;
 
         let data = {
-          action: 'select',
-          type: 'twitch',
+          action: "select",
+          type: "twitch",
           winId: sender.tab.windowId,
           version: 0,
           name: matchChannelName(sender.tab.url),
@@ -473,12 +477,12 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
         forwardNativeMessage(data);
       });
       break;
-    case 'chat-resized':
+    case "chat-resized":
       // is tab highlighted
       if (!sender.tab.highlighted) return;
 
       // is window focused
-      safeGetWindow(sender.tab.windowId).then(async window => {
+      safeGetWindow(sender.tab.windowId).then(async (window) => {
         if (!window?.focused) return;
 
         const dpr = message.dpr ?? 1;
@@ -497,13 +501,13 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
         };
 
         // attach to window
-        await tryAttach(sender.tab.windowId, window.state == 'fullscreen', {
+        await tryAttach(sender.tab.windowId, window.state == "fullscreen", {
           name: matchChannelName(sender.tab.url),
           size: size,
         });
       });
       break;
-    case 'detach':
+    case "detach":
       tryDetach(sender.tab.windowId);
       break;
   }
@@ -511,16 +515,16 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
 
 // attach chatterino to a chrome window
 async function tryAttach(windowId, fullscreen, data) {
-  data.action = 'select';
-  if (await Settings.get('replaceTwitchChat')) {
+  data.action = "select";
+  if (await Settings.get("replaceTwitchChat")) {
     if (fullscreen) {
       data.attach_fullscreen = true;
     } else {
       data.attach = true;
     }
   }
-  data.type = 'twitch';
-  data.winId = '' + windowId;
+  data.type = "twitch";
+  data.winId = "" + windowId;
   data.version = 0;
 
   let port = getPort();
@@ -544,18 +548,22 @@ async function tryDetach(windowId) {
 }
 
 function sendDetach(winID) {
-  forwardNativeMessage({ action: 'detach', version: 0, winId: winID.toString() });
+  forwardNativeMessage({
+    action: "detach",
+    version: 0,
+    winId: winID.toString(),
+  });
 }
 
 async function updateBadge() {
   chrome.action.setBadgeText({
-    text: (await Settings.get('replaceTwitchChat')) ? '' : 'off',
+    text: (await Settings.get("replaceTwitchChat")) ? "" : "off",
   });
 }
 
 function getPreviousTabs() {
   return chrome.storage.session
-    .get('previousTabs')
+    .get("previousTabs")
     .then(({ previousTabs }) => new Set(previousTabs ?? []))
     .catch(() => new Set());
 }
@@ -580,16 +588,16 @@ async function syncTabs() {
 
   let previousTabs = await getPreviousTabs();
 
-  const tabs = await chrome.tabs.query({ url: '*://*.twitch.tv/*' });
+  const tabs = await chrome.tabs.query({ url: "*://*.twitch.tv/*" });
   const currentTabs = new Set(
-    tabs.map(t => matchChannelName(t.url)).filter(Boolean),
+    tabs.map((t) => matchChannelName(t.url)).filter(Boolean)
   );
   if (compareTabs(previousTabs, currentTabs)) {
     return;
   }
   previousTabs = currentTabs;
 
-  forwardNativeMessage({ action: 'sync', twitchChannels: [...currentTabs] });
+  forwardNativeMessage({ action: "sync", twitchChannels: [...currentTabs] });
 
   await setPreviousTabs(previousTabs);
 }
@@ -598,7 +606,7 @@ syncTabs();
 chrome.tabs.onCreated.addListener(() => syncTabs());
 chrome.tabs.onRemoved.addListener(() => syncTabs());
 chrome.tabs.onUpdated.addListener((id, changeInfo) => {
-  if ('url' in changeInfo) {
+  if ("url" in changeInfo) {
     syncTabs();
   }
 });

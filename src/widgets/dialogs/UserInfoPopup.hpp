@@ -9,8 +9,9 @@
 
 #include <pajlada/signals/scoped-connection.hpp>
 #include <pajlada/signals/signal.hpp>
-#include <QPointer>
 #include <QDate>
+#include <QPointer>
+
 #include <unordered_set>
 
 class QCheckBox;

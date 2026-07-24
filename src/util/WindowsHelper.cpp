@@ -18,12 +18,12 @@
 #ifdef USEWINSDK
 
 #    include <Ole2.h>
-#    include <ShellScalingApi.h>
-#    include <Shlwapi.h>
-#    include <VersionHelpers.h>
 #    include <propkey.h>
 #    include <propvarutil.h>
+#    include <ShellScalingApi.h>
+#    include <Shlwapi.h>
 #    include <shobjidl.h>
+#    include <VersionHelpers.h>
 
 #    pragma comment(lib, "shell32.lib")
 #    pragma comment(lib, "propsys.lib")
@@ -48,8 +48,7 @@ bool setShortcutAppUserModelId(IShellLinkW *shellLink,
 
     PROPVARIANT value;
     const auto appId = appUserModelId.toStdWString();
-    const HRESULT initResult =
-        InitPropVariantFromString(appId.c_str(), &value);
+    const HRESULT initResult = InitPropVariantFromString(appId.c_str(), &value);
     if (FAILED(initResult))
     {
         propertyStore->Release();
@@ -98,8 +97,7 @@ bool writeShellShortcut(const QString &shortcutPath, const QString &exePath,
     }
 
     const auto shortcut = shortcutPath.toStdWString();
-    const HRESULT saveResult =
-        persistFile->Save(shortcut.c_str(), TRUE);
+    const HRESULT saveResult = persistFile->Save(shortcut.c_str(), TRUE);
 
     persistFile->Release();
     shellLink->Release();
@@ -128,8 +126,7 @@ bool shortcutTargetMatches(IShellLinkW *shellLink, const QString &exePath)
     return shortcutTarget.compare(expectedTarget, Qt::CaseInsensitive) == 0;
 }
 
-void syncShortcutDirectory(const QString &directoryPath,
-                           const QString &exePath,
+void syncShortcutDirectory(const QString &directoryPath, const QString &exePath,
                            const QString &appUserModelId)
 {
     QDir directory(directoryPath);
@@ -312,23 +309,20 @@ void ensureWindowsShellShortcuts(const QString &appUserModelId)
         return;
     }
 
-    const HRESULT comInit =
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    const bool needsComUninit =
-        comInit == S_OK || comInit == S_FALSE;
+    const HRESULT comInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    const bool needsComUninit = comInit == S_OK || comInit == S_FALSE;
 
-    const auto exeInfo =
-        QFileInfo(QCoreApplication::applicationFilePath());
+    const auto exeInfo = QFileInfo(QCoreApplication::applicationFilePath());
     const auto exePath = exeInfo.absoluteFilePath();
     const auto workDir = exeInfo.absolutePath();
 
-    const auto startMenuPrograms = QStandardPaths::writableLocation(
-        QStandardPaths::ApplicationsLocation);
+    const auto startMenuPrograms =
+        QStandardPaths::writableLocation(QStandardPaths::ApplicationsLocation);
     if (!startMenuPrograms.isEmpty())
     {
         writeShellShortcut(
-            QDir(startMenuPrograms).filePath(
-                QStringLiteral("Chatterino Better Browser.lnk")),
+            QDir(startMenuPrograms)
+                .filePath(QStringLiteral("Chatterino Better Browser.lnk")),
             exePath, workDir, appUserModelId);
     }
 
@@ -337,18 +331,20 @@ void ensureWindowsShellShortcuts(const QString &appUserModelId)
     if (!desktopPath.isEmpty())
     {
         writeShellShortcut(
-            QDir(desktopPath).filePath(
-                QStringLiteral("Chatterino Better Browser.lnk")),
+            QDir(desktopPath)
+                .filePath(QStringLiteral("Chatterino Better Browser.lnk")),
             exePath, workDir, appUserModelId);
     }
 
-    const auto roamingAppData = QStandardPaths::writableLocation(
-        QStandardPaths::GenericConfigLocation);
+    const auto roamingAppData =
+        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     if (!roamingAppData.isEmpty())
     {
-        const auto pinnedTaskbar = QDir(roamingAppData).filePath(
-            QStringLiteral("Microsoft/Internet Explorer/Quick Launch/User "
-                           "Pinned/TaskBar"));
+        const auto pinnedTaskbar =
+            QDir(roamingAppData)
+                .filePath(QStringLiteral(
+                    "Microsoft/Internet Explorer/Quick Launch/User "
+                    "Pinned/TaskBar"));
         syncShortcutDirectory(pinnedTaskbar, exePath, appUserModelId);
     }
 

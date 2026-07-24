@@ -4,7 +4,10 @@ html.chatterino-companion-active .chat-room__content,
 html.chatterino-companion-active
   section.chat-room
   [class*="scrollable"]:not(
-    :is(.chatterino-native-reward-dialog *, .chatterino-native-chat-identity-dialog *)
+    :is(
+      .chatterino-native-reward-dialog *,
+      .chatterino-native-chat-identity-dialog *
+    )
   ),
 html.chatterino-companion-active .chat-scrollable-area__message-container,
 html.chatterino-companion-active [data-a-target="chat-line-message-container"] {
@@ -14,23 +17,45 @@ html.chatterino-companion-active [data-a-target="chat-line-message-container"] {
 
 /* While a message-based reward redemption is pending, keep the native chat
    input/footer interactive so programmatic sends can complete the redeem. */
-html.chatterino-companion-active.chatterino-reward-pending [data-a-target="chat-input"],
-html.chatterino-companion-active.chatterino-reward-pending [data-a-target="chat-input"] *,
-html.chatterino-companion-active.chatterino-reward-pending [data-test-selector="chat-input"],
-html.chatterino-companion-active.chatterino-reward-pending [data-test-selector="chat-input"] *,
-html.chatterino-companion-active.chatterino-reward-pending [class*="chat-input"],
-html.chatterino-companion-active.chatterino-reward-pending [class*="chat-input"] *,
-html.chatterino-companion-active.chatterino-reward-pending [data-a-target="chat-send-button"],
-html.chatterino-companion-active.chatterino-reward-pending [data-a-target="chat-send-status"],
-html.chatterino-companion-active.chatterino-reward-pending [data-a-target="chat-rewards-button"] {
+html.chatterino-companion-active.chatterino-reward-pending
+  [data-a-target="chat-input"],
+html.chatterino-companion-active.chatterino-reward-pending
+  [data-a-target="chat-input"]
+  *,
+html.chatterino-companion-active.chatterino-reward-pending
+  [data-test-selector="chat-input"],
+html.chatterino-companion-active.chatterino-reward-pending
+  [data-test-selector="chat-input"]
+  *,
+html.chatterino-companion-active.chatterino-reward-pending
+  [class*="chat-input"],
+html.chatterino-companion-active.chatterino-reward-pending
+  [class*="chat-input"]
+  *,
+html.chatterino-companion-active.chatterino-reward-pending
+  [data-a-target="chat-send-button"],
+html.chatterino-companion-active.chatterino-reward-pending
+  [data-a-target="chat-send-status"],
+html.chatterino-companion-active.chatterino-reward-pending
+  [data-a-target="chat-rewards-button"] {
   visibility: visible !important;
   pointer-events: auto !important;
 }
 
-html.chatterino-companion-active.chatterino-reward-pending .chatterino-cc-restored [data-a-target="chat-input"],
-html.chatterino-companion-active.chatterino-reward-pending .chatterino-cc-restored [data-a-target="chat-input"] *,
-html.chatterino-companion-active.chatterino-reward-pending .chatterino-cc-restored [class*="chat-input"],
-html.chatterino-companion-active.chatterino-reward-pending .chatterino-cc-restored [class*="chat-input"] * {
+html.chatterino-companion-active.chatterino-reward-pending
+  .chatterino-cc-restored
+  [data-a-target="chat-input"],
+html.chatterino-companion-active.chatterino-reward-pending
+  .chatterino-cc-restored
+  [data-a-target="chat-input"]
+  *,
+html.chatterino-companion-active.chatterino-reward-pending
+  .chatterino-cc-restored
+  [class*="chat-input"],
+html.chatterino-companion-active.chatterino-reward-pending
+  .chatterino-cc-restored
+  [class*="chat-input"]
+  * {
   visibility: visible !important;
   pointer-events: auto !important;
 }
@@ -133,7 +158,9 @@ html.chatterino-video-fullscreen #chatterino-toolbar-portal {
    It must stay mounted (no display:none removal from React) so forwarded
    clicks and auto-claim keep working. */
 html.chatterino-points-replica-active
-  [data-test-selector="community-points-summary"]:not(#chatterino-toolbar-portal *),
+  [data-test-selector="community-points-summary"]:not(
+    #chatterino-toolbar-portal *
+  ),
 html.chatterino-points-replica-active
   [data-a-target="community-points-summary"]:not(#chatterino-toolbar-portal *) {
   visibility: hidden !important;
@@ -154,7 +181,9 @@ html.chatterino-points-replica-active
   min-height: 36px !important;
   border-radius: 4px !important;
   color: #9146ff !important;
-  transition: color 120ms ease, background-color 120ms ease !important;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease !important;
 }
 
 #chatterino-badge-replica:hover,
@@ -273,9 +302,21 @@ html.chatterino-badge-replica-active
 }
 
 /* Hide plain pinned messages (not prediction/poll containers) */
-.pinned-chat__container:not(:has([data-test-selector="community-prediction-banner"])):not(:has(.prediction-banner)):not(:has([data-test-selector="community-poll-banner"])):not(:has(.gamba-prediction-status-banner)),
-.community-highlight-stack:not(:has([data-test-selector="community-prediction-banner"])):not(:has(.prediction-banner)):not(:has([data-test-selector="community-poll-banner"])):not(:has(.gamba-prediction-status-banner)),
-.community-highlight:not(:has([data-test-selector="community-prediction-banner"])):not(:has(.prediction-banner)):not(:has([data-test-selector="community-poll-banner"])):not(:has(.gamba-prediction-status-banner)) {
+.pinned-chat__container:not(
+    :has([data-test-selector="community-prediction-banner"])
+  ):not(:has(.prediction-banner)):not(
+    :has([data-test-selector="community-poll-banner"])
+  ):not(:has(.gamba-prediction-status-banner)),
+.community-highlight-stack:not(
+    :has([data-test-selector="community-prediction-banner"])
+  ):not(:has(.prediction-banner)):not(
+    :has([data-test-selector="community-poll-banner"])
+  ):not(:has(.gamba-prediction-status-banner)),
+.community-highlight:not(
+    :has([data-test-selector="community-prediction-banner"])
+  ):not(:has(.prediction-banner)):not(
+    :has([data-test-selector="community-poll-banner"])
+  ):not(:has(.gamba-prediction-status-banner)) {
   display: none !important;
 }
 
@@ -429,8 +470,13 @@ div[role="dialog"][aria-labelledby="channel-points-reward-center-header"] {
    It stays inside the React tree (often inside chat containers that companion
    mode hides with visibility:hidden), so force it and its contents back to
    visible and interactive — including wheel/touch scrolling on the rewards list. */
-html.chatterino-companion-active section.chat-room .chatterino-native-reward-dialog,
-html.chatterino-companion-active section.chat-room .chatterino-native-reward-dialog *,
+html.chatterino-companion-active
+  section.chat-room
+  .chatterino-native-reward-dialog,
+html.chatterino-companion-active
+  section.chat-room
+  .chatterino-native-reward-dialog
+  *,
 .chatterino-native-reward-dialog,
 .chatterino-native-reward-dialog * {
   visibility: visible !important;
@@ -442,8 +488,13 @@ html.chatterino-companion-active section.chat-room .chatterino-native-reward-dia
 }
 
 /* Native Twitch Chat Identity popover when repositioned beside toolbar */
-html.chatterino-companion-active section.chat-room .chatterino-native-chat-identity-dialog,
-html.chatterino-companion-active section.chat-room .chatterino-native-chat-identity-dialog *,
+html.chatterino-companion-active
+  section.chat-room
+  .chatterino-native-chat-identity-dialog,
+html.chatterino-companion-active
+  section.chat-room
+  .chatterino-native-chat-identity-dialog
+  *,
 .chatterino-native-chat-identity-dialog,
 .chatterino-native-chat-identity-dialog * {
   visibility: visible !important;

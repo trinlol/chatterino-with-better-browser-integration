@@ -25,8 +25,7 @@ constexpr const char *USER_LOGS_BASE_URLS[] = {
     "https://logs.ivr.fi/",
 };
 
-using UserLogsJsonSuccessCallback =
-    std::function<void(const NetworkResult &)>;
+using UserLogsJsonSuccessCallback = std::function<void(const NetworkResult &)>;
 
 void requestUserLogsJsonImpl(QString path, const QUrlQuery &query,
                              int timeoutMs,
@@ -65,9 +64,8 @@ void requestUserLogsJsonImpl(QString path, const QUrlQuery &query,
 
             if (hasFallback)
             {
-                requestUserLogsJsonImpl(path, query, timeoutMs,
-                                        successCallback, failureCallback,
-                                        baseIndex + 1);
+                requestUserLogsJsonImpl(path, query, timeoutMs, successCallback,
+                                        failureCallback, baseIndex + 1);
             }
             else
             {
@@ -82,8 +80,8 @@ void requestUserLogsJson(QString path, QUrlQuery query, int timeoutMs,
                          IvrFailureCallback failureCallback)
 {
     requestUserLogsJsonImpl(std::move(path), std::move(query), timeoutMs,
-                              std::move(successCallback),
-                              std::move(failureCallback), 0);
+                            std::move(successCallback),
+                            std::move(failureCallback), 0);
 }
 
 }  // namespace

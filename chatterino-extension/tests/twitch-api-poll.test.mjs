@@ -1,12 +1,12 @@
-import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import test from 'node:test';
-import vm from 'node:vm';
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import vm from "node:vm";
 
 class FakeXmlHttpRequest {
   constructor() {
     this.listeners = {};
-    this.responseText = '';
+    this.responseText = "";
   }
 
   addEventListener(name, listener) {
@@ -21,16 +21,19 @@ class FakeXmlHttpRequest {
 }
 
 async function createTwitchApiHarness() {
-  const source = await readFile(new URL('../twitch-api.js', import.meta.url), 'utf8');
+  const source = await readFile(
+    new URL("../twitch-api.js", import.meta.url),
+    "utf8"
+  );
   const attributes = new Map();
   const events = [];
   const windowListeners = new Map();
   const window = {
-    location: { pathname: '/example' },
+    location: { pathname: "/example" },
     fetch: async () => ({
       ok: false,
       clone() {
-        return { text: async () => '' };
+        return { text: async () => "" };
       },
     }),
     addEventListener(name, listener) {
@@ -75,19 +78,19 @@ async function createTwitchApiHarness() {
   return { window, attributes, events };
 }
 
-test('a generic CommunityPoll event with outcomes is not misclassified as a prediction', async () => {
+test("a generic CommunityPoll event with outcomes is not misclassified as a prediction", async () => {
   const harness = await createTwitchApiHarness();
   const xhr = new FakeXmlHttpRequest();
-  xhr.open('POST', 'https://gql.twitch.tv/gql');
+  xhr.open("POST", "https://gql.twitch.tv/gql");
   xhr.responseText = JSON.stringify({
     data: {
       communityPoll: {
-        __typename: 'CommunityPoll',
+        __typename: "CommunityPoll",
         event: {
-          __typename: 'CommunityPollEvent',
-          title: 'Which map should be next?',
-          outcomes: [{ title: 'Map A' }, { title: 'Map B' }],
-          status: 'ACTIVE',
+          __typename: "CommunityPollEvent",
+          title: "Which map should be next?",
+          outcomes: [{ title: "Map A" }, { title: "Map B" }],
+          status: "ACTIVE",
         },
       },
     },
@@ -96,7 +99,10 @@ test('a generic CommunityPoll event with outcomes is not misclassified as a pred
 
   const state = harness.window.__chatterinoCompanionGql.getState();
   assert.equal(state.prediction, null);
-  assert.equal(state.poll.title, 'Which map should be next?');
-  assert.deepEqual(Array.from(state.poll.options), ['Map A', 'Map B']);
-  assert.match(harness.attributes.get('data-cc-gql-poll'), /Which map should be next/);
+  assert.equal(state.poll.title, "Which map should be next?");
+  assert.deepEqual(Array.from(state.poll.options), ["Map A", "Map B"]);
+  assert.match(
+    harness.attributes.get("data-cc-gql-poll"),
+    /Which map should be next/
+  );
 });

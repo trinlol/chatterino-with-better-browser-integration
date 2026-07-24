@@ -596,9 +596,9 @@ std::optional<ChannelPointReward> TwitchChannel::channelPointReward(
 }
 
 void TwitchChannel::setPendingRewardRedemption(const QString &rewardId,
-                                              const QString &title,
-                                              const QString &prompt,
-                                              int timeoutSeconds)
+                                               const QString &title,
+                                               const QString &prompt,
+                                               int timeoutSeconds)
 {
     assertInGuiThread();
 
@@ -642,7 +642,7 @@ bool TwitchChannel::hasPendingRewardRedemption() const
 }
 
 const std::optional<TwitchChannel::PendingRewardRedemption> &
-TwitchChannel::pendingRewardRedemption() const
+    TwitchChannel::pendingRewardRedemption() const
 {
     return this->pendingRewardRedemption_;
 }
