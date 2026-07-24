@@ -129,10 +129,7 @@ test("prediction timing is published as one absolute lock deadline", async () =>
   const prediction =
     harness.window.__chatterinoCompanionGql.getState().prediction;
   assert.equal(prediction.title, "Will we win?");
-  assert.equal(
-    prediction.closesAt,
-    Date.parse("2026-07-24T12:02:00.000Z")
-  );
+  assert.equal(prediction.closesAt, Date.parse("2026-07-24T12:02:00.000Z"));
 });
 
 test("an empty generic outcomes container does not create a fake prediction", async () => {
