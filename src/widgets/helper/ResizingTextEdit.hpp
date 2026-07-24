@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <pajlada/signals/scoped-connection.hpp>
 #include <pajlada/signals/signal.hpp>
 #include <QCompleter>
 #include <QKeyEvent>
