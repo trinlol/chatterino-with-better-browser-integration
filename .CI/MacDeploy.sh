@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 
-# Bundle relevant qt & system dependencies into the ./chatterino.app folder
+# Bundle relevant Qt and system dependencies into the application bundle.
 
 set -eo pipefail
 
-if [ -d bin/chatterino.app ] && [ ! -d chatterino.app ]; then
-    >&2 echo "Moving bin/chatterino.app down one directory"
-    mv bin/chatterino.app chatterino.app
+APP_BUNDLE="Chatterino Better Browser.app"
+
+if [ -d "bin/$APP_BUNDLE" ] && [ ! -d "$APP_BUNDLE" ]; then
+    >&2 echo "Moving bin/$APP_BUNDLE down one directory"
+    mv "bin/$APP_BUNDLE" "$APP_BUNDLE"
 fi
 
 if [ -n "$Qt5_DIR" ]; then
@@ -31,9 +33,9 @@ if [ -n "$MACOS_CODESIGN_CERTIFICATE" ]; then
     _macdeployqt_args+=("-codesign=$MACOS_CODESIGN_CERTIFICATE")
 fi
 
-macdeployqt chatterino.app "${_macdeployqt_args[@]}"
+macdeployqt "$APP_BUNDLE" "${_macdeployqt_args[@]}"
 
 if [ -n "$MACOS_CODESIGN_CERTIFICATE" ]; then
-    # Validate that chatterino.app was codesigned correctly
-    codesign -v chatterino.app
+    # Validate that the application bundle was codesigned correctly.
+    codesign -v "$APP_BUNDLE"
 fi

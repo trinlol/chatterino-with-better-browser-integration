@@ -41,6 +41,7 @@ public:
     };
 
     static bool isDowngradeOf(const QString &online, const QString &current);
+    static bool isNewerThan(const QString &online, const QString &current);
 
     /**
      * @brief Delete old files that belong to the update process
@@ -70,8 +71,6 @@ private:
     Status status_ = None;
     bool isDowngrade_{};
 
-    QString updateExe_;
-    QString updatePortable_;
     QString updateGuideLink_;
 
     void setStatus_(Status status);

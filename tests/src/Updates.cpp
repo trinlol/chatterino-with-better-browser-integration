@@ -41,6 +41,15 @@ TEST(Updates, MustNotBeDowngrade)
         << "2.4.5 must not be a downgrade of 2.4.5-beta";
 }
 
+TEST(Updates, OnlyNewerVersionsAreUpdates)
+{
+    EXPECT_TRUE(Updates::isNewerThan("2.6.1", "2.6.0"));
+    EXPECT_TRUE(Updates::isNewerThan("2.7.0-beta.1", "2.6.0"));
+    EXPECT_FALSE(Updates::isNewerThan("2.6.0", "2.6.0"));
+    EXPECT_FALSE(Updates::isNewerThan("2.5.5", "2.6.0"));
+    EXPECT_FALSE(Updates::isNewerThan("not-a-version", "2.6.0"));
+}
+
 TEST(Updates, ValidateCurrentVersion)
 {
     EXPECT_NO_THROW([[maybe_unused]] auto v = semver::from_string(

@@ -14,6 +14,7 @@
 #include <QPointer>
 #include <QPropertyAnimation>
 #include <QTextEdit>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 

@@ -22,6 +22,14 @@ const installerSource = readFileSync(
   path.join(root, '.CI', 'chatterino-installer.iss'),
   'utf8',
 );
+const updatesSource = readFileSync(
+  path.join(root, 'src', 'singletons', 'Updates.cpp'),
+  'utf8',
+);
+const buildWorkflow = readFileSync(
+  path.join(root, '.github', 'workflows', 'build.yml'),
+  'utf8',
+);
 const versionMatch = protocolSource.match(/const CURRENT_VERSION = (\d+);/);
 const cmakeVersionMatch = cmakeSource.match(
   /project\(chatterino[\s\S]*?\bVERSION\s+([^\s)]+)/,
@@ -64,6 +72,38 @@ for (const [label, actual] of [
     throw new Error(
       `${label} mismatch: implementation=${actual || 'missing'}, contract=${contract.applicationName}`,
     );
+  }
+}
+const forkReleaseApiParts = [
+  'https://api.github.com/repos/trinlol/',
+  'chatterino-with-better-browser-integration/releases',
+];
+if (!forkReleaseApiParts.every((part) => updatesSource.includes(part))) {
+  throw new Error('updater must query the Chatterino Better Browser GitHub releases API');
+}
+for (const disallowedSource of [
+  'notitia.chatterino.com',
+  'github.com/Chatterino/chatterino2/releases',
+  'chatterino.com/#downloads',
+]) {
+  if (updatesSource.includes(disallowedSource)) {
+    throw new Error(`updater still references upstream source: ${disallowedSource}`);
+  }
+}
+if (!updatesSource.includes('Updates::isNewerThan')) {
+  throw new Error('updater must compare releases with Updates::isNewerThan');
+}
+for (const expectedBuildArtifact of [
+  'bin/Chatterino Better Browser.exe',
+  'bin/Chatterino Better Browser.pdb',
+]) {
+  if (!buildWorkflow.includes(expectedBuildArtifact)) {
+    throw new Error(`release workflow does not package ${expectedBuildArtifact}`);
+  }
+}
+for (const staleBuildArtifact of ['bin/chatterino.exe', 'bin/chatterino.pdb']) {
+  if (buildWorkflow.includes(staleBuildArtifact)) {
+    throw new Error(`release workflow still packages ${staleBuildArtifact}`);
   }
 }
 if (Number(versionMatch?.[1]) !== contract.nativeProtocolVersion) {
