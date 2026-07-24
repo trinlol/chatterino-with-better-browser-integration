@@ -1023,9 +1023,18 @@ if (BUILD_APP)
         add_executable(${EXECUTABLE_PROJECT} main.cpp)
     endif()
 
-    set_target_properties(${EXECUTABLE_PROJECT} PROPERTIES
-        OUTPUT_NAME "Chatterino Better Browser"
-    )
+    if (WIN32 OR APPLE)
+        set_target_properties(${EXECUTABLE_PROJECT} PROPERTIES
+            OUTPUT_NAME "Chatterino Better Browser"
+        )
+    else()
+        # Unix packaging and Makefile generators expect the historical,
+        # whitespace-free executable path. The in-app product name remains
+        # Chatterino Better Browser on every platform.
+        set_target_properties(${EXECUTABLE_PROJECT} PROPERTIES
+            OUTPUT_NAME "chatterino"
+        )
+    endif()
 
     if (WIN32 AND RES_WINDOWS_RC_FILE)
         target_sources(${EXECUTABLE_PROJECT} PRIVATE "${RES_WINDOWS_RC_FILE}")
