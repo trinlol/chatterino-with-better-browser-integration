@@ -5,6 +5,7 @@
 #include "Application.hpp"
 #include "common/Aliases.hpp"
 #include "controllers/accounts/AccountController.hpp"
+#include "controllers/completion/sources/EmoteSource.hpp"
 #include "controllers/completion/strategies/ClassicEmoteStrategy.hpp"
 #include "controllers/completion/strategies/ClassicUserStrategy.hpp"
 #include "controllers/completion/strategies/SmartEmoteStrategy.hpp"
@@ -214,9 +215,12 @@ private:
 
 protected:
     template <typename T>
-    auto queryEmoteCompletion(const QString &fullQuery)
+    auto queryEmoteCompletion(
+        const QString &fullQuery,
+        EmoteSource::ProviderMode providerMode = EmoteSource::ProviderMode::All)
     {
-        EmoteSource source(this->channelPtr.get(), std::make_unique<T>());
+        EmoteSource source(this->channelPtr.get(), std::make_unique<T>(),
+                           providerMode);
         source.update(fullQuery);
 
         std::vector<EmoteItem> out(source.output());
@@ -224,9 +228,12 @@ protected:
     }
 
     template <typename T>
-    auto queryTabCompletion(const QString &fullQuery, bool isFirstWord)
+    auto queryTabCompletion(
+        const QString &fullQuery, bool isFirstWord,
+        EmoteSource::ProviderMode providerMode = EmoteSource::ProviderMode::All)
     {
-        EmoteSource source(this->channelPtr.get(), std::make_unique<T>());
+        EmoteSource source(this->channelPtr.get(), std::make_unique<T>(),
+                           providerMode);
         source.update(fullQuery);
 
         QStringList m;
@@ -256,6 +263,36 @@ protected:
                                                          isFirstWord);
     }
 };
+
+TEST_F(InputCompletionTest, SeventvOnlyPopupCompletion)
+{
+    for (auto completion :
+         {queryEmoteCompletion<ClassicEmoteStrategy>(
+              ":cla", EmoteSource::ProviderMode::SeventvOnly),
+          queryEmoteCompletion<SmartEmoteStrategy>(
+              ":cla", EmoteSource::ProviderMode::SeventvOnly)})
+    {
+        ASSERT_EQ(completion.size(), 2);
+        containsRoughly(completion, {"Clap", "Clap2"});
+        ASSERT_TRUE(std::ranges::all_of(completion, [](const auto &item) {
+            return !item.isEmoji && item.providerName == u"Global 7TV";
+        }));
+    }
+}
+
+TEST_F(InputCompletionTest, SeventvOnlyTabCompletion)
+{
+    for (const auto &completion :
+         {queryTabCompletion<ClassicTabEmoteStrategy>(
+              "cla", false, EmoteSource::ProviderMode::SeventvOnly),
+          queryTabCompletion<SmartTabEmoteStrategy>(
+              "cla", false, EmoteSource::ProviderMode::SeventvOnly)})
+    {
+        ASSERT_EQ(completion.size(), 2);
+        ASSERT_TRUE(completion.contains("Clap "));
+        ASSERT_TRUE(completion.contains("Clap2 "));
+    }
+}
 
 TEST_F(InputCompletionTest, ClassicEmoteNameFiltering)
 {
