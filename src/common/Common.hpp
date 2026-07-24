@@ -17,7 +17,7 @@ inline constexpr QStringView LINK_CHATTERINO_WIKI =
 inline constexpr QStringView LINK_CHATTERINO_DISCORD =
     u"https://discord.gg/7Y5AYhAK4z";
 inline constexpr QStringView LINK_CHATTERINO_SOURCE =
-    u"https://github.com/Chatterino/chatterino2";
+    u"https://github.com/trinlol/chatterino-with-better-browser-integration";
 
 inline constexpr QStringView TWITCH_PLAYER_URL =
     u"https://player.twitch.tv/?channel=%1&parent=twitch.tv";

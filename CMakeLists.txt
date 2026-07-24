@@ -68,9 +68,9 @@ if(BUILD_BENCHMARKS)
 endif()
 
 project(chatterino
-    VERSION 2.5.5
-    DESCRIPTION "Chat client for twitch.tv"
-    HOMEPAGE_URL "https://chatterino.com/"
+    VERSION 2.6.0
+    DESCRIPTION "Chatterino Better Browser client for Twitch"
+    HOMEPAGE_URL "https://github.com/trinlol/chatterino-with-better-browser-integration"
 )
 
 if(CHATTERINO_GENERATE_COVERAGE)

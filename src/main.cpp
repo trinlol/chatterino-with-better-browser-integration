@@ -56,6 +56,7 @@ int main(int argc, char **argv)
 #endif
 
     QCoreApplication::setApplicationName("chatterino");
+    QApplication::setApplicationDisplayName(CHATTERINO_PRODUCT_NAME);
     QCoreApplication::setApplicationVersion(CHATTERINO_VERSION);
     QCoreApplication::setOrganizationDomain("chatterino.com");
 

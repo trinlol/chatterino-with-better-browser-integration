@@ -18,7 +18,7 @@ Version::Version()
     , dateOfBuild_(QStringLiteral(CHATTERINO_CMAKE_GEN_DATE))
     , isNightly_(CHATTERINO_NIGHTLY_BUILD == 1)
 {
-    this->fullVersion_ = "Chatterino ";
+    this->fullVersion_ = CHATTERINO_PRODUCT_NAME + " ";
     if (this->isNightly())
     {
         this->fullVersion_ += "Nightly ";
@@ -134,13 +134,13 @@ bool Version::isNightly() const
 
 void Version::generateBuildString()
 {
-    // e.g. Chatterino 2.3.5 or Chatterino Nightly 2.3.5
+    // e.g. Chatterino Better Browser 2.6.0
     auto s = this->fullVersion();
 
     // Add commit information
     s +=
         QString(
-            R"( (commit <a href="https://github.com/Chatterino/chatterino2/commit/%1">%1</a>)")
+            R"( (commit <a href="https://github.com/trinlol/chatterino-with-better-browser-integration/commit/%1">%1</a>)")
             .arg(this->commitHash());
     if (this->isModified())
     {

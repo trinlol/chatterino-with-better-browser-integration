@@ -8,14 +8,15 @@
     <content_rating type="oars-1.0">
         <content_attribute id="social-chat">intense</content_attribute>
     </content_rating>
-    <name>Chatterino</name>
-    <developer_name>Chatterino Developers</developer_name>
+    <name>Chatterino Better Browser</name>
+    <developer_name>trinlol and Chatterino contributors</developer_name>
     <summary>
-        Chat client for twitch.tv
+        Chatterino with native Twitch browser integration
     </summary>
     <description>
         <p>
-            Chatterino is a chat client for Twitch.tv.
+            Chatterino Better Browser combines Chatterino chat with polls,
+            predictions, channel points, and other Twitch browser activities.
         </p>
     </description>
     <screenshots>
@@ -27,13 +28,16 @@
         <keyword>chat</keyword>
         <keyword>twitch</keyword>
     </keywords>
-    <url type="homepage">https://chatterino.com/</url>
-    <url type="bugtracker">https://chatterino.com/link/issues</url>
+    <url type="homepage">https://github.com/trinlol/chatterino-with-better-browser-integration</url>
+    <url type="bugtracker">https://github.com/trinlol/chatterino-with-better-browser-integration/issues</url>
     <url type="donation">https://chatterino.com/link/tips</url>
     <provides>
         <binary>chatterino</binary>
     </provides>
     <releases>
+        <release version="2.6.0" date="2026-07-24">
+            <url>https://github.com/trinlol/chatterino-with-better-browser-integration/releases/tag/v2.6.0</url>
+        </release>
         <release version="2.5.5" date="2026-03-22">
             <url>https://github.com/Chatterino/chatterino2/releases/tag/v2.5.5</url>
         </release>
