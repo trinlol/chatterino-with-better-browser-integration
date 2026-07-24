@@ -8,6 +8,9 @@ A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes T
 
 > 🧩 **One extension only** — load [`chatterino-extension/`](./chatterino-extension/) in Chrome or Edge. No separate Native Host or Companion install.
 
+> [!IMPORTANT]
+> Chatterino Better Browser stores settings locally in `%APPDATA%\Chatterino2\` and communicates only with Twitch and the services used for chat features. Its updater and first-run release notes point exclusively to this fork's [GitHub Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases). Remove the unpacked browser extension and delete the extracted app folder to stop using the fork; your Chatterino settings remain untouched.
+
 ---
 
 ## 📸 Showcase
@@ -67,10 +70,14 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 ### 🌐 Browser integration
 
 - 📌 **Pinned messages** — moderator pins show as a compact purple banner in Chatterino with clickable links and a dismiss button
-- 🎲 **Predictions & polls** — live prediction/poll UI integrated into the Twitch toolbar
+- 🗳️ **Clickable polls & predictions** — voting controls appear beside the Twitch player so you can vote without reopening native Twitch chat
+- 🟢 **Accurate prediction banner** — the green Chatterino banner follows Twitch's real lock deadline instead of getting stuck at `2:00`
+- 🧭 **Independent activity state** — polls and predictions update separately, with clearer titles and no cross-event overwrites
 - 🪙 **Channel points auto-claim** — claims bonus chests automatically; scrollable rewards menu
 - 🏅 **Chat identity button** — badge picker in the toolbar (left of channel points); opens Twitch's Chat Identity menu even when the native chat is hidden
+- 🖥️ **Fullscreen-safe controls** — moved toolbar elements automatically hide while the Twitch video is fullscreen
 - ⚡ **Stable browser overlay** — fixes flicker, disappearing chat, and runaway CPU from native messaging
+- 🔄 **Fork-only updates** — update prompts and first-run release notes use this repository, never the upstream Chatterino download site
 
 ### 💬 Rich emote input (fork-exclusive)
 
@@ -214,8 +221,8 @@ git clone --recurse-submodules https://github.com/trinlol/chatterino-with-better
 <table>
   <tr>
     <td align="center" valign="top" width="200">
-      <a href="https://claude.ai"><img src="https://img.shields.io/badge/Claude-cc785c?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude" /></a><br />
-      <sub><b>Debugging</b></sub>
+      <a href="https://chatgpt.com"><img src="https://img.shields.io/badge/ChatGPT-412991?style=for-the-badge&logo=openai&logoColor=white" alt="ChatGPT by OpenAI" /></a><br />
+      <sub><b>ChatGPT by OpenAI</b> — development, debugging, and documentation assistance</sub>
     </td>
   </tr>
 </table>

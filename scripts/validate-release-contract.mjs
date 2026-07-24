@@ -113,15 +113,15 @@ if (!forkReleasePageParts.every((part) => commonHeader.includes(part))) {
   );
 }
 if (!applicationSource.includes("LINK_CHATTERINO_RELEASES")) {
-  throw new Error(
-    "first-run changelog must use the fork release URL contract"
-  );
+  throw new Error("first-run changelog must use the fork release URL contract");
 }
 const forkChangelogPromptParts = [
   "View Chatterino Better Browser release ",
   "notes on GitHub?",
 ];
-if (!forkChangelogPromptParts.every((part) => applicationSource.includes(part))) {
+if (
+  !forkChangelogPromptParts.every((part) => applicationSource.includes(part))
+) {
   throw new Error("first-run changelog prompt must identify the fork");
 }
 for (const expectedBuildArtifact of [
