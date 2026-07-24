@@ -53,4 +53,4 @@ system. It was amplified by two competing handlers for the same Tab key.
 ## Hypothesis failures
 
 1. `design_rejected`: the first mitigation made all input plain text, which
-fixed cursor stability but removed the required inline-emote feature.
+   fixed cursor stability but removed the required inline-emote feature.
