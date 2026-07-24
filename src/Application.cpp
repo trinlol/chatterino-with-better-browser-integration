@@ -6,6 +6,7 @@
 
 #include "common/Args.hpp"
 #include "common/Channel.hpp"
+#include "common/Common.hpp"
 #include "common/Version.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/Command.hpp"
@@ -215,15 +216,16 @@ void Application::initialize(Settings &settings, const Paths &paths)
         getSettings()->currentVersion.getValue() != "" &&
         getSettings()->currentVersion.getValue() != CHATTERINO_VERSION)
     {
-        auto *box = new QMessageBox(QMessageBox::Information,
-                                    CHATTERINO_PRODUCT_NAME, "Show changelog?",
-                                    QMessageBox::Yes | QMessageBox::No);
+        auto *box =
+            new QMessageBox(QMessageBox::Information, CHATTERINO_PRODUCT_NAME,
+                            "View Chatterino Better Browser release "
+                            "notes on GitHub?",
+                            QMessageBox::Yes | QMessageBox::No);
         box->setAttribute(Qt::WA_DeleteOnClose);
         if (box->exec() == QMessageBox::Yes)
         {
             QDesktopServices::openUrl(
-                QUrl("https://github.com/trinlol/"
-                     "chatterino-with-better-browser-integration/releases"));
+                QUrl(LINK_CHATTERINO_RELEASES.toString()));
         }
     }
 

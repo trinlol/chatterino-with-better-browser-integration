@@ -18,6 +18,14 @@ const versionHeader = readFileSync(
   path.join(root, "src", "common", "Version.hpp"),
   "utf8"
 );
+const commonHeader = readFileSync(
+  path.join(root, "src", "common", "Common.hpp"),
+  "utf8"
+);
+const applicationSource = readFileSync(
+  path.join(root, "src", "Application.cpp"),
+  "utf8"
+);
 const installerSource = readFileSync(
   path.join(root, ".CI", "chatterino-installer.iss"),
   "utf8"
@@ -94,6 +102,27 @@ for (const disallowedSource of [
 }
 if (!updatesSource.includes("Updates::isNewerThan")) {
   throw new Error("updater must compare releases with Updates::isNewerThan");
+}
+const forkReleasePageParts = [
+  "https://github.com/trinlol/chatterino-with-better-browser-integration/",
+  'u"releases"',
+];
+if (!forkReleasePageParts.every((part) => commonHeader.includes(part))) {
+  throw new Error(
+    "first-run changelog must target the Chatterino Better Browser releases page"
+  );
+}
+if (!applicationSource.includes("LINK_CHATTERINO_RELEASES")) {
+  throw new Error(
+    "first-run changelog must use the fork release URL contract"
+  );
+}
+const forkChangelogPromptParts = [
+  "View Chatterino Better Browser release ",
+  "notes on GitHub?",
+];
+if (!forkChangelogPromptParts.every((part) => applicationSource.includes(part))) {
+  throw new Error("first-run changelog prompt must identify the fork");
 }
 for (const expectedBuildArtifact of [
   "bin/Chatterino Better Browser.exe",
