@@ -293,12 +293,14 @@ TEST_F(InputCompletionTest, ClassicEmoteExactNameMatching)
     // FFZ emote is prioritized over any other matching emojis
     ASSERT_EQ(completion[1].displayName, "CatBag");
 
-    // not exactly "salt", SaltyCorn BTTV emote comes first
+    // Prefix matches are prioritized over substring matches. Provider emotes
+    // are collected before emoji, so SaltyCorn remains first.
     completion = queryClassicEmoteCompletion(":sal");
-    ASSERT_TRUE(completion.size() >= 3);
+    ASSERT_TRUE(completion.size() >= 4);
     ASSERT_EQ(completion[0].displayName, "SaltyCorn");
-    ASSERT_EQ(completion[1].displayName, "green_salad");
-    ASSERT_EQ(completion[2].displayName, "salt");
+    ASSERT_EQ(completion[1].displayName, "salt");
+    ASSERT_EQ(completion[2].displayName, "saluting_face");
+    ASSERT_EQ(completion[3].displayName, "green_salad");
 
     // exactly "salt", emoji comes first
     completion = queryClassicEmoteCompletion(":salt");
@@ -461,8 +463,8 @@ TEST_F(InputCompletionTest, SmartEmoteExactNameMatching)
     ASSERT_TRUE(completion.size() >= 4);
     ASSERT_EQ(completion[0].displayName, "salt");
     ASSERT_EQ(completion[1].displayName, "SaltyCorn");
-    ASSERT_EQ(completion[2].displayName, "green_salad");
-    ASSERT_EQ(completion[3].displayName, "saluting_face");
+    ASSERT_EQ(completion[2].displayName, "saluting_face");
+    ASSERT_EQ(completion[3].displayName, "green_salad");
 
     completion = querySmartEmoteCompletion(":salt");
     ASSERT_TRUE(completion.size() >= 2);
