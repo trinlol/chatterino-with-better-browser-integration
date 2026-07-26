@@ -8,9 +8,7 @@
 #include "util/IpcQueue.hpp"
 #include "util/RenameThread.hpp"
 
-#include <atomic>
 #include <iostream>
-#include <memory>
 #include <thread>
 
 #ifdef Q_OS_WIN
@@ -82,27 +80,10 @@ void runBrowserOutboundLoop()
 
 void runLoop()
 {
-    auto receivedMessage = std::make_shared<std::atomic_bool>(true);
-
     auto outboundThread = std::thread([] {
         runBrowserOutboundLoop();
     });
     renameThread(outboundThread, "BrowserOutbound");
-
-    auto thread = std::thread([=]() {
-        while (true)
-        {
-            using namespace std::chrono_literals;
-            if (!receivedMessage->exchange(false))
-            {
-                sendToBrowser(QLatin1String{
-                    R"({"type":"status","status":"exiting-host","reason":"no message was received in 10s"})"});
-                _Exit(1);
-            }
-            std::this_thread::sleep_for(10s);
-        }
-    });
-    renameThread(thread, "BrowserPingCheck");
 
     while (true)
     {
@@ -111,8 +92,6 @@ void runLoop()
         {
             break;
         }
-
-        receivedMessage->store(true);
 
         nm::client::sendMessage(buffer);
     }

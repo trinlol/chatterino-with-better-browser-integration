@@ -44,7 +44,8 @@ public:
 
 #ifdef USEWINSDK
     /// Immediately synchronize this overlay with its browser window.
-    /// Called by the WinEvent location hook while the browser is moving.
+    /// Called by the WinEvent hook while the browser is moving or changing
+    /// window state.
     void syncToTargetWindow();
 #endif
 
@@ -75,11 +76,16 @@ private:
     int width_ = 360;
     int height_ = -1;
     bool fullscreen_ = false;
+    bool requestedVisible_ = false;
 
 #ifdef USEWINSDK
     bool validProcessName_ = false;
     bool attached_ = false;
     bool wasBrowserActive_ = false;
+    bool targetWindowStateInitialized_ = false;
+    bool targetWindowZoomed_ = false;
+    bool targetWindowTransitioning_ = false;
+    QTimer targetWindowSettleTimer_;
 #endif
     QTimer timer_;
     QTimer slowTimer_;

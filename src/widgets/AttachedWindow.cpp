@@ -37,14 +37,16 @@ static thread_local std::vector<HWND> taskbarHwnds;
 namespace {
 
 std::unordered_map<HWND, AttachedWindow *> attachedWindows;
-HWINEVENTHOOK locationChangeHook = nullptr;
+HWINEVENTHOOK targetWindowHook = nullptr;
 
-void CALLBACK handleLocationChange(HWINEVENTHOOK /*hook*/, DWORD event,
-                                   HWND hwnd, LONG objectId, LONG childId,
-                                   DWORD /*eventThread*/, DWORD /*eventTime*/)
+void CALLBACK handleTargetWindowEvent(HWINEVENTHOOK /*hook*/, DWORD event,
+                                      HWND hwnd, LONG objectId, LONG childId,
+                                      DWORD /*eventThread*/,
+                                      DWORD /*eventTime*/)
 {
-    if (event != EVENT_OBJECT_LOCATIONCHANGE || objectId != OBJID_WINDOW ||
-        childId != CHILDID_SELF)
+    if ((event != EVENT_OBJECT_STATECHANGE &&
+         event != EVENT_OBJECT_LOCATIONCHANGE) ||
+        objectId != OBJID_WINDOW || childId != CHILDID_SELF)
     {
         return;
     }
@@ -56,20 +58,20 @@ void CALLBACK handleLocationChange(HWINEVENTHOOK /*hook*/, DWORD event,
     }
 }
 
-void registerLocationHook(HWND target, AttachedWindow *window)
+void registerTargetWindowHook(HWND target, AttachedWindow *window)
 {
     attachedWindows.insert_or_assign(target, window);
 
-    if (!locationChangeHook)
+    if (!targetWindowHook)
     {
-        locationChangeHook = ::SetWinEventHook(
-            EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
-            handleLocationChange, 0, 0,
+        targetWindowHook = ::SetWinEventHook(
+            EVENT_OBJECT_STATECHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
+            handleTargetWindowEvent, 0, 0,
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     }
 }
 
-void unregisterLocationHook(HWND target, AttachedWindow *window)
+void unregisterTargetWindowHook(HWND target, AttachedWindow *window)
 {
     auto attachedWindow = attachedWindows.find(target);
     if (attachedWindow != attachedWindows.end() &&
@@ -78,10 +80,10 @@ void unregisterLocationHook(HWND target, AttachedWindow *window)
         attachedWindows.erase(attachedWindow);
     }
 
-    if (attachedWindows.empty() && locationChangeHook)
+    if (attachedWindows.empty() && targetWindowHook)
     {
-        ::UnhookWinEvent(locationChangeHook);
-        locationChangeHook = nullptr;
+        ::UnhookWinEvent(targetWindowHook);
+        targetWindowHook = nullptr;
     }
 }
 
@@ -142,13 +144,55 @@ AttachedWindow::AttachedWindow(void *_target)
     split->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
     layout->addWidget(split);
 
+#ifdef USEWINSDK
+    this->targetWindowSettleTimer_.setInterval(75);
+    this->targetWindowSettleTimer_.setSingleShot(true);
+    QObject::connect(&this->targetWindowSettleTimer_, &QTimer::timeout, [this] {
+        if (!this->targetWindowTransitioning_)
+        {
+            return;
+        }
+
+        auto target = HWND(this->target_);
+        if (!::IsWindow(target))
+        {
+            this->targetWindowTransitioning_ = false;
+            this->updateWindowRect(this->target_);
+            return;
+        }
+
+        // An owned overlay follows its browser through minimize/restore.
+        // If a zoom transition was interrupted by minimizing, defer the final
+        // placement until the browser is restored.
+        if (::IsIconic(target))
+        {
+            return;
+        }
+
+        const bool zoomed = ::IsZoomed(target) != 0;
+        if (zoomed != this->targetWindowZoomed_)
+        {
+            this->targetWindowZoomed_ = zoomed;
+            this->targetWindowSettleTimer_.start();
+            return;
+        }
+
+        this->targetWindowTransitioning_ = false;
+        this->updateWindowRect(this->target_);
+        if (this->requestedVisible_)
+        {
+            this->show();
+        }
+    });
+#endif
+
     DebugCount::increase(DebugObject::AttachedWindow);
 }
 
 AttachedWindow::~AttachedWindow()
 {
 #ifdef USEWINSDK
-    unregisterLocationHook(HWND(this->target_), this);
+    unregisterTargetWindowHook(HWND(this->target_), this);
 #endif
 
     for (auto it = items.begin(); it != items.end(); it++)
@@ -215,8 +259,15 @@ AttachedWindow *AttachedWindow::get(void *target, const GetArgs &args)
         }
     }
 
+    window->requestedVisible_ = show;
     if (show)
     {
+#ifdef USEWINSDK
+        if (window->targetWindowTransitioning_)
+        {
+            return window;
+        }
+#endif
         window->updateWindowRect(window->target_);
         window->show();
     }
@@ -271,6 +322,8 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
     auto attached = HWND(_attachedPtr);
 
     this->attached_ = true;
+    this->targetWindowZoomed_ = ::IsZoomed(attached) != 0;
+    this->targetWindowStateInitialized_ = true;
 
     // Set the browser window as the owner of this window to prevent Z-order flickering
     ::SetWindowLongPtr(hwnd, GWLP_HWNDPARENT,
@@ -281,7 +334,7 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
 
     // Location changes are delivered immediately by the WinEvent hook. Keep
     // the timer as a fallback and for foreground/Z-order maintenance.
-    registerLocationHook(attached, this);
+    registerTargetWindowHook(attached, this);
     this->timer_.setInterval(16);
     QObject::connect(&this->timer_, &QTimer::timeout, [this, attached] {
         // check process id
@@ -324,6 +377,16 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
             this->validProcessName_ = true;
         }
 
+        if (this->targetWindowTransitioning_)
+        {
+            if (!::IsIconic(attached) &&
+                !this->targetWindowSettleTimer_.isActive())
+            {
+                this->targetWindowSettleTimer_.start();
+            }
+            return;
+        }
+
         this->updateWindowRect(attached);
     });
 
@@ -352,6 +415,34 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
 #ifdef USEWINSDK
 void AttachedWindow::syncToTargetWindow()
 {
+    auto target = HWND(this->target_);
+    if (::IsIconic(target))
+    {
+        return;
+    }
+
+    const bool zoomed = ::IsZoomed(target) != 0;
+    if (!this->targetWindowStateInitialized_)
+    {
+        this->targetWindowZoomed_ = zoomed;
+        this->targetWindowStateInitialized_ = true;
+    }
+    else if (zoomed != this->targetWindowZoomed_)
+    {
+        this->targetWindowZoomed_ = zoomed;
+        this->targetWindowTransitioning_ = true;
+        this->hide();
+    }
+
+    if (this->targetWindowTransitioning_)
+    {
+        // Coalesce the animated maximize/restore rectangle burst. Applying
+        // every queued intermediate rectangle makes the overlay visibly trail
+        // the browser even though ordinary dragging is synchronized directly.
+        this->targetWindowSettleTimer_.start();
+        return;
+    }
+
     this->updateWindowRect(this->target_);
 }
 #endif
