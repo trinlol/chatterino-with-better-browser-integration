@@ -35,7 +35,7 @@ namespace chatterino {
  **/
 inline const QString CHATTERINO_PRODUCT_NAME =
     QStringLiteral("Chatterino Better Browser");
-inline const QString CHATTERINO_VERSION = QStringLiteral("2.6.0");
+inline const QString CHATTERINO_VERSION = QStringLiteral("2.6.1");
 
 class Version
 {
@@ -88,7 +88,7 @@ private:
     bool isSupportedOS_;
 
     QString buildString_;
-    // Generate a build string (e.g. Chatterino Better Browser 2.6.0 (commit ...))
+    // Generate a build string (e.g. Chatterino Better Browser 2.6.1 (commit ...))
     // and store it in buildString_ for future use.
     void generateBuildString();
 

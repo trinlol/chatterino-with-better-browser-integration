@@ -2,7 +2,7 @@
 
 # ✨ Chatterino Better Browser
 
-Current release: **2.6.0**
+Current release: **2.6.1**
 
 A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes Twitch browser integration feel native and complete — Chatterino chat overlaid on Twitch, plus pinned messages, predictions, channel points, chat identity badges, and a richer emote input experience.
 

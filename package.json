@@ -1,6 +1,6 @@
 {
   "name": "chatterino-better-browser",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "description": "Chatterino desktop client with native Twitch browser integration.",
   "main": "index.js",
   "directories": {

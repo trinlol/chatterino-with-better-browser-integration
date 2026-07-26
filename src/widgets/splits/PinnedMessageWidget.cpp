@@ -18,6 +18,7 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QRegularExpression>
 #include <QScrollArea>
 #include <QShowEvent>
 #include <QTimer>
@@ -35,6 +36,30 @@ namespace chatterino {
 namespace {
 
 constexpr auto MUTED_STYLE = "color: #adadb8;";
+
+QString linkifyPinnedMessage(const QString &message)
+{
+    const auto escaped =
+        message.toHtmlEscaped().replace(QChar(u'\n'), QStringLiteral("<br/>"));
+    static const QRegularExpression urlPattern(
+        "((?:https?://|www\\.)[^\\s<]+)");
+
+    QString result;
+    result.reserve(escaped.size());
+    qsizetype cursor = 0;
+    auto match = urlPattern.match(escaped, cursor);
+    while (match.hasMatch())
+    {
+        result += escaped.mid(cursor, match.capturedStart() - cursor);
+        const auto url = match.captured(1);
+        const auto href = url.startsWith(u"www.") ? u"https://"_s + url : url;
+        result += u"<a href=\"%1\">%2</a>"_s.arg(href, url);
+        cursor = match.capturedEnd();
+        match = urlPattern.match(escaped, cursor);
+    }
+    result += escaped.mid(cursor);
+    return result;
+}
 
 }  // namespace
 
@@ -75,12 +100,13 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
 
     // Message body
     this->messageLabel_->setWordWrap(true);
-    this->messageLabel_->setTextFormat(Qt::PlainText);
+    this->messageLabel_->setTextFormat(Qt::RichText);
+    this->messageLabel_->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    this->messageLabel_->setOpenExternalLinks(true);
     this->messageLabel_->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     this->messageLabel_->setStyleSheet("background: transparent;");
     this->messageLabel_->setSizePolicy(QSizePolicy::Expanding,
                                        QSizePolicy::Preferred);
-    this->messageLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     this->messageScrollArea_->setWidgetResizable(true);
     this->messageScrollArea_->setHorizontalScrollBarPolicy(
@@ -264,6 +290,15 @@ std::unique_ptr<QMenu> PinnedMessageWidget::buildModMenu()
     menu->addSeparator();
 
     menu->addAction(u"Hide for Yourself"_s, this, [this] {
+        if (this->channel_)
+        {
+            const auto *pin = this->channel_->getPinnedMessage();
+            if (pin)
+            {
+                this->dismissedMessageID_ = pin->messageID;
+            }
+        }
+        this->autoHideTimer_->stop();
         this->hide();
     });
 
@@ -291,12 +326,19 @@ void PinnedMessageWidget::refresh()
         return;
     }
 
+    if (this->dismissedMessageID_ == pin->messageID)
+    {
+        this->hide();
+        return;
+    }
+    this->dismissedMessageID_.clear();
+
     const auto mode = static_cast<UsernameDisplayMode>(
         getSettings()->usernameDisplayMode.getValue());
     this->pinnedByLabel_->setText(u"Pinned by <b>%1</b>"_s.arg(
         pin->pinnedBy.formatted(mode).toHtmlEscaped()));
 
-    this->messageLabel_->setText(pin->messageText);
+    this->messageLabel_->setText(linkifyPinnedMessage(pin->messageText));
     this->updateMessageHeight();
 
     {
@@ -333,12 +375,21 @@ void PinnedMessageWidget::toggleUserPinned()
     if (this->isVisible())
     {
         this->userToggled_ = false;
+        if (this->channel_)
+        {
+            const auto *pin = this->channel_->getPinnedMessage();
+            if (pin)
+            {
+                this->dismissedMessageID_ = pin->messageID;
+            }
+        }
         this->autoHideTimer_->stop();
         this->hide();
     }
     else
     {
         this->userToggled_ = true;
+        this->dismissedMessageID_.clear();
         this->autoHideTimer_->stop();
         this->show();
         this->updateMessageHeightIfNeeded();

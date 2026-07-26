@@ -2,6 +2,18 @@
 
 ## Chatterino Better Browser
 
+### v2.6.1 (2026-07-26)
+
+#### Fixed
+
+- Enter and Return send chat messages again instead of inserting an unwanted new line
+- Pinned announcements stay dismissed when Twitch refreshes or rebinds the same channel
+- URLs in pinned announcements are clickable and safely open in the default browser
+- Native chat remains attached while Twitch is inactive and stays synchronized while moving or maximizing the browser window
+- Prediction countdowns and voting controls remain usable beside the Twitch player
+- 7TV-only emote completion and the related-emote popup behave consistently in the input box
+- First-run changelog and update links continue to use this fork's GitHub releases
+
 ### v1.0.6 (2026-07-09)
 
 #### Added

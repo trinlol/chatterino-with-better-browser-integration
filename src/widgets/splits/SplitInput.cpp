@@ -1092,6 +1092,27 @@ void SplitInput::installTextEditEvents()
             }
         }
 
+        // The normal send action is a QShortcut. If Qt lets the key reach the
+        // text edit instead of activating that shortcut, QTextEdit would
+        // insert a newline. Keep the default Enter behavior reliable at the
+        // key-event boundary while preserving Ctrl+Enter's keep-input mode.
+        const auto key = event->key();
+        const auto modifiers = event->modifiers();
+        const bool isSendKey = key == Qt::Key_Return || key == Qt::Key_Enter;
+        const bool isSendModifier =
+            modifiers == Qt::NoModifier || modifiers == Qt::ShiftModifier ||
+            modifiers == Qt::ControlModifier ||
+            modifiers == (Qt::ControlModifier | Qt::ShiftModifier);
+        if (isSendKey && isSendModifier)
+        {
+            event->accept();
+            this->stopHistorySearchIfNecessary();
+            this->handleSendMessage(modifiers.testFlag(Qt::ControlModifier)
+                                        ? std::vector<QString>{"keepInput"}
+                                        : std::vector<QString>{});
+            return;
+        }
+
         if (event->key() == Qt::Key_Tab && event->modifiers() == Qt::NoModifier)
         {
             const auto word = this->ui_.textEdit->textUnderCursor();

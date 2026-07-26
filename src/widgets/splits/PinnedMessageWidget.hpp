@@ -8,6 +8,7 @@
 
 #include <pajlada/signals/signalholder.hpp>
 #include <QDateTime>
+#include <QString>
 #include <QTimer>
 
 #include <memory>
@@ -84,6 +85,8 @@ private:
     int messageMaxHeight_ = 110;
     /// True while user manually pinned the widget.
     bool userToggled_ = false;
+    /// Message ID hidden by the user. Re-fetches of the same pin stay hidden.
+    QString dismissedMessageID_;
     /// Invalid when no end time.
     QDateTime pinEndsAt_;
 
