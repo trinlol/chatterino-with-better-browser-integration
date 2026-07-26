@@ -42,6 +42,12 @@ public:
 
     void setChannel(ChannelPtr channel);
 
+#ifdef USEWINSDK
+    /// Immediately synchronize this overlay with its browser window.
+    /// Called by the WinEvent location hook while the browser is moving.
+    void syncToTargetWindow();
+#endif
+
 protected:
     void showEvent(QShowEvent *) override;
     //    virtual void nativeEvent(const QByteArray &eventType, void *message,

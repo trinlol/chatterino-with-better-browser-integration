@@ -297,7 +297,7 @@
   // event listeners
   window.addEventListener("load", () => setTimeout(queryChatRect, 1000));
   window.addEventListener("resize", () => {
-    queryChatRect;
+    queryChatRect();
     setTimeout(queryChatRect, 475);
   });
   window.addEventListener("focus", queryChatRect);

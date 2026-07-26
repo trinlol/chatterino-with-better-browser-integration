@@ -16,6 +16,7 @@
 #include <QWindow>
 
 #include <memory>
+#include <unordered_map>
 
 #ifdef USEWINSDK
 #    include "util/WindowsHelper.hpp"
@@ -32,6 +33,82 @@ namespace chatterino {
 
 #ifdef USEWINSDK
 static thread_local std::vector<HWND> taskbarHwnds;
+
+namespace {
+
+std::unordered_map<HWND, AttachedWindow *> attachedWindows;
+HWINEVENTHOOK locationChangeHook = nullptr;
+
+void CALLBACK handleLocationChange(HWINEVENTHOOK /*hook*/, DWORD event,
+                                   HWND hwnd, LONG objectId, LONG childId,
+                                   DWORD /*eventThread*/, DWORD /*eventTime*/)
+{
+    if (event != EVENT_OBJECT_LOCATIONCHANGE || objectId != OBJID_WINDOW ||
+        childId != CHILDID_SELF)
+    {
+        return;
+    }
+
+    auto attachedWindow = attachedWindows.find(hwnd);
+    if (attachedWindow != attachedWindows.end())
+    {
+        attachedWindow->second->syncToTargetWindow();
+    }
+}
+
+void registerLocationHook(HWND target, AttachedWindow *window)
+{
+    attachedWindows.insert_or_assign(target, window);
+
+    if (!locationChangeHook)
+    {
+        locationChangeHook = ::SetWinEventHook(
+            EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
+            handleLocationChange, 0, 0,
+            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    }
+}
+
+void unregisterLocationHook(HWND target, AttachedWindow *window)
+{
+    auto attachedWindow = attachedWindows.find(target);
+    if (attachedWindow != attachedWindows.end() &&
+        attachedWindow->second == window)
+    {
+        attachedWindows.erase(attachedWindow);
+    }
+
+    if (attachedWindows.empty() && locationChangeHook)
+    {
+        ::UnhookWinEvent(locationChangeHook);
+        locationChangeHook = nullptr;
+    }
+}
+
+void moveOverlayWindow(HWND hwnd, int x, int y, int width, int height)
+{
+    RECT current{};
+    const bool haveCurrentRect = ::GetWindowRect(hwnd, &current) != 0;
+    if (haveCurrentRect && current.left == x && current.top == y &&
+        current.right - current.left == width &&
+        current.bottom - current.top == height)
+    {
+        return;
+    }
+
+    UINT flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER;
+    if (haveCurrentRect && current.right - current.left == width &&
+        current.bottom - current.top == height)
+    {
+        // During a browser drag only the position changes. Keeping the
+        // existing composited surface avoids a synchronous full repaint.
+        flags |= SWP_NOSIZE;
+    }
+
+    ::SetWindowPos(hwnd, nullptr, x, y, width, height, flags);
+}
+
+}  // namespace
 
 BOOL CALLBACK enumWindows(HWND hwnd, LPARAM)
 {
@@ -70,6 +147,10 @@ AttachedWindow::AttachedWindow(void *_target)
 
 AttachedWindow::~AttachedWindow()
 {
+#ifdef USEWINSDK
+    unregisterLocationHook(HWND(this->target_), this);
+#endif
+
     for (auto it = items.begin(); it != items.end(); it++)
     {
         if (it->window == this)
@@ -198,7 +279,9 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER |
                        SWP_FRAMECHANGED);
 
-    // FAST TIMER - used to resize/reorder windows (16ms ~= 60fps; 1ms pegged CPU)
+    // Location changes are delivered immediately by the WinEvent hook. Keep
+    // the timer as a fallback and for foreground/Z-order maintenance.
+    registerLocationHook(attached, this);
     this->timer_.setInterval(16);
     QObject::connect(&this->timer_, &QTimer::timeout, [this, attached] {
         // check process id
@@ -215,6 +298,10 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
                 ::GetModuleFileNameEx(process, nullptr, filename.get(), 512);
             QString qfilename =
                 QString::fromWCharArray(filename.get(), int(filenameLength));
+            if (process)
+            {
+                ::CloseHandle(process);
+            }
 
             if (!getSettings()->attachExtensionToAnyProcess)
             {
@@ -261,6 +348,13 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
     this->slowTimer_.start();
 #endif
 }
+
+#ifdef USEWINSDK
+void AttachedWindow::syncToTargetWindow()
+{
+    this->updateWindowRect(this->target_);
+}
+#endif
 
 void AttachedWindow::updateWindowRect(void *_attachedPtr)
 {
@@ -330,34 +424,39 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
 
     if (this->height_ != -1)
     {
-        this->ui_.split->setFixedWidth(int(this->width_ * ourScale));
+        const auto splitWidth = int(this->width_ * ourScale);
+        if (this->ui_.split->minimumWidth() != splitWidth ||
+            this->ui_.split->maximumWidth() != splitWidth)
+        {
+            this->ui_.split->setFixedWidth(splitWidth);
+        }
 
         // offset
         int o = this->fullscreen_ ? 0 : 8;
 
         if (this->pixelRatio_ != -1.0)
         {
-            ::MoveWindow(
+            moveOverlayWindow(
                 hwnd,
                 int(rect.left + this->x_ * scale * this->pixelRatio_ + o - 2),
                 int(rect.bottom - this->height_ * scale - o),
-                int(this->width_ * scale), int(this->height_ * scale), true);
+                int(this->width_ * scale), int(this->height_ * scale));
         }
         //support for old extension version 1.3
         else if (this->x_ != -1.0)
         {
-            ::MoveWindow(hwnd, int(rect.left + this->x_ * scale + o),
-                         int(rect.bottom - this->height_ * scale - o),
-                         int(this->width_ * scale), int(this->height_ * scale),
-                         true);
+            moveOverlayWindow(hwnd, int(rect.left + this->x_ * scale + o),
+                              int(rect.bottom - this->height_ * scale - o),
+                              int(this->width_ * scale),
+                              int(this->height_ * scale));
         }
         //support for old extension version 1.2
         else
         {
-            ::MoveWindow(hwnd, int(rect.right - this->width_ * scale - o),
-                         int(rect.bottom - this->height_ * scale - o),
-                         int(this->width_ * scale), int(this->height_ * scale),
-                         true);
+            moveOverlayWindow(hwnd, int(rect.right - this->width_ * scale - o),
+                              int(rect.bottom - this->height_ * scale - o),
+                              int(this->width_ * scale),
+                              int(this->height_ * scale));
         }
     }
 
