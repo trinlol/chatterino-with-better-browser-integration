@@ -408,6 +408,13 @@ void NativeMessagingServer::ReceiverThread::run()
         return;
     }
 
+    // A native host may already have forwarded the initial selection before
+    // this queue existed. Announce that the desktop receiver is ready so the
+    // extension can request and replay fresh geometry.
+    ipc::sendMessage(
+        BROWSER_IPC_QUEUE_NAME,
+        QByteArrayLiteral(R"({"type":"status","status":"desktop-ready"})"));
+
     while (!this->isInterruptionRequested())
     {
         auto buf = messageQueue->receive();

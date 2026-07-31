@@ -67,6 +67,12 @@ void runBrowserOutboundLoop()
         return;
     }
 
+    // The desktop process can start before this outbound queue exists. Tell
+    // the extension when the host is ready so it can replay the active chat
+    // geometry after that startup ordering.
+    sendToBrowser(QLatin1String{
+        R"({"type":"status","status":"native-host-ready"})"});
+
     while (true)
     {
         auto buf = messageQueue->receive();

@@ -152,6 +152,22 @@ async function safeGetWindow(windowId) {
   }
 }
 
+async function requestActiveTwitchChatRect() {
+  const [tab] = await chrome.tabs
+    .query({
+      active: true,
+      currentWindow: true,
+      url: "*://*.twitch.tv/*",
+    })
+    .catch(() => []);
+  if (!tab?.url) return;
+
+  const window = await safeGetWindow(tab.windowId);
+  if (!window?.focused) return;
+
+  await onTabSelected(tab.url, tab);
+}
+
 // gets the port for communication with chatterino
 function getPort() {
   if (portConnectBlocked) {
@@ -190,6 +206,10 @@ function connectPort() {
   port.onMessage.addListener((msg) => {
     if (typeof msg === "object" && msg.type === "status") {
       switch (msg.status) {
+        case "native-host-ready":
+        case "desktop-ready":
+          void requestActiveTwitchChatRect();
+          break;
         case "exiting-host":
           console.info(
             `Native host is exiting: '${msg.reason ?? "<unknown>"}'`

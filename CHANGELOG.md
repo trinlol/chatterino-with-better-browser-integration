@@ -2,6 +2,12 @@
 
 ## Chatterino Better Browser
 
+### v2.6.2 (2026-07-31)
+
+#### Fixed
+
+- Native Twitch chat automatically reconnects when Edge's extension host and the Chatterino desktop app start in either order
+
 ### v2.6.1 (2026-07-26)
 
 #### Fixed

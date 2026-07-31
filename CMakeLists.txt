@@ -64,7 +64,7 @@ if(BUILD_BENCHMARKS)
 endif()
 
 project(chatterino
-    VERSION 2.6.1
+    VERSION 2.6.2
     DESCRIPTION "Chatterino Better Browser client for Twitch"
     HOMEPAGE_URL "https://github.com/trinlol/chatterino-with-better-browser-integration"
 )
