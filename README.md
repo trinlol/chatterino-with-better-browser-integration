@@ -1,12 +1,22 @@
+<div align="center">
+
 ![chatterinoLogo](https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png)
 
 # ✨ Chatterino Better Browser
 
-Current release: **2.6.0**
+[![Release](https://img.shields.io/github/v/release/trinlol/chatterino-with-better-browser-integration?style=for-the-badge&color=9146FF&label=Release)](https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest)
+[![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/trinlol/chatterino-with-better-browser-integration)
+[![Extension](https://img.shields.io/badge/Extension-Chrome%20%7C%20Edge-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)](./chatterino-extension/)
+[![Twitch](https://img.shields.io/badge/Twitch-Native%20Overlay-9146FF?style=for-the-badge&logo=twitch&logoColor=white)](https://www.twitch.tv)
 
-A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes Twitch browser integration native and complete — Chatterino chat overlaid on Twitch, plus pinned messages, predictions, channel points, chat identity badges, and an enhanced emote input experience.
+**A sleek Chatterino 2 fork that elevates Twitch browser integration into a complete, native experience.**
 
-> **One extension only** — load [`chatterino-extension/`](./chatterino-extension/) in Chrome or Edge. No separate Native Host or Companion app required.
+</div>
+
+---
+
+> [!TIP]
+> **Zero Extra Setup:** Runs via **one browser extension** loaded in Chrome or Edge. No separate Native Host binaries or companion applications required.
 
 > [!IMPORTANT]
 > Chatterino Better Browser stores settings locally in `%APPDATA%\Chatterino2\` and communicates only with Twitch and its associated chat services. Its updater and release notes point exclusively to this fork's [GitHub Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases). Removing the unpacked browser extension and deleting the extracted folder will stop using the fork while leaving your original Chatterino settings untouched.
@@ -61,6 +71,7 @@ Chatterino Better Browser on a live Twitch channel — full chat overlay, synced
 6. Install the required browser extension (see [Browser extension](#-browser-extension--one-install)).
 7. Restart the app after loading the extension to register native messaging.
 
+> [!NOTE]
 > **Already use Chatterino?** Your existing settings, accounts, and window layout load automatically. Uninstalling the old app does not remove your data. See [Settings & migration](#-settings--migration).
 
 ---
@@ -69,29 +80,35 @@ Chatterino Better Browser on a live Twitch channel — full chat overlay, synced
 
 ### 🌐 Browser integration
 
-- **Pinned messages** — Moderator pins display as a compact purple banner with clickable links and a dismiss button.
-- **Clickable polls & predictions** — Voting controls appear beside the Twitch player without needing native chat open.
-- **Accurate prediction banner** — The prediction banner follows Twitch's real lock deadline instead of freezing at `2:00`.
-- **Independent activity state** — Polls and predictions update independently without overwriting each other.
-- **Channel points auto-claim** — Automatically claims bonus chests and provides a scrollable rewards menu.
-- **Chat identity button** — Badge picker in the player toolbar opens Twitch's Chat Identity menu even when native chat is hidden.
-- **Fullscreen-safe controls** — Moved toolbar elements automatically hide during video fullscreen mode.
-- **Stable browser overlay** — Fixes flickering, disappearing chat, and high CPU usage from native messaging.
-- **Fork-only updates** — Update prompts and release notes route exclusively to this repository.
+| Feature | Description |
+| --- | --- |
+| **Pinned messages** | Moderator pins display as a compact purple banner with clickable links and a dismiss button. |
+| **Clickable polls & predictions** | Voting controls appear beside the Twitch player without needing native chat open. |
+| **Accurate prediction banner** | Prediction banner follows Twitch's real lock deadline instead of freezing at `2:00`. |
+| **Independent activity state** | Polls and predictions update independently without overwriting each other. |
+| **Channel points auto-claim** | Automatically claims bonus chests and provides a scrollable rewards menu. |
+| **Chat identity button** | Badge picker in player toolbar opens Twitch's Chat Identity menu even when chat is hidden. |
+| **Fullscreen-safe controls** | Moved toolbar elements automatically hide during video fullscreen mode. |
+| **Stable browser overlay** | Fixes flickering, disappearing chat, and high CPU usage from native messaging. |
+| **Fork-only updates** | Update prompts and release notes route exclusively to this repository. |
 
 ### 💬 Better emote input
 
-- **7TV-only autocomplete** — Tab completion and the `:` menu filter exclusively for 7TV emotes.
-- **Reliable Tab cycling** — Press **Tab** or **Shift+Tab** to cycle forward or backward through matching 7TV emotes.
-- **Visual emote menu** — Type `:` at the start of a word to browse 7TV emotes with live previews.
-- **Inline emotes in input** — Typed and selected 7TV emotes render as inline images in the text box.
-- **Emote favourites tab** — **Ctrl+click** any emote in chat to add it to your Favourites list.
-- **Click-to-type emotes** — Click an emote in chat to insert it directly into your message box.
+| Feature | Description |
+| --- | --- |
+| **7TV-only autocomplete** | Tab completion and the `:` menu filter exclusively for 7TV emotes. |
+| **Reliable Tab cycling** | Press **Tab** or **Shift+Tab** to cycle forward or backward through matching 7TV emotes. |
+| **Visual emote menu** | Type `:` at the start of a word to browse 7TV emotes with live previews. |
+| **Inline emotes in input** | Typed and selected 7TV emotes render as inline images in the text box. |
+| **Emote favourites tab** | **Ctrl+click** any emote in chat to add it to your Favourites list. |
+| **Click-to-type emotes** | Click an emote in chat to insert it directly into your message box. |
 
 ### 👤 User card
 
-- **Badges under avatar** — Clicking a user displays their badges in a grid under their avatar.
-- **Paginated message history** — Loads recent channel messages first, fetching older logs on demand.
+| Feature | Description |
+| --- | --- |
+| **Badges under avatar** | Clicking a user displays their badges in a grid under their avatar. |
+| **Paginated message history** | Loads recent channel messages first, fetching older logs on demand. |
 
 ---
 
@@ -150,6 +167,7 @@ All features run through a single browser extension.
 
 See [`chatterino-extension/README.md`](./chatterino-extension/README.md) for extension settings and troubleshooting.
 
+> [!TIP]
 > **Tip:** After loading the extension, restart **Chatterino Better Browser** so the native messaging host registers with your browser.
 
 ---
