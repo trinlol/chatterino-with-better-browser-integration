@@ -4,10 +4,10 @@
   <img src="https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png" height="48" align="absmiddle" alt="Chatterino Logo"> Chatterino Better Browser
 </h1>
 
-[![Release](https://img.shields.io/github/v/release/trinlol/chatterino-with-better-browser-integration?style=plastic&color=9146FF&label=Release)](https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/trinlol/chatterino-with-better-browser-integration/total?style=plastic&color=9146FF&label=Downloads)](https://github.com/trinlol/chatterino-with-better-browser-integration/releases)
-[![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=plastic&logo=windows&logoColor=white)](https://github.com/trinlol/chatterino-with-better-browser-integration)
-[![Extension](https://img.shields.io/badge/Extension-Chrome%20%7C%20Edge-4285F4?style=plastic&logo=googlechrome&logoColor=white)](./chatterino-extension/)
+[![Release](https://img.shields.io/badge/release-v2.6.0-purple?style=for-the-badge)](https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest)
+[![Downloads](https://img.shields.io/badge/downloads-latest-brightgreen?style=for-the-badge)](https://github.com/trinlol/chatterino-with-better-browser-integration/releases)
+[![Platform](https://img.shields.io/badge/platform-windows-0078D6?style=for-the-badge)](https://github.com/trinlol/chatterino-with-better-browser-integration)
+[![Extension](https://img.shields.io/badge/extension-chrome%20%7C%20edge-blueviolet?style=for-the-badge)](./chatterino-extension/)
 
 **A sleek Chatterino 2 fork that elevates Twitch browser integration into a complete, native experience.**
 
@@ -270,7 +270,7 @@ git clone --recurse-submodules https://github.com/trinlol/chatterino-with-better
 <table>
   <tr>
     <td align="center" valign="top" width="200">
-      <a href="https://chatgpt.com"><img src="https://img.shields.io/badge/ChatGPT-412991?style=plastic&logo=openai&logoColor=white" alt="ChatGPT by OpenAI" /></a><br />
+      <a href="https://chatgpt.com"><img src="https://img.shields.io/badge/curated_by-ChatGPT_by_OpenAI-412991?style=for-the-badge" alt="ChatGPT by OpenAI" /></a><br />
       <sub><b>ChatGPT by OpenAI</b> — development, debugging, and documentation assistance</sub>
     </td>
   </tr>
