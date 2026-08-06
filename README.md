@@ -1,13 +1,13 @@
 <div align="center">
 
-![chatterinoLogo](https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png)
-
-# ✨ Chatterino Better Browser
+<h1 align="center">
+  <img src="https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png" height="48" align="absmiddle" alt="Chatterino Logo"> Chatterino Better Browser
+</h1>
 
 [![Release](https://img.shields.io/github/v/release/trinlol/chatterino-with-better-browser-integration?style=for-the-badge&color=9146FF&label=Release)](https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/trinlol/chatterino-with-better-browser-integration/total?style=for-the-badge&color=9146FF&label=Downloads)](https://github.com/trinlol/chatterino-with-better-browser-integration/releases)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/trinlol/chatterino-with-better-browser-integration)
 [![Extension](https://img.shields.io/badge/Extension-Chrome%20%7C%20Edge-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)](./chatterino-extension/)
-[![Twitch](https://img.shields.io/badge/Twitch-Native%20Overlay-9146FF?style=for-the-badge&logo=twitch&logoColor=white)](https://www.twitch.tv)
 
 **A sleek Chatterino 2 fork that elevates Twitch browser integration into a complete, native experience.**
 
