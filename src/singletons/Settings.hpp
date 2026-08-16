@@ -308,6 +308,8 @@ public:
     /// Behaviour
     BoolSetting alwaysShowPinnedMessage = {"/behaviour/alwaysShowPinnedMessage",
                                            false};
+    ChatterinoSetting<QStringList> dismissedPinnedMessageIds = {
+        "/behaviour/dismissedPinnedMessageIds", {}};
     BoolSetting allowDuplicateMessages = {"/behaviour/allowDuplicateMessages",
                                           true};
     BoolSetting mentionUsersWithAt = {"/behaviour/mentionUsersWithAt", false};

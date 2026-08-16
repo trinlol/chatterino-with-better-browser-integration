@@ -36,6 +36,45 @@ namespace chatterino {
 namespace {
 
 constexpr auto MUTED_STYLE = "color: #adadb8;";
+constexpr qsizetype MAX_DISMISSED_PINNED_MESSAGES = 500;
+
+bool isPinnedMessageDismissed(const QString &messageID)
+{
+    return !messageID.isEmpty() &&
+           getSettings()->dismissedPinnedMessageIds.getValue().contains(
+               messageID);
+}
+
+void rememberPinnedMessageDismissal(const QString &messageID)
+{
+    if (messageID.isEmpty())
+    {
+        return;
+    }
+
+    auto dismissed = getSettings()->dismissedPinnedMessageIds.getValue();
+    dismissed.removeAll(messageID);
+    dismissed.append(messageID);
+    while (dismissed.size() > MAX_DISMISSED_PINNED_MESSAGES)
+    {
+        dismissed.removeFirst();
+    }
+    getSettings()->dismissedPinnedMessageIds.setValue(dismissed);
+}
+
+void forgetPinnedMessageDismissal(const QString &messageID)
+{
+    if (messageID.isEmpty())
+    {
+        return;
+    }
+
+    auto dismissed = getSettings()->dismissedPinnedMessageIds.getValue();
+    if (dismissed.removeAll(messageID) > 0)
+    {
+        getSettings()->dismissedPinnedMessageIds.setValue(dismissed);
+    }
+}
 
 QString linkifyPinnedMessage(const QString &message)
 {
@@ -296,6 +335,7 @@ std::unique_ptr<QMenu> PinnedMessageWidget::buildModMenu()
             if (pin)
             {
                 this->dismissedMessageID_ = pin->messageID;
+                rememberPinnedMessageDismissal(pin->messageID);
             }
         }
         this->autoHideTimer_->stop();
@@ -326,7 +366,8 @@ void PinnedMessageWidget::refresh()
         return;
     }
 
-    if (this->dismissedMessageID_ == pin->messageID)
+    if (this->dismissedMessageID_ == pin->messageID ||
+        isPinnedMessageDismissed(pin->messageID))
     {
         this->hide();
         return;
@@ -381,6 +422,7 @@ void PinnedMessageWidget::toggleUserPinned()
             if (pin)
             {
                 this->dismissedMessageID_ = pin->messageID;
+                rememberPinnedMessageDismissal(pin->messageID);
             }
         }
         this->autoHideTimer_->stop();
@@ -389,6 +431,14 @@ void PinnedMessageWidget::toggleUserPinned()
     else
     {
         this->userToggled_ = true;
+        if (this->channel_)
+        {
+            const auto *pin = this->channel_->getPinnedMessage();
+            if (pin)
+            {
+                forgetPinnedMessageDismissal(pin->messageID);
+            }
+        }
         this->dismissedMessageID_.clear();
         this->autoHideTimer_->stop();
         this->show();

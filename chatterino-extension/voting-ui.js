@@ -185,6 +185,35 @@
     return false;
   }
 
+  function isGenericVotingSurface(surface, kind) {
+    if (
+      !surface ||
+      surface.closest?.(
+        '.onsite-notifications, [data-test-selector="onsite-notifications"], [data-test-selector="onsite-notifications-toast-manager"]'
+      ) ||
+      global.ChatterinoNotificationUi?.isNotificationsSurface(surface)
+    ) {
+      return false;
+    }
+
+    const label = kind === "poll" ? "poll" : "prediction";
+    const text = String(surface.textContent || "").toLowerCase();
+    if (
+      !text.includes(label) &&
+      !(label === "prediction" && text.includes("predict"))
+    ) {
+      return false;
+    }
+
+    // Generic dialogs are accepted only when they expose voting semantics.
+    // A button-heavy dialog which merely mentions a prediction (notably the
+    // Twitch notifications inbox) must never be cloned into the toolbar.
+    const votingControls = surface.querySelectorAll?.(
+      '[role="radio"], [role="option"], input[type="radio"], input[type="checkbox"], [data-a-target*="poll" i], [data-a-target*="prediction" i], [data-test-selector*="poll" i], [data-test-selector*="prediction" i]'
+    );
+    return (votingControls?.length || 0) >= 2;
+  }
+
   function isFullscreenActive(document, window) {
     if (document?.fullscreenElement || document?.webkitFullscreenElement) {
       return true;
@@ -219,6 +248,7 @@
     collectInteractiveControls,
     forwardActivation,
     getElementPath,
+    isGenericVotingSurface,
     isFullscreenActive,
     resolveActivationTarget,
     resolveElementPath,

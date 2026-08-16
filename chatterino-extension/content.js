@@ -1185,13 +1185,7 @@
     for (const surface of document.querySelectorAll(
       '[role="dialog"], [role="menu"]'
     )) {
-      const text = String(surface.textContent || "").toLowerCase();
-      const controls = surface.querySelectorAll(VOTING_CONTROL_SELECTOR);
-      if (
-        controls.length >= 2 &&
-        (text.includes(kind) ||
-          (kind === "prediction" && text.includes("predict")))
-      ) {
+      if (window.ChatterinoVotingUi.isGenericVotingSurface(surface, kind)) {
         candidates.set(surface, 40);
       }
     }

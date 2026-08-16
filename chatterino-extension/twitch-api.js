@@ -628,14 +628,22 @@
         }
       }
 
-      if (obj.prediction != null && typeof obj.prediction === "object") {
+      if (
+        obj.prediction != null &&
+        typeof obj.prediction === "object" &&
+        getEventKind(obj, obj.prediction) === "prediction"
+      ) {
         const parsed = parsePredictionEvent(obj.prediction);
         if (parsed) {
           state.prediction = parsed;
         }
       }
 
-      if (obj.poll != null && typeof obj.poll === "object") {
+      if (
+        obj.poll != null &&
+        typeof obj.poll === "object" &&
+        getEventKind(obj, obj.poll) === "poll"
+      ) {
         const parsed = parsePollEvent(obj.poll);
         if (parsed) {
           state.poll = parsed;

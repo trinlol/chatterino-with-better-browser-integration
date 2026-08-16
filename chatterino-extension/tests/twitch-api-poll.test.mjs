@@ -152,3 +152,26 @@ test("an empty generic outcomes container does not create a fake prediction", as
     null
   );
 });
+
+test("notification settings named prediction do not create an engagement", async () => {
+  const harness = await createTwitchApiHarness();
+  const xhr = new harness.XMLHttpRequest();
+  xhr.open("POST", "https://gql.twitch.tv/gql");
+  xhr.responseText = JSON.stringify({
+    data: {
+      onsiteNotifications: {
+        prediction: {
+          title: "Mark 239 as ReadNotificationsSettings",
+          outcomes: [{ title: "My Twitch (239)" }, { title: "My Channel (1)" }],
+          status: "ACTIVE",
+        },
+      },
+    },
+  });
+  xhr.send();
+
+  assert.equal(
+    harness.window.__chatterinoCompanionGql.getState().prediction,
+    null
+  );
+});

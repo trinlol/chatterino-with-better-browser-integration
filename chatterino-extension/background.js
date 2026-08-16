@@ -140,6 +140,14 @@ let lastPortConnectAttempt = 0;
 let lastNativeError = "";
 let lastNativeConnectedAt = 0;
 const PORT_CONNECT_COOLDOWN_MS = 5000;
+const ATTACH_ACK_TIMEOUT_MS = 750;
+const ATTACH_MAX_ATTEMPTS = 40;
+const STARTUP_REPLAY_WINDOW_MS = 15000;
+// Starting Chatterino temporarily takes OS focus from Edge. Permit one recent
+// readiness-triggered geometry reply to cross that focus transition.
+const pendingStartupReplayTabs = new Map();
+const pendingAttachRequests = new Map();
+let nextAttachRequestId = 1;
 
 async function safeGetWindow(windowId) {
   if (windowId === undefined || windowId === chrome.windows.WINDOW_ID_NONE) {
@@ -162,10 +170,70 @@ async function requestActiveTwitchChatRect() {
     .catch(() => []);
   if (!tab?.url) return;
 
-  const window = await safeGetWindow(tab.windowId);
-  if (!window?.focused) return;
+  await onTabSelected(tab.url, tab, { startupReplay: true });
+}
 
-  await onTabSelected(tab.url, tab);
+function clearPendingAttach(windowId) {
+  const key = String(windowId);
+  const pending = pendingAttachRequests.get(key);
+  if (!pending) return;
+
+  clearTimeout(pending.timerId);
+  pendingAttachRequests.delete(key);
+}
+
+function scheduleAttachRetry(windowId, requestId) {
+  const key = String(windowId);
+  const pending = pendingAttachRequests.get(key);
+  if (!pending || pending.requestId !== requestId) return;
+
+  pending.timerId = setTimeout(() => {
+    const current = pendingAttachRequests.get(key);
+    if (!current || current.requestId !== requestId) return;
+    if (current.attempts >= ATTACH_MAX_ATTEMPTS) {
+      pendingAttachRequests.delete(key);
+      return;
+    }
+
+    current.attempts += 1;
+    const nativePort = getPort();
+    if (nativePort) {
+      nativePort.postMessage({
+        ...current.message,
+        browserWindowFocused: false,
+        startupReplay: true,
+      });
+    }
+    scheduleAttachRetry(windowId, requestId);
+  }, ATTACH_ACK_TIMEOUT_MS);
+}
+
+function postAttachUntilAcknowledged(windowId, message) {
+  clearPendingAttach(windowId);
+
+  const requestId = `${Date.now()}-${nextAttachRequestId++}`;
+  const pending = {
+    attempts: 1,
+    message: { ...message, attachRequestId: requestId },
+    requestId,
+    timerId: null,
+  };
+  pendingAttachRequests.set(String(windowId), pending);
+
+  const nativePort = getPort();
+  if (nativePort) {
+    nativePort.postMessage(pending.message);
+  }
+  scheduleAttachRetry(windowId, requestId);
+}
+
+function acknowledgeAttachedWindow(message) {
+  const key = String(message.winId ?? "");
+  const pending = pendingAttachRequests.get(key);
+  if (!pending || pending.requestId !== message.attachRequestId) return;
+
+  clearPendingAttach(key);
+  void AttachedWindows.markAttached(key);
 }
 
 // gets the port for communication with chatterino
@@ -209,6 +277,9 @@ function connectPort() {
         case "native-host-ready":
         case "desktop-ready":
           void requestActiveTwitchChatRect();
+          break;
+        case "chat-attached":
+          acknowledgeAttachedWindow(msg);
           break;
         case "exiting-host":
           console.info(
@@ -304,7 +375,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 });
 
 // attach or detach from tab
-async function onTabSelected(url, tab) {
+async function onTabSelected(url, tab, { startupReplay = false } = {}) {
   const channelName = matchChannelName(url);
 
   if (!channelName) {
@@ -320,9 +391,19 @@ async function onTabSelected(url, tab) {
   // Without this handshake, a background-loaded Twitch tab stays detached
   // until a later page focus or mouse event happens to trigger a measurement.
   if (tab.id !== undefined) {
+    if (startupReplay) {
+      pendingStartupReplayTabs.set(
+        tab.id,
+        Date.now() + STARTUP_REPLAY_WINDOW_MS
+      );
+    }
+
     try {
       await chrome.tabs.sendMessage(tab.id, { action: "requestChatRect" });
     } catch (error) {
+      if (startupReplay) {
+        pendingStartupReplayTabs.delete(tab.id);
+      }
       // The content script may not have loaded yet. Its initial measurement
       // will attach the chat once it does, so there is nothing to detach here.
     }
@@ -498,12 +579,21 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
       });
       break;
     case "chat-resized":
+      const startupReplayDeadline = pendingStartupReplayTabs.get(
+        sender.tab?.id
+      );
+      pendingStartupReplayTabs.delete(sender.tab?.id);
+      const isStartupReplay =
+        startupReplayDeadline !== undefined &&
+        startupReplayDeadline >= Date.now();
+
       // is tab highlighted
       if (!sender.tab.highlighted) return;
 
       // is window focused
       safeGetWindow(sender.tab.windowId).then(async (window) => {
-        if (!window?.focused) return;
+        if (!window) return;
+        if (!window.focused && !isStartupReplay) return;
 
         const dpr = message.dpr ?? 1;
         // devicePixelRatio combines both zoom and display scaling set in the
@@ -524,6 +614,8 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
         await tryAttach(sender.tab.windowId, window.state == "fullscreen", {
           name: matchChannelName(sender.tab.url),
           size: size,
+          browserWindowFocused: window.focused,
+          startupReplay: isStartupReplay,
         });
       });
       break;
@@ -547,13 +639,12 @@ async function tryAttach(windowId, fullscreen, data) {
   data.winId = "" + windowId;
   data.version = 0;
 
-  let port = getPort();
-
-  if (port) {
-    port.postMessage(data);
+  if (data.attach || data.attach_fullscreen) {
+    postAttachUntilAcknowledged(windowId, data);
+  } else {
+    const nativePort = getPort();
+    if (nativePort) nativePort.postMessage(data);
   }
-
-  await AttachedWindows.markAttached(windowId);
 }
 
 /**
@@ -561,6 +652,7 @@ async function tryAttach(windowId, fullscreen, data) {
  * @param {number} windowId
  */
 async function tryDetach(windowId) {
+  clearPendingAttach(windowId);
   if (await AttachedWindows.isAttached(windowId)) {
     sendDetach(windowId);
     await AttachedWindows.markDetatched(windowId);

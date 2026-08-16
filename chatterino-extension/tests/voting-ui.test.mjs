@@ -180,3 +180,22 @@ test("fullscreen detection covers the Fullscreen API and viewport-filling video"
     true
   );
 });
+
+test("the Twitch notifications inbox is never treated as voting UI", async () => {
+  const votingUi = await loadVotingUi();
+  const notificationsDialog = {
+    textContent:
+      "Prediction Mark 239 as Read Notifications Settings My Twitch My Channel",
+    closest(selector) {
+      return selector.includes("onsite-notifications") ? this : null;
+    },
+    querySelectorAll() {
+      return [{}, {}, {}];
+    },
+  };
+
+  assert.equal(
+    votingUi.isGenericVotingSurface(notificationsDialog, "prediction"),
+    false
+  );
+});

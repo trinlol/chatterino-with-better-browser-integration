@@ -25,7 +25,7 @@
   "content_scripts": [
     {
       "matches": ["https://*.twitch.tv/*"],
-      "js": ["anti-wipe.js"],
+      "js": ["notification-ui.js", "anti-wipe.js"],
       "run_at": "document_start"
     },
     {

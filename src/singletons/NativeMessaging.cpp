@@ -35,6 +35,8 @@
 
 #ifdef Q_OS_WIN
 #    include "widgets/AttachedWindow.hpp"
+
+#    include <Windows.h>
 #endif
 
 namespace {
@@ -476,6 +478,7 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
     bool attach = root["attach"_L1].toBool();
     bool attachFullscreen = root["attach_fullscreen"_L1].toBool();
     QString name = root["name"_L1].toString();
+    QString attachRequestId = root["attachRequestId"_L1].toString();
 
 #ifdef USEWINSDK
     const auto sizeObject = root["size"_L1].toObject();
@@ -495,6 +498,30 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
     if (args.winId.isNull())
     {
         qCDebug(chatterinoNativeMessage) << "winId in select is missing";
+        return;
+    }
+
+    void *browserTarget = nullptr;
+    bool browserHwndOk = false;
+    const auto browserHwnd =
+        root["browserHwnd"_L1].toString().toULongLong(&browserHwndOk);
+    if (browserHwndOk && browserHwnd != 0)
+    {
+        auto target = reinterpret_cast<HWND>(
+            static_cast<quintptr>(browserHwnd));
+        if (::IsWindow(target))
+        {
+            browserTarget = target;
+        }
+    }
+
+    // A startup replay is intentionally allowed while Edge is unfocused, but
+    // it may only attach through an HWND previously captured while Edge was
+    // focused. Falling back to GetForegroundWindow here would attach to the
+    // newly opened Chatterino window instead.
+    if ((attach || attachFullscreen) &&
+        root["startupReplay"_L1].toBool() && browserTarget == nullptr)
+    {
         return;
     }
 #endif
@@ -519,11 +546,23 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
         {
             parent.browserAttached_ = true;
 #ifdef USEWINSDK
-            auto *window = AttachedWindow::getForeground(args);
+            auto *window = browserTarget != nullptr
+                               ? AttachedWindow::get(browserTarget, args)
+                               : AttachedWindow::getForeground(args);
             if (!name.isEmpty())
             {
                 window->setChannel(
                     getApp()->getTwitch()->getOrAddChannel(name));
+            }
+
+            if (!attachRequestId.isEmpty())
+            {
+                sendToBrowserExtension(QJsonObject{
+                    {u"type"_s, "status"_L1},
+                    {u"status"_s, "chat-attached"_L1},
+                    {u"winId"_s, args.winId},
+                    {u"attachRequestId"_s, attachRequestId},
+                });
             }
 #endif
         }

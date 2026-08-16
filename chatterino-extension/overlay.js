@@ -8,6 +8,9 @@
   let errorDiv = null;
 
   let showingChat = false;
+  let notificationsSuppressed = false;
+  let notificationsTogglePendingUntil = 0;
+  let shiftedNotificationsPanel = null;
 
   const ignoredPages = {
     settings: true,
@@ -40,12 +43,8 @@
   }
 
   let findChatDiv = () => document.getElementsByClassName("chat-shell")[0];
-  let findRightCollapse = () =>
-    document.getElementsByClassName("right-column__toggle-visibility")[0]
-      .children[0];
   let findRightColumn = () =>
     document.getElementsByClassName("channel-page__right-column")[0];
-  let findNavBar = () => document.getElementsByClassName("top-nav")[0];
   let findInfoBar = () =>
     document.getElementsByClassName("channel-info-bar__content-right")[0];
 
@@ -88,23 +87,6 @@
         installedObjects.rightColumn = true;
       } else {
         retry = true;
-      }
-    }
-
-    // nav bar
-    if (!installedObjects.topNav) {
-      let x = findNavBar();
-
-      if (x === undefined) {
-        retry = true;
-      } else {
-        x.addEventListener("mouseup", () => {
-          if (findChatDiv() && findChatDiv().clientWidth != 0) {
-            findRightCollapse().click();
-          }
-        });
-
-        installedObjects.topNav = true;
       }
     }
 
@@ -186,7 +168,11 @@
       return;
     }
 
-    if (document.fullscreenElement != null) {
+    if (
+      document.fullscreenElement != null ||
+      notificationsSuppressed ||
+      window.ChatterinoNotificationUi?.isOpen(document)
+    ) {
       chrome.runtime.sendMessage({ type: "detach" });
       return;
     }
@@ -298,10 +284,74 @@
   window.addEventListener("load", () => setTimeout(queryChatRect, 1000));
   window.addEventListener("resize", () => {
     queryChatRect();
+    syncNotificationsOverlay();
     setTimeout(queryChatRect, 475);
+    setTimeout(syncNotificationsOverlay, 475);
   });
   window.addEventListener("focus", queryChatRect);
   window.addEventListener("mouseup", () => setTimeout(queryChatRect, 10));
+
+  function syncNotificationsOverlay() {
+    const notificationUi = window.ChatterinoNotificationUi;
+    const isOpen = notificationUi?.isOpen(document) || false;
+    if (isOpen) {
+      notificationsSuppressed = true;
+      chrome.runtime.sendMessage({ type: "detach" });
+
+      const panel = notificationUi.findPanel(document);
+      const chatRect = findChatDiv()?.getBoundingClientRect?.();
+      if (panel && chatRect?.width > 0) {
+        if (shiftedNotificationsPanel !== panel) {
+          notificationUi.clearPanelShift(shiftedNotificationsPanel);
+          shiftedNotificationsPanel = panel;
+        }
+        notificationUi.positionPanelLeftOf(panel, chatRect, 12);
+      }
+      return;
+    }
+
+    notificationUi?.clearPanelShift(shiftedNotificationsPanel);
+    shiftedNotificationsPanel = null;
+    if (
+      notificationsSuppressed &&
+      Date.now() >= notificationsTogglePendingUntil
+    ) {
+      notificationsSuppressed = false;
+      queryChatRect();
+    }
+  }
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const toggle = window.ChatterinoNotificationUi?.findToggle(event.target);
+      if (!toggle) {
+        return;
+      }
+      if (window.ChatterinoNotificationUi.toggleWillOpen(toggle)) {
+        notificationsSuppressed = true;
+        notificationsTogglePendingUntil = Date.now() + 1500;
+        chrome.runtime.sendMessage({ type: "detach" });
+      } else {
+        notificationsTogglePendingUntil = 0;
+      }
+      setTimeout(syncNotificationsOverlay, 0);
+      setTimeout(syncNotificationsOverlay, 100);
+      setTimeout(syncNotificationsOverlay, 500);
+      setTimeout(syncNotificationsOverlay, 1600);
+    },
+    true
+  );
+
+  const notificationsObserver = new MutationObserver(() => {
+    syncNotificationsOverlay();
+  });
+  notificationsObserver.observe(document.documentElement, {
+    attributes: true,
+    childList: true,
+    subtree: true,
+    attributeFilter: ["aria-expanded", "aria-label"],
+  });
 
   // The background script asks for a fresh measurement whenever this Twitch
   // tab becomes active. This covers tabs that finished loading while they
