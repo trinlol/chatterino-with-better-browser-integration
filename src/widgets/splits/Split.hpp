@@ -28,6 +28,8 @@ class OverlayWindow;
 class PinnedMessageWidget;
 class PredictionBannerWidget;
 
+struct SplitDescriptor;
+
 // Each ChatWidget consists of three sub-elements that handle their own part of
 // the chat widget: ChatWidgetHeader
 //   - Responsible for rendering which channel the ChatWidget is in, and the
@@ -58,7 +60,7 @@ public:
     SplitInput &getInput();
     [[nodiscard]] PinnedMessageWidget *getPinnedBanner() const;
 
-    IndirectChannel getIndirectChannel();
+    IndirectChannel getIndirectChannel() const;
     ChannelPtr getChannel() const;
     void setChannel(IndirectChannel newChannel);
 
@@ -86,6 +88,8 @@ public:
     void setContainer(SplitContainer *container);
 
     void setInputReply(const MessagePtr &reply);
+
+    SplitDescriptor buildDescriptor() const;
 
     // This is called on window focus lost
     void unpause();

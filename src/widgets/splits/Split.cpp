@@ -57,6 +57,8 @@
 
 #include <functional>
 
+using namespace Qt::Literals;
+
 namespace chatterino {
 namespace {
 void showTutorialVideo(QWidget *parent, const QString &source,
@@ -815,7 +817,7 @@ void Split::openChannelInStreamlink(const QString channelName)
 {
     try
     {
-        openStreamlinkForChannel(channelName);
+        openStreamlinkForChannelOrUrl(channelName);
     }
     catch (const Exception &ex)
     {
@@ -829,7 +831,7 @@ void Split::openChannelInCustomPlayer(const QString channelName)
     openInCustomPlayer(channelName);
 }
 
-IndirectChannel Split::getIndirectChannel()
+IndirectChannel Split::getIndirectChannel() const
 {
     return this->channel_;
 }
@@ -1115,7 +1117,7 @@ void Split::explainSplitting()
 void Split::popup()
 {
     auto *app = getApp();
-    Window &window = app->getWindows()->createWindow(WindowType::Popup);
+    Window &window = app->getWindows()->createWindow(WindowType::Popup, {});
 
     auto *split = new Split(window.getNotebook().getOrAddSelectedPage());
 
@@ -1360,6 +1362,38 @@ void Split::drag()
 void Split::setInputReply(const MessagePtr &reply)
 {
     this->input_->setReply(reply);
+}
+
+SplitDescriptor Split::buildDescriptor() const
+{
+    SplitDescriptor descriptor;
+    descriptor.moderationMode_ = this->getModerationMode();
+    descriptor.filters_ = this->getFilters();
+    descriptor.spellCheckOverride = this->checkSpellingOverride();
+
+    auto chan = this->getIndirectChannel();
+    descriptor.type_ = qmagicenum::enumNameString(chan.getType());
+    switch (chan.getType())
+    {
+        case Channel::Type::Twitch:
+        case Channel::Type::Misc:
+            descriptor.channelName_ = chan.get()->getName();
+            break;
+
+        case Channel::Type::TwitchWhispers:
+        case Channel::Type::TwitchWatching:
+        case Channel::Type::TwitchMentions:
+        case Channel::Type::TwitchLive:
+        case Channel::Type::TwitchAutomod:
+
+        // FIXME: Remove these (#5703)
+        case Channel::Type::None:
+        case Channel::Type::Direct:
+        case Channel::Type::TwitchEnd:
+            break;
+    }
+
+    return descriptor;
 }
 
 void Split::unpause()

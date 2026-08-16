@@ -493,6 +493,23 @@ Scrollbar *ChannelView::scrollbar()
     return this->scrollBar_;
 }
 
+Split *ChannelView::findParentSplit() const
+{
+    auto *split = dynamic_cast<Split *>(this->parentWidget());
+
+    if (split)
+    {
+        return split;
+    }
+
+    auto *searchPopup = dynamic_cast<SearchPopup *>(this->parentWidget());
+    if (!searchPopup)
+    {
+        return nullptr;
+    }
+    return dynamic_cast<Split *>(searchPopup->parentWidget());
+}
+
 bool ChannelView::pausable() const
 {
     return this->pausable_;
@@ -1419,16 +1436,7 @@ MessageElementFlags ChannelView::getFlags() const
 
     MessageElementFlags flags = app->getWindows()->getWordFlags();
 
-    auto *split = dynamic_cast<Split *>(this->parentWidget());
-
-    if (split == nullptr)
-    {
-        auto *searchPopup = dynamic_cast<SearchPopup *>(this->parentWidget());
-        if (searchPopup != nullptr)
-        {
-            split = dynamic_cast<Split *>(searchPopup->parentWidget());
-        }
-    }
+    auto *split = this->findParentSplit();
 
     if (split != nullptr)
     {
@@ -2646,9 +2654,14 @@ void ChannelView::addContextMenuItems(
     addHiddenContextMenuItems(menu, hoveredElement, layout, event);
 
     // Add executable command options
-    this->addCommandExecutionContextMenuItems(menu, layout);
+    this->addCommandExecutionContextMenuItems(menu, hoveredElement, layout);
 
     this->messageMenuCreated.invoke(menu, hoveredElement);
+
+    menu->addSeparator();
+
+    getApp()->getWindows()->channelViewContextMenuRequested.invoke(
+        *this, *layout, hoveredElement, *menu);
 
     menu->popup(QCursor::pos());
     menu->raise();
@@ -2944,7 +2957,8 @@ void ChannelView::addTwitchLinkContextMenuItems(
 }
 
 void ChannelView::addCommandExecutionContextMenuItems(
-    QMenu *menu, const MessageLayoutPtr &layout)
+    QMenu *menu, const MessageLayoutElement *hoveredElement,
+    const MessageLayoutPtr &layout)
 {
     /* Get commands to be displayed in context menu;
      * only those that had the showInMsgContextMenu check box marked in the Commands page */
@@ -2967,6 +2981,13 @@ void ChannelView::addCommandExecutionContextMenuItems(
     auto *cmdMenu = new QMenu(menu);
     executeAction->setMenu(cmdMenu);
 
+    QString elementCopyText;
+    if (hoveredElement != nullptr)
+    {
+        hoveredElement->addCopyTextToString(elementCopyText);
+        elementCopyText = elementCopyText.trimmed();
+    }
+
     for (auto &cmd : cmds)
     {
         QString inputText = this->selection_.isEmpty()
@@ -2975,7 +2996,8 @@ void ChannelView::addCommandExecutionContextMenuItems(
 
         inputText.push_front(cmd.name + " ");
 
-        cmdMenu->addAction(cmd.name, [this, layout, cmd, inputText] {
+        cmdMenu->addAction(cmd.name, [this, layout, cmd, inputText,
+                                      elementCopyText] {
             /* Search popups and user message history's underlyingChannels aren't of type TwitchChannel, but
              * we would still like to execute commands from them. Use their source channel instead if applicable. */
             ChannelPtr channel = this->effectiveSourceChannel();
@@ -2991,6 +3013,7 @@ void ChannelView::addCommandExecutionContextMenuItems(
                 inputText.split(' '), cmd, true, channel, layout->getMessage(),
                 {
                     {"input.text", userText},
+                    {"element.copytext", elementCopyText},
                 });
 
             value = getApp()->getCommands()->execCommand(value, channel, false);

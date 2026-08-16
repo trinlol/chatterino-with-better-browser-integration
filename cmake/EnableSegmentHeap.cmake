@@ -8,7 +8,7 @@ if(NOT DEFINED ENV{VSINSTALLDIR})
 endif()
 
 set(segment_heap_path "$ENV{VSINSTALLDIR}Common7/IDE/CommonExtensions/Microsoft/CMake/cmake/Microsoft/SegmentHeap.cmake")
-if(NOT EXISTS "${segment_heap_path}")
+if (NOT EXISTS "${segment_heap_path}")
     message(STATUS "Missing '${segment_heap_path}'. Segment heap will be disabled - consider updating Visual Studio.")
     return()
 endif()
