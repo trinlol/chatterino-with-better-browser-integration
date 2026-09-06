@@ -93,6 +93,14 @@ QString localizeNumbers(T number)
 
 QString kFormatNumbers(const int &number);
 
+// The two functions below are ported from Moltorino
+// (https://codeberg.org/MoltoBenne/Moltorino), MIT License, (c) MoltoBenne.
+QString formatCompactNumber(qint64 number);
+
+/// Formats a channel point balance; negative values render as "..."
+/// (used for "balance unknown").
+QString formatChannelPoints(qint64 points);
+
 QColor getRandomColor(const QString &userId);
 
 /**

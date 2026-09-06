@@ -159,6 +159,22 @@ public:
 
     /// Appearance
     BoolSetting showTimestamps = {"/appearance/messages/showTimestamps", true};
+    BoolSetting showHeaderTimestamps = {
+        "/appearance/messages/header/showTimestamps",
+        false,
+    };
+    BoolSetting showAnnouncementHeader = {
+        "/appearance/messages/announcements/showHeader",
+        true,
+    };
+    BoolSetting showSubscriptionHeader = {
+        "/appearance/messages/subscriptions/showHeader",
+        true,
+    };
+    BoolSetting showWatchStreakHeader = {
+        "/appearance/messages/watchstreaks/showHeader",
+        true,
+    };
     BoolSetting animationsWhenFocused = {
         "/appearance/enableAnimationsWhenFocused", false};
     BoolSetting hideMessageTimestampsWhenLive = {
@@ -180,6 +196,10 @@ public:
                                      false};
     EnumSetting<MessageOverflow> messageOverflow = {
         "/appearance/messages/messageOverflow", MessageOverflow::Highlight};
+    BoolSetting wrapAsciiArt = {
+        "/appearance/messages/wrapAsciiArt",
+        false,
+    };
     BoolSetting separateMessages = {"/appearance/messages/separateMessages",
                                     false};
     BoolSetting fadeMessageHistory = {"/appearance/messages/fadeMessageHistory",
@@ -313,6 +333,48 @@ public:
         "/behaviour/dismissedPinnedMessageIds", {}};
     BoolSetting allowDuplicateMessages = {"/behaviour/allowDuplicateMessages",
                                           true};
+    // Settings below are ported from Moltorino (MIT, (c) MoltoBenne)
+    BoolSetting nukePreviewEnabled = {
+        "/moderation/nuke/previewEnabled",
+        true,
+    };
+    BoolSetting nukeShowSummary = {
+        "/moderation/nuke/showSummary",
+        true,
+    };
+    BoolSetting nukeSkipVips = {"/moderation/nuke/skipVips", false};
+    QStringSetting nukeModerationMessage = {
+        "/moderation/nuke/moderationMessage",
+        "",
+    };
+    IntSetting spamCommandIntervalMs = {"/fun/spam/intervalMs", 30};
+    BoolSetting showSpamPyramidStatusMessages = {
+        "/fun/spam/showStatusMessages",
+        true,
+    };
+    // Prediction popout settings (ported from Moltorino, MIT, (c) MoltoBenne)
+    BoolSetting enablePredictions = {"/predictions/enabled", true};
+    /// 0 = Open betting view (default), 1 = Open manage view
+    IntSetting predictionModAction = {"/predictions/modAction", 0};
+    BoolSetting predictionAutoCloseDialog = {
+        "/predictions/autoCloseDialog",
+        true,
+    };
+    BoolSetting limitPredictionDialogs = {"/predictions/limitPopups", true};
+    BoolSetting predictionDialogsPerChannel = {
+        "/predictions/limitPerChannel",
+        true,
+    };
+    BoolSetting predictionCloseOnFocusLoss = {
+        "/predictions/closeOnFocusLoss",
+        false,
+    };
+    // Default /translate target language (ported from Moltorino, MIT,
+    // (c) MoltoBenne)
+    QStringSetting messageTranslationTargetLanguage{
+        "/translation/targetLanguage",
+        "en",
+    };
     BoolSetting mentionUsersWithAt = {"/behaviour/mentionUsersWithAt", false};
     BoolSetting showJoins = {"/behaviour/showJoins", false};
     BoolSetting showParts = {"/behaviour/showParts", false};

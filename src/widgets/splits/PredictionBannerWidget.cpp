@@ -1,7 +1,10 @@
 #include "widgets/splits/PredictionBannerWidget.hpp"
 
 #include "common/Channel.hpp"
+#include "providers/twitch/TwitchChannel.hpp"
+#include "widgets/dialogs/PredictionDialog.hpp"
 
+#include <QMouseEvent>
 #include <QPainter>
 
 namespace chatterino {
@@ -50,7 +53,31 @@ PredictionBannerWidget::PredictionBannerWidget(QWidget *parent)
     layout->addWidget(this->textLabel_, 1);
     layout->addWidget(this->closeButton_);
     this->setLayout(layout);
+    this->setCursor(Qt::PointingHandCursor);
     this->hide();
+}
+
+void PredictionBannerWidget::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        this->openPredictionDialog();
+    }
+    BaseWidget::mouseReleaseEvent(event);
+}
+
+void PredictionBannerWidget::openPredictionDialog()
+{
+    // Clicking the prediction banner opens the prediction popout
+    // (interaction ported from Moltorino, MIT, (c) MoltoBenne).
+    auto *twitchChannel =
+        dynamic_cast<TwitchChannel *>(this->channel_.get());
+    if (twitchChannel == nullptr)
+    {
+        return;
+    }
+    twitchChannel->refreshPrediction(true);
+    PredictionDialog::showDialog(twitchChannel, this->window());
 }
 
 void PredictionBannerWidget::setChannel(const ChannelPtr &channel)
@@ -117,6 +144,10 @@ void PredictionBannerWidget::updateState()
     this->update();
 }
 
+void PredictionBannerWidget::themeChangedEvent()
+{
+}
+
 QColor PredictionBannerWidget::backgroundColor() const
 {
     bool hasLocked = false;
@@ -163,10 +194,6 @@ void PredictionBannerWidget::paintEvent(QPaintEvent *event)
     painter.setRenderHint(QPainter::Antialiasing);
     painter.fillRect(this->rect(), this->backgroundColor());
     painter.fillRect(QRect(0, 0, this->width(), 1), this->borderColor());
-}
-
-void PredictionBannerWidget::themeChangedEvent()
-{
 }
 
 }  // namespace chatterino

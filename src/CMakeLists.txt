@@ -91,18 +91,28 @@ set(SOURCE_FILES
         controllers/commands/builtin/twitch/Ban.hpp
         controllers/commands/builtin/twitch/Block.cpp
         controllers/commands/builtin/twitch/Block.hpp
+        controllers/commands/builtin/twitch/BlockedTerms.cpp
+        controllers/commands/builtin/twitch/BlockedTerms.hpp
         controllers/commands/builtin/twitch/ChatSettings.cpp
         controllers/commands/builtin/twitch/ChatSettings.hpp
         controllers/commands/builtin/twitch/Chatters.cpp
         controllers/commands/builtin/twitch/Chatters.hpp
         controllers/commands/builtin/twitch/DeleteMessages.cpp
         controllers/commands/builtin/twitch/DeleteMessages.hpp
+        controllers/commands/builtin/twitch/Editor.cpp
+        controllers/commands/builtin/twitch/Editor.hpp
+        controllers/commands/builtin/twitch/GetFounders.cpp
+        controllers/commands/builtin/twitch/GetFounders.hpp
         controllers/commands/builtin/twitch/GetModerators.cpp
         controllers/commands/builtin/twitch/GetModerators.hpp
         controllers/commands/builtin/twitch/GetVIPs.cpp
         controllers/commands/builtin/twitch/GetVIPs.hpp
+        controllers/commands/builtin/twitch/LeadModerator.cpp
+        controllers/commands/builtin/twitch/LeadModerator.hpp
         controllers/commands/builtin/twitch/LowTrust.cpp
         controllers/commands/builtin/twitch/LowTrust.hpp
+        controllers/commands/builtin/twitch/Nuke.cpp
+        controllers/commands/builtin/twitch/Nuke.hpp
         controllers/commands/builtin/twitch/Pin.cpp
         controllers/commands/builtin/twitch/Pin.hpp
         controllers/commands/builtin/twitch/Poll.cpp
@@ -111,6 +121,8 @@ set(SOURCE_FILES
         controllers/commands/builtin/twitch/Prediction.hpp
         controllers/commands/builtin/twitch/Raid.cpp
         controllers/commands/builtin/twitch/Raid.hpp
+        controllers/commands/builtin/twitch/Redeem.cpp
+        controllers/commands/builtin/twitch/Redeem.hpp
         controllers/commands/builtin/twitch/RemoveModerator.cpp
         controllers/commands/builtin/twitch/RemoveModerator.hpp
         controllers/commands/builtin/twitch/RemoveVIP.cpp
@@ -125,6 +137,8 @@ set(SOURCE_FILES
         controllers/commands/builtin/twitch/Shoutout.hpp
         controllers/commands/builtin/twitch/StartCommercial.cpp
         controllers/commands/builtin/twitch/StartCommercial.hpp
+        controllers/commands/builtin/twitch/Translate.cpp
+        controllers/commands/builtin/twitch/Translate.hpp
         controllers/commands/builtin/twitch/Unban.cpp
         controllers/commands/builtin/twitch/Unban.hpp
         controllers/commands/builtin/twitch/UpdateChannel.cpp
@@ -330,6 +344,8 @@ set(SOURCE_FILES
         debug/Benchmark.cpp
         debug/Benchmark.hpp
 
+        messages/AsciiArt.cpp
+        messages/AsciiArt.hpp
         messages/Emote.cpp
         messages/Emote.hpp
         messages/Image.cpp
@@ -347,6 +363,7 @@ set(SOURCE_FILES
         messages/MessageElement.cpp
         messages/MessageElement.hpp
         messages/MessageFlag.hpp
+        messages/MessageParseArgs.hpp
         messages/MessageSimilarity.cpp
         messages/MessageSimilarity.hpp
         messages/MessageSink.hpp
@@ -486,6 +503,8 @@ set(SOURCE_FILES
         providers/twitch/TwitchIrc.hpp
         providers/twitch/TwitchIrcServer.cpp
         providers/twitch/TwitchIrcServer.hpp
+        providers/twitch/TwitchNameHistory.cpp
+        providers/twitch/TwitchNameHistory.hpp
         providers/twitch/TwitchUser.cpp
         providers/twitch/TwitchUser.hpp
         providers/twitch/TwitchUsers.cpp
@@ -520,6 +539,14 @@ set(SOURCE_FILES
 
         providers/twitch/api/Helix.cpp
         providers/twitch/api/Helix.hpp
+        providers/translation/Translator.cpp
+        providers/translation/Translator.hpp
+
+        providers/twitch/api/TwitchGql.cpp
+        providers/twitch/api/TwitchGql.hpp
+
+        widgets/dialogs/PredictionDialog.cpp
+        widgets/dialogs/PredictionDialog.hpp
 
         singletons/CrashHandler.cpp
         singletons/CrashHandler.hpp
@@ -789,6 +816,8 @@ set(SOURCE_FILES
         widgets/helper/IconDelegate.hpp
         widgets/helper/InvisibleSizeGrip.cpp
         widgets/helper/InvisibleSizeGrip.hpp
+        widgets/helper/LiveIndicator.cpp
+        widgets/helper/LiveIndicator.hpp
         widgets/helper/MessageView.cpp
         widgets/helper/MessageView.hpp
         widgets/helper/NotebookTab.cpp
@@ -809,8 +838,8 @@ set(SOURCE_FILES
         widgets/helper/SearchPopup.hpp
         widgets/helper/SettingsDialogTab.cpp
         widgets/helper/SettingsDialogTab.hpp
-        widgets/helper/LiveIndicator.cpp
-        widgets/helper/LiveIndicator.hpp
+        widgets/helper/SvgWidget.cpp
+        widgets/helper/SvgWidget.hpp
         widgets/helper/TableStyles.cpp
         widgets/helper/TableStyles.hpp
         widgets/helper/TrimRegExpValidator.cpp
@@ -976,7 +1005,6 @@ target_link_libraries(${LIBRARY_PROJECT}
         Qt${MAJOR_QT_VERSION}::Gui
         Qt${MAJOR_QT_VERSION}::Network
         Qt${MAJOR_QT_VERSION}::Svg
-        Qt${MAJOR_QT_VERSION}::SvgWidgets
         Qt${MAJOR_QT_VERSION}::Concurrent
 
         LibCommuni::LibCommuni
@@ -996,7 +1024,7 @@ endif()
 
 if (CHATTERINO_SPELLCHECK)
     target_compile_definitions(${LIBRARY_PROJECT} PUBLIC CHATTERINO_WITH_SPELLCHECK)
-    target_link_libraries(${LIBRARY_PROJECT} PRIVATE hunspell::hunspell)
+    target_link_libraries(${LIBRARY_PROJECT} PUBLIC hunspell::hunspell)
 endif()
 
 if (CHATTERINO_ALLOW_PRIVATE_QT_API)

@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "Chatterino Better Browser"
-#define MyAppVersion "2.6.2"
+#define MyAppVersion "2.6.3"
 #define MyAppPublisher "trinlol"
 #define MyAppURL "https://github.com/trinlol/chatterino-with-better-browser-integration"
 #define MyAppExeName "Chatterino Better Browser.exe"

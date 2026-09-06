@@ -234,10 +234,10 @@ public:
     void markConnected();
 
     // Emotes
-    std::optional<EmotePtr> twitchEmote(const EmoteName &name) const;
-    std::optional<EmotePtr> bttvEmote(const EmoteName &name) const;
-    std::optional<EmotePtr> ffzEmote(const EmoteName &name) const;
-    std::optional<EmotePtr> seventvEmote(const EmoteName &name) const;
+    std::optional<EmotePtr> twitchEmote(EmoteNameView name) const;
+    std::optional<EmotePtr> bttvEmote(EmoteNameView name) const;
+    std::optional<EmotePtr> ffzEmote(EmoteNameView name) const;
+    std::optional<EmotePtr> seventvEmote(EmoteNameView name) const;
 
     std::shared_ptr<const EmoteMap> localTwitchEmotes() const;
     std::shared_ptr<const EmoteMap> bttvEmotes() const;
@@ -448,6 +448,51 @@ public:
     /// Fires when the pinned message changes (set, cleared, or updated).
     pajlada::Signals::NoArgSignal pinnedMessageChanged;
 
+    // Predictions (ported from Moltorino, MIT, (c) MoltoBenne)
+    struct PredictionOutcome {
+        QString id;
+        QString title;
+        QString color;  // "BLUE", "PINK", "GREEN"
+        qlonglong totalPoints = 0;
+        int totalUsers = 0;
+        qlonglong topPoints = 0;
+        QString topPredictorName;
+    };
+
+    struct PredictionEvent {
+        QString id;
+        QString title;
+        QString status;  // "ACTIVE", "LOCKED", "RESOLVED", "CANCELED"
+        std::vector<PredictionOutcome> outcomes;  // 2-10
+        int predictionWindowSeconds = 0;
+        QDateTime createdAt;
+        std::optional<QDateTime> lockedAt;
+        QString winningOutcomeId;
+        QString createdByName;
+        QString lockedByName;
+        QString endedByName;
+        QString selfOutcomeId;
+        int selfPoints = 0;
+    };
+
+    SharedAccessGuard<const std::optional<PredictionEvent>> accessPrediction()
+        const;
+    void setActivePrediction(std::optional<PredictionEvent> prediction);
+    void refreshActivePrediction();
+    void refreshPrediction(bool force = false);
+
+    // Channel point balance (ported from Moltorino, MIT, (c) MoltoBenne).
+    /// -1 when unknown. Fires channelPointsChanged on updates.
+    qint64 channelPointBalance() const;
+    void setChannelPointBalance(qint64 balance);
+    void refreshChannelPointsIfStale(bool force = false);
+    bool isChannelPointsFetchInFlight() const;
+
+    pajlada::Signals::NoArgSignal channelPointsChanged;
+
+    /// Fires when the active prediction changes.
+    pajlada::Signals::NoArgSignal predictionChanged;
+
 private:
     struct NameOptions {
         // displayName is the non-CJK-display name for this user
@@ -609,6 +654,18 @@ private:
     QElapsedTimer titleRefreshedTimer_;
     QElapsedTimer clipCreationTimer_;
     bool isClipCreationInProgress{false};
+
+    // Predictions (ported from Moltorino, MIT, (c) MoltoBenne)
+    UniqueAccess<std::optional<PredictionEvent>> activePrediction_;
+    QDateTime lastPredictionUpdateAt_;
+    QDateTime lastPredictionRefreshAt_;
+    std::atomic_bool predictionFetchInFlight_{false};
+
+    // Channel point balance (ported from Moltorino, MIT, (c) MoltoBenne)
+    std::atomic<qint64> channelPoints_{-1};
+    QDateTime lastChannelPointsUpdateAt_;
+    QDateTime lastChannelPointsRefreshAt_;
+    std::atomic_bool channelPointsFetchInFlight_{false};
 
     /**
      * This channels 7TV user-id,

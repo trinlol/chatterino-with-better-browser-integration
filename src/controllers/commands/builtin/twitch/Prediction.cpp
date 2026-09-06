@@ -12,7 +12,14 @@
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
+#include "singletons/Settings.hpp"
+#include "singletons/WindowManager.hpp"
 #include "util/Helpers.hpp"
+#include "widgets/Window.hpp"
+#include "widgets/dialogs/PredictionDialog.hpp"
+#include "widgets/Notebook.hpp"
+#include "widgets/splits/Split.hpp"
+#include "widgets/splits/SplitContainer.hpp"
 
 #include <QCommandLineParser>
 #include <QProcess>
@@ -26,13 +33,96 @@ using namespace chatterino;
 constexpr auto MIN_PREDICT_DURATION = std::chrono::seconds(30);
 constexpr auto MAX_PREDICT_DURATION = std::chrono::seconds(1800);
 
+// Ported from Moltorino (https://codeberg.org/MoltoBenne/Moltorino),
+// MIT License, (c) MoltoBenne.
+Split *findOpenSplitForChannel(const ChannelPtr &channel)
+{
+    if (!channel)
+    {
+        return nullptr;
+    }
+
+    auto *windowManager = getApp()->getWindows();
+    if (windowManager == nullptr)
+    {
+        return nullptr;
+    }
+
+    auto *window = windowManager->getLastSelectedWindow();
+    if (window == nullptr)
+    {
+        return nullptr;
+    }
+
+    auto *currentPage = dynamic_cast<SplitContainer *>(
+        window->getNotebook().getSelectedPage());
+    if (currentPage != nullptr)
+    {
+        if (auto *selectedSplit = currentPage->getSelectedSplit())
+        {
+            if (selectedSplit->getChannel() == channel)
+            {
+                return selectedSplit;
+            }
+        }
+    }
+
+    const auto &notebook = window->getNotebook();
+    for (int i = 0; i < notebook.getPageCount(); ++i)
+    {
+        auto *page = dynamic_cast<SplitContainer *>(notebook.getPageAt(i));
+        if (page == nullptr)
+        {
+            continue;
+        }
+
+        for (auto *split : page->getSplits())
+        {
+            if (split->getChannel() == channel)
+            {
+                return split;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
 }  // namespace
 
 namespace chatterino::commands {
 
+// Ported from Moltorino - opens the prediction popout dialog. Registered as
+// the bare "/prediction" command; argument-based creation remains available
+// through the same command with flags (see createPrediction).
+QString showPredictions(const CommandContext &ctx)
+{
+    if (ctx.twitchChannel == nullptr)
+    {
+        if (ctx.channel != nullptr)
+        {
+            ctx.channel->addSystemMessage(
+                "The /prediction command only works in Twitch channels.");
+        }
+        return "";
+    }
+
+    auto *split = findOpenSplitForChannel(ctx.channel);
+    PredictionDialog::showDialog(ctx.twitchChannel, split);
+    return "";
+}
+
 QString createPrediction(const CommandContext &ctx)
 {
     const auto command = QStringLiteral("/prediction");
+
+    // Without arguments (and with the popout enabled), open the prediction
+    // dialog instead of printing usage (ported from Moltorino).
+    if (ctx.words.size() <= 1 && getSettings()->enablePredictions)
+    {
+        return showPredictions(ctx);
+    }
+
     const auto usage = QStringLiteral(
         R"(Usage: "/prediction --title "<title>" --choice "<choice1>" --choice "<choice2>" --duration <duration>[time unit]" - Creates a prediction for users to guess among the defined options. Title may not exceed 45 characters. There must be between two and ten choices. Duration must be a positive integer; time unit (optional, default=s) must be one of s, m; maximum duration is 30 minutes.)");
     const auto action = parseUserParticipationAction(

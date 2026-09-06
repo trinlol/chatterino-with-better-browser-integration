@@ -212,6 +212,47 @@ void IvrApi::loadUserLogsForDay(
         failureCallback);
 }
 
+// Ported from Moltorino (https://codeberg.org/MoltoBenne/Moltorino)
+// Copyright (c) MoltoBenne - MIT License
+void IvrApi::getFounders(
+    QString channelName, ResultCallback<std::vector<HelixModerator>> successCallback,
+    IvrFailureCallback failureCallback)
+{
+    assert(!channelName.isEmpty());
+
+    this->makeRequest(QString("twitch/founders/%1").arg(channelName), {})
+        .onSuccess([successCallback, failureCallback](auto result) {
+            auto root = result.parseJson();
+            const auto foundersValue = root.value("founders");
+
+            if (!foundersValue.isArray())
+            {
+                failureCallback();
+                return;
+            }
+
+            std::vector<HelixModerator> founders;
+            for (const auto &entry : foundersValue.toArray())
+            {
+                const auto obj = entry.toObject();
+                founders.emplace_back(QJsonObject{
+                    {"user_id", obj.value("id").toString()},
+                    {"user_login", obj.value("login").toString()},
+                    {"user_name", obj.value("displayName").toString()},
+                });
+            }
+
+            successCallback(std::move(founders));
+        })
+        .onError([failureCallback](auto result) {
+            qCWarning(chatterinoIvr)
+                << "Failed IVR founders API call!" << result.formatError()
+                << QString(result.getData());
+            failureCallback();
+        })
+        .execute();
+}
+
 NetworkRequest IvrApi::makeRequest(QString url, QUrlQuery urlQuery)
 {
     assert(!url.startsWith("/"));

@@ -14,7 +14,11 @@ struct CommandContext;
 
 namespace chatterino::commands {
 
-/// /prediction
+/// /prediction (dialog popout when invoked without arguments - ported from
+/// Moltorino, MIT, (c) MoltoBenne)
+QString showPredictions(const CommandContext &ctx);
+
+/// /prediction --title ... (Helix create flow)
 QString createPrediction(const CommandContext &ctx);
 
 /// /lockprediction

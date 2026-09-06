@@ -8,6 +8,7 @@
 #include "common/enums/MessageOverflow.hpp"
 #include "common/QLogging.hpp"
 #include "controllers/commands/CommandController.hpp"
+#include "controllers/commands/builtin/twitch/Nuke.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/spellcheck/SpellChecker.hpp"
 #include "messages/Link.hpp"
@@ -138,6 +139,12 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
     this->installEventFilter(this);
     this->initLayout();
 
+    // Nuke preview (ported from Moltorino, MIT, (c) MoltoBenne)
+    this->nukePreviewTimer_.setSingleShot(true);
+    this->nukePreviewTimer_.setInterval(80);
+    QObject::connect(&this->nukePreviewTimer_, &QTimer::timeout, this,
+                     &SplitInput::applyNukePreview);
+
     auto *completer =
         new QCompleter(this->split_->getChannel()->completionModel);
     this->ui_.textEdit->setCompleter(completer);
@@ -149,12 +156,15 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
     auto *spellChecker = getApp()->getSpellChecker();
     this->inputHighlighter = new InputHighlighter(*spellChecker, this);
     this->inputHighlighter->setChannel(this->split_->getChannel());
+    this->bindNukePreviewChannel();
 
     this->signalHolder_.managedConnect(this->split_->channelChanged, [this] {
         auto channel = this->split_->getChannel();
         auto *completer = new QCompleter(channel->completionModel);
         this->ui_.textEdit->setCompleter(completer);
         this->inputHighlighter->setChannel(this->split_->getChannel());
+        this->bindNukePreviewChannel();
+        this->updateNukePreview(this->ui_.textEdit->toPlainText());
     });
 
     getSettings()->enableSpellChecking.connect(
@@ -369,6 +379,14 @@ void SplitInput::initLayout()
         label->setFrameStyle(QFrame::NoFrame);
         backLayout->addSpacing(5);
     }
+
+    // nuke preview label (ported from Moltorino, MIT, (c) MoltoBenne)
+    auto nukePreviewLabel =
+        layout.emplace<QLabel>().assign(&this->ui_.nukePreviewLabel);
+    nukePreviewLabel->setContentsMargins(6, 1, 6, 1);
+    nukePreviewLabel->setStyleSheet(
+        "color: #ffb3b3; background: rgba(90, 20, 20, 0.32);");
+    nukePreviewLabel->hide();
 
     // reply label stuff
     auto replyWrapper =
@@ -1261,6 +1279,83 @@ void SplitInput::onTextChanged()
     this->updateCompletionPopup();
 }
 
+// Nuke preview support below is ported from Moltorino
+// (https://codeberg.org/MoltoBenne/Moltorino), MIT License, (c) MoltoBenne.
+void SplitInput::bindNukePreviewChannel()
+{
+    this->nukePreviewMessageConnection_ = pajlada::Signals::ScopedConnection();
+    this->nukePreviewReplaceConnection_ = pajlada::Signals::ScopedConnection();
+    this->nukePreviewClearConnection_ = pajlada::Signals::ScopedConnection();
+
+    auto channel = this->split_->getChannel();
+    if (channel == nullptr)
+    {
+        return;
+    }
+
+    this->nukePreviewMessageConnection_ = channel->messageAppended.connect(
+        [this](MessagePtr &, std::optional<MessageFlags>) {
+            this->scheduleNukePreviewRefresh();
+        });
+    this->nukePreviewReplaceConnection_ = channel->messageReplaced.connect(
+        [this](size_t, const MessagePtr &, const MessagePtr &) {
+            this->scheduleNukePreviewRefresh();
+        });
+    this->nukePreviewClearConnection_ = channel->messagesCleared.connect(
+        [this] {
+            this->scheduleNukePreviewRefresh();
+        });
+}
+
+void SplitInput::scheduleNukePreviewRefresh()
+{
+    if (!this->nukePreviewCommandActive_ || !getSettings()->nukePreviewEnabled)
+    {
+        return;
+    }
+
+    if (!this->nukePreviewTimer_.isActive())
+    {
+        this->nukePreviewTimer_.start();
+    }
+}
+
+void SplitInput::updateNukePreview(const QString &text)
+{
+    this->pendingNukePreviewText_ = text;
+    const auto trimmed = text.trimmed();
+    const bool isNukeCommand =
+        trimmed.compare(QStringLiteral("/nuke"), Qt::CaseInsensitive) == 0 ||
+        trimmed.startsWith(QStringLiteral("/nuke "), Qt::CaseInsensitive);
+    this->nukePreviewCommandActive_ =
+        getSettings()->nukePreviewEnabled && isNukeCommand;
+    if (!getSettings()->nukePreviewEnabled || !isNukeCommand)
+    {
+        this->nukePreviewTimer_.stop();
+        this->applyNukePreview();
+        return;
+    }
+
+    this->nukePreviewTimer_.start();
+}
+
+void SplitInput::applyNukePreview()
+{
+    const auto preview = commands::buildNukePreview(
+        this->pendingNukePreviewText_, this->split_->getChannel());
+    if (!preview.active)
+    {
+        this->nukePreviewCommandActive_ = false;
+        this->ui_.nukePreviewLabel->hide();
+        this->ui_.nukePreviewLabel->clear();
+        return;
+    }
+
+    this->nukePreviewCommandActive_ = true;
+    this->ui_.nukePreviewLabel->setText(preview.statusText);
+    this->ui_.nukePreviewLabel->setVisible(!preview.statusText.isEmpty());
+}
+
 void SplitInput::onCursorPositionChanged()
 {
     this->updateCompletionPopup();
@@ -1487,6 +1582,7 @@ void SplitInput::editTextChanged()
     else
     {
         this->textChanged.invoke(text);
+        this->updateNukePreview(text);
 
         text = text.trimmed();
         text = app->getCommands()->execCommand(text, this->split_->getChannel(),
@@ -2056,7 +2152,7 @@ void SplitInput::updateSelectedHistorySearchMatch()
         this->historySearchResultIndex)];
 
     this->prevIndex_ = static_cast<int>(current.messageIdx);
-    this->ui_.textEdit->setText(current.message);
+    this->ui_.textEdit->setPlainText(current.message);
 
     this->updateHistorySearchStatus(
         false, QString::number(this->historySearchResults.size() -

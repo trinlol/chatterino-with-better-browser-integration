@@ -32,6 +32,7 @@
 #include "providers/seventv/SeventvEmotes.hpp"
 #include "providers/seventv/SeventvEventAPI.hpp"
 #include "providers/twitch/api/Helix.hpp"
+#include "providers/twitch/api/TwitchGql.hpp"
 #include "providers/twitch/ChannelPointReward.hpp"
 #include "providers/twitch/eventsub/Controller.hpp"
 #include "providers/twitch/IrcMessageHandler.hpp"
@@ -106,6 +107,14 @@ constexpr auto MAX_CHATTERS_TO_FETCH = 5000;
 
 // From Twitch docs - expected size for a badge (1x)
 constexpr QSize BASE_BADGE_SIZE(18, 18);
+
+// Prediction refresh cadence (ported from Moltorino)
+constexpr qint64 PREDICTION_MIN_REFRESH_INTERVAL_MS = 10'000;
+constexpr qint64 PREDICTION_STALE_AFTER_MS = 120'000;
+
+// Channel point balance refresh cadence (ported from Moltorino)
+constexpr qint64 CHANNEL_POINTS_MIN_REFRESH_INTERVAL_MS = 30'000;
+constexpr qint64 CHANNEL_POINTS_STALE_AFTER_MS = 120'000;
 
 }  // namespace
 
@@ -832,6 +841,9 @@ void TwitchChannel::roomIdChanged()
     this->listenSevenTVCosmetics();
     getApp()->getTwitchLiveController()->add(this->sharedFromThis());
     this->refreshPinnedMessage();
+    // Predictions (ported from Moltorino, MIT, (c) MoltoBenne) - the room id
+    // is required for the GQL prediction fetch.
+    this->refreshPrediction();
 }
 
 QString TwitchChannel::prepareMessage(const QString &message) const
@@ -1104,7 +1116,7 @@ SharedAccessGuard<const TwitchChannel::StreamStatus>
     return this->streamStatus_.accessConst();
 }
 
-std::optional<EmotePtr> TwitchChannel::twitchEmote(const EmoteName &name) const
+std::optional<EmotePtr> TwitchChannel::twitchEmote(EmoteNameView name) const
 {
     auto emotes = this->localTwitchEmotes();
     auto it = emotes->find(name);
@@ -1116,7 +1128,7 @@ std::optional<EmotePtr> TwitchChannel::twitchEmote(const EmoteName &name) const
     return it->second;
 }
 
-std::optional<EmotePtr> TwitchChannel::bttvEmote(const EmoteName &name) const
+std::optional<EmotePtr> TwitchChannel::bttvEmote(EmoteNameView name) const
 {
     auto emotes = this->bttvEmotes_.get();
     auto it = emotes->find(name);
@@ -1128,7 +1140,7 @@ std::optional<EmotePtr> TwitchChannel::bttvEmote(const EmoteName &name) const
     return it->second;
 }
 
-std::optional<EmotePtr> TwitchChannel::ffzEmote(const EmoteName &name) const
+std::optional<EmotePtr> TwitchChannel::ffzEmote(EmoteNameView name) const
 {
     auto emotes = this->ffzEmotes_.get();
     auto it = emotes->find(name);
@@ -1140,7 +1152,7 @@ std::optional<EmotePtr> TwitchChannel::ffzEmote(const EmoteName &name) const
     return it->second;
 }
 
-std::optional<EmotePtr> TwitchChannel::seventvEmote(const EmoteName &name) const
+std::optional<EmotePtr> TwitchChannel::seventvEmote(EmoteNameView name) const
 {
     auto emotes = this->seventvEmotes_.get();
     auto it = emotes->find(name);
@@ -2827,6 +2839,246 @@ void TwitchChannel::unpinCurrentMessage()
         [](HelixUnpinMessageError /*error*/, const QString &message) {
             qCWarning(chatterinoTwitch)
                 << "Failed to unpin message:" << message;
+        });
+}
+
+// Predictions below ported from Moltorino
+// (https://codeberg.org/MoltoBenne/Moltorino), MIT License, (c) MoltoBenne.
+SharedAccessGuard<const std::optional<TwitchChannel::PredictionEvent>>
+    TwitchChannel::accessPrediction() const
+{
+    return this->activePrediction_.accessConst();
+}
+
+void TwitchChannel::setActivePrediction(
+    std::optional<PredictionEvent> prediction)
+{
+    assertInGuiThread();
+
+    this->lastPredictionUpdateAt_ = QDateTime::currentDateTimeUtc();
+
+    {
+        auto locked = this->activePrediction_.access();
+        *locked = std::move(prediction);
+    }
+    this->predictionChanged.invoke();
+}
+
+void TwitchChannel::refreshActivePrediction()
+{
+    auto account = getApp()->getAccounts()->twitch.getCurrent();
+    if (!account || account->isAnon())
+    {
+        return;
+    }
+
+    const auto token = account->getOAuthToken();
+    if (token.trimmed().isEmpty())
+    {
+        qCDebug(chatterinoTwitch) << "[Predictions] Skipping active "
+                                     "prediction fetch for"
+                                  << this->getName()
+                                  << "because no auth token is available";
+        return;
+    }
+
+    if (this->predictionFetchInFlight_.exchange(true))
+    {
+        return;
+    }
+
+    this->lastPredictionRefreshAt_ = QDateTime::currentDateTimeUtc();
+
+    const auto weak = this->weakFromThis();
+    qCDebug(chatterinoTwitch)
+        << "[Predictions] Fetching active prediction for" << this->getName();
+
+    TwitchGql::getActivePrediction(
+        this->getName(), token,
+        [weak](std::optional<PredictionEvent> prediction) {
+            auto shared = weak.lock();
+            if (!shared)
+            {
+                return;
+            }
+            shared->predictionFetchInFlight_.store(false);
+            runInGuiThread(
+                [weak, prediction = std::move(prediction)]() mutable {
+                    auto shared = weak.lock();
+                    if (!shared)
+                    {
+                        return;
+                    }
+
+                    shared->lastPredictionUpdateAt_ =
+                        QDateTime::currentDateTimeUtc();
+                    if (prediction)
+                    {
+                        {
+                            auto cur = shared->activePrediction_.access();
+                            if (cur->has_value())
+                            {
+                                if ((*cur)->id == prediction->id &&
+                                    (*cur)->selfPoints > 0)
+                                {
+                                    prediction->selfPoints =
+                                        (*cur)->selfPoints;
+                                    prediction->selfOutcomeId =
+                                        (*cur)->selfOutcomeId;
+                                }
+                            }
+                        }
+
+                        qCDebug(chatterinoTwitch)
+                            << "[Predictions] Got active prediction:"
+                            << prediction->title << "status:"
+                            << prediction->status;
+                    }
+                    else
+                    {
+                        qCDebug(chatterinoTwitch)
+                            << "[Predictions] No active prediction for"
+                            << shared->getName();
+                    }
+                    shared->setActivePrediction(std::move(prediction));
+                });
+        },
+        [weak](const QString &error) {
+            auto shared = weak.lock();
+            if (!shared)
+            {
+                return;
+            }
+
+            shared->predictionFetchInFlight_.store(false);
+            qCDebug(chatterinoTwitch)
+                << "[Predictions] Failed to fetch active prediction for"
+                << shared->getName() << ":" << error;
+        });
+}
+
+void TwitchChannel::refreshPrediction(bool force)
+{
+    if (!getSettings()->enablePredictions)
+    {
+        return;
+    }
+
+    if (this->roomId().isEmpty())
+    {
+        return;
+    }
+
+    if (this->predictionFetchInFlight_.load())
+    {
+        return;
+    }
+
+    const auto now = QDateTime::currentDateTimeUtc();
+
+    if (!force && this->lastPredictionUpdateAt_.isValid() &&
+        this->lastPredictionUpdateAt_.msecsTo(now) <
+            PREDICTION_STALE_AFTER_MS)
+    {
+        return;
+    }
+
+    if (!force && this->lastPredictionRefreshAt_.isValid() &&
+        this->lastPredictionRefreshAt_.msecsTo(now) <
+            PREDICTION_MIN_REFRESH_INTERVAL_MS)
+    {
+        return;
+    }
+
+    this->refreshActivePrediction();
+}
+qint64 TwitchChannel::channelPointBalance() const
+{
+    return this->channelPoints_.load();
+}
+
+void TwitchChannel::setChannelPointBalance(qint64 balance)
+{
+    const auto previous = this->channelPoints_.exchange(balance);
+    if (previous != balance)
+    {
+        this->lastChannelPointsUpdateAt_ = QDateTime::currentDateTimeUtc();
+        this->channelPointsChanged.invoke();
+    }
+}
+
+bool TwitchChannel::isChannelPointsFetchInFlight() const
+{
+    return this->channelPointsFetchInFlight_.load();
+}
+
+void TwitchChannel::refreshChannelPointsIfStale(bool force)
+{
+    if (this->roomId().isEmpty())
+    {
+        return;
+    }
+
+    if (this->channelPointsFetchInFlight_.load())
+    {
+        return;
+    }
+
+    const auto now = QDateTime::currentDateTimeUtc();
+
+    if (!force && this->lastChannelPointsUpdateAt_.isValid() &&
+        this->lastChannelPointsUpdateAt_.msecsTo(now) <
+            CHANNEL_POINTS_STALE_AFTER_MS)
+    {
+        return;
+    }
+
+    if (!force && this->lastChannelPointsRefreshAt_.isValid() &&
+        this->lastChannelPointsRefreshAt_.msecsTo(now) <
+            CHANNEL_POINTS_MIN_REFRESH_INTERVAL_MS)
+    {
+        return;
+    }
+
+    auto account = getApp()->getAccounts()->twitch.getCurrent();
+    if (!account || account->isAnon() || account->getOAuthToken().isEmpty())
+    {
+        return;
+    }
+
+    if (this->channelPointsFetchInFlight_.exchange(true))
+    {
+        return;
+    }
+
+    this->lastChannelPointsRefreshAt_ = now;
+
+    const auto weak = this->weakFromThis();
+    TwitchGql::getChannelPoints(
+        this->getName(), account->getOAuthToken(),
+        [weak](qint64 points) {
+            runInGuiThread([weak, points]() {
+                auto shared = weak.lock();
+                if (!shared)
+                {
+                    return;
+                }
+                shared->channelPointsFetchInFlight_.store(false);
+                shared->setChannelPointBalance(points);
+            });
+        },
+        [weak](const QString &error) {
+            runInGuiThread([weak, error]() {
+                auto shared = weak.lock();
+                if (!shared)
+                {
+                    return;
+                }
+                shared->channelPointsFetchInFlight_.store(false);
+                qCDebug(chatterinoTwitch)
+                    << "[Points] Failed to fetch channel points for"
+                    << shared->getName() << ":" << error;
+            });
         });
 }
 

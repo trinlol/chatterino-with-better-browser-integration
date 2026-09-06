@@ -7,6 +7,9 @@
 #include "messages/Message.hpp"
 #include "widgets/BaseWidget.hpp"
 
+#include <pajlada/signals/scoped-connection.hpp>
+#include <pajlada/signals/signalholder.hpp>
+
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -184,6 +187,7 @@ protected:
         QWidget *historySearchWrap;
         QLineEdit *historySearchInput;
         QLabel *historySearchLabel;
+        QLabel *nukePreviewLabel = nullptr;
     } ui_;
 
     MessagePtr replyTarget_ = nullptr;
@@ -255,6 +259,18 @@ protected:
     void updateHistorySearchStatus(bool failed, const QString &message);
 
     QString historySearchQuery;
+
+    // Nuke preview support (ported from Moltorino, MIT, (c) MoltoBenne)
+    void bindNukePreviewChannel();
+    void scheduleNukePreviewRefresh();
+    void updateNukePreview(const QString &text);
+    void applyNukePreview();
+    QTimer nukePreviewTimer_;
+    QString pendingNukePreviewText_;
+    bool nukePreviewCommandActive_ = false;
+    pajlada::Signals::ScopedConnection nukePreviewMessageConnection_;
+    pajlada::Signals::ScopedConnection nukePreviewReplaceConnection_;
+    pajlada::Signals::ScopedConnection nukePreviewClearConnection_;
 
     struct HistorySearchResult {
         /// Index of the message in `prevMsg_`
