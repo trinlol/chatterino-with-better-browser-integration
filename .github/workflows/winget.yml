@@ -9,7 +9,7 @@ jobs:
     # must never run for Chatterino Better Browser releases.
     if: ${{ startsWith(github.event.release.tag_name, 'v') && github.repository == 'Chatterino/chatterino2' }}
     steps:
-      - uses: vedantmgoyal9/winget-releaser@main
+      - uses: vedantmgoyal9/winget-releaser@b3a5dae0047c6180023acba3f548c55fdf6b7193 # main
         with:
           identifier: ChatterinoTeam.Chatterino
           installers-regex: ^Chatterino.Installer.exe$
