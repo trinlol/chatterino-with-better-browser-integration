@@ -23,3 +23,15 @@
 - Test: `npm test`
 - Package: `npm run package:extension`
 - Dev: load `chatterino-extension/` unpacked in Chrome or Edge
+
+### Releasing to GitHub
+
+- **Version bump is mandatory on every release push.** Any push that ships an update to users (GitHub release with prebuilt binaries, or a commit that changes application/extension behavior) must bump the version in ALL FOUR files together, keeping them in lockstep:
+  1. `CMakeLists.txt` (`project(chatterino VERSION X.Y.Z ...)` — sets the exe's version resource)
+  2. `package.json` (`version`)
+  3. `release-contract.json` (`applicationVersion` AND `extensionVersion`)
+  4. `chatterino-extension/manifest.json` (`version`)
+- Re-run `npm run test:e2e:contract` after bumping; it validates the release contract.
+- Commit the bump as `chore(release): bump version to X.Y.Z` on `master` before creating the GitHub release.
+- Never rebuild/publish a prebuilt package whose embedded version was not bumped — an unverifiable binary is a release blocker.
+- Release evidence contract (gates, smoke matrix, artifact collection): `docs/testing/browser-native-release-gate.md`
