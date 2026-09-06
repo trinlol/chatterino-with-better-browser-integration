@@ -8,6 +8,7 @@
 
 #    include "common/websockets/WebSocketPool.hpp"
 #    include "controllers/commands/CommandContext.hpp"
+#    include "controllers/plugins/api/BetterBrowserEvent.hpp"
 #    include "controllers/plugins/Plugin.hpp"
 #    include "util/FunctionRef.hpp"
 
@@ -69,6 +70,10 @@ public:
     std::pair<bool, QStringList> updateCustomCompletions(
         const QString &query, const QString &fullTextContent,
         int cursorPosition, bool isFirstWord) const;
+
+    /// Dispatch a versioned, read-only Better Browser event to loaded and
+    /// enabled plugins. Callback return values are intentionally ignored.
+    void dispatchBetterBrowserEvent(const BetterBrowserEvent &event) const;
 
     WebSocketPool &webSocketPool();
 

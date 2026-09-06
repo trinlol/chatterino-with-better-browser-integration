@@ -80,6 +80,33 @@ sol::table toTable(lua_State *L, const CompletionEvent &ev)
     );
 }
 
+sol::table toTable(lua_State *L, const ::chatterino::BetterBrowserEvent &ev)
+{
+    auto table =
+        sol::state_view(L).create_table_with("schema_version", 1,          //
+                                             "event", ev.event,            //
+                                             "session_id", ev.sessionId,   //
+                                             "generation", ev.generation,  //
+                                             "channel", ev.channel,        //
+                                             "source", ev.source,          //
+                                             "status", ev.status,          //
+                                             "reason", ev.reason           //
+        );
+    if (!ev.activityKind.isEmpty())
+    {
+        table["activity_kind"] = ev.activityKind;
+    }
+    if (!ev.activityTitle.isEmpty())
+    {
+        table["activity_title"] = ev.activityTitle;
+    }
+    if (!ev.activityStatus.isEmpty())
+    {
+        table["activity_status"] = ev.activityStatus;
+    }
+    return table;
+}
+
 void c2_register_callback(ThisPluginState L, EventType evtType,
                           sol::protected_function callback)
 {

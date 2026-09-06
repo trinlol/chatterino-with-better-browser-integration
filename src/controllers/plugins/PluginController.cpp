@@ -539,6 +539,51 @@ std::pair<bool, QStringList> PluginController::updateCustomCompletions(
     return {false, results};
 }
 
+void PluginController::dispatchBetterBrowserEvent(
+    const BetterBrowserEvent &event) const
+{
+    // Only project a short opaque suffix into Lua. The full browser session
+    // identifier remains at the native integration boundary.
+    auto projected = event;
+    projected.sessionId = projected.sessionId.right(8);
+    projected.event = projected.event.left(64);
+    projected.channel = projected.channel.left(64);
+    projected.source = projected.source.left(64);
+    projected.status = projected.status.left(64);
+    projected.reason = projected.reason.left(160);
+    projected.activityKind = projected.activityKind.left(32);
+    projected.activityTitle = projected.activityTitle.left(256);
+    projected.activityStatus = projected.activityStatus.left(64);
+
+    for (const auto &[name, anyPlugin] : this->allPlugins())
+    {
+        const auto *oPl = std::get_if<PluginPtr>(&anyPlugin);
+        if (oPl == nullptr)
+        {
+            continue;
+        }
+        const auto &pl = *oPl;
+        if (!PluginController::isPluginEnabled(pl->id) ||
+            !pl->error().isNull() || pl->state_ == nullptr)
+        {
+            continue;
+        }
+
+        const auto it =
+            pl->callbacks.find(lua::api::EventType::BetterBrowserEvent);
+        if (it == pl->callbacks.end())
+        {
+            continue;
+        }
+
+        qCDebug(chatterinoLua)
+            << "Dispatching Better Browser event to plugin" << name;
+        lua::loggedVoidCall(it->second,
+                            u"PluginController::dispatchBetterBrowserEvent",
+                            pl.get(), lua::api::toTable(pl->state_, projected));
+    }
+}
+
 WebSocketPool &PluginController::webSocketPool()
 {
     return this->webSocketPool_;

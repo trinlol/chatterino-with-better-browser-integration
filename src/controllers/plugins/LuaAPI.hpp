@@ -5,6 +5,7 @@
 #pragma once
 
 #ifdef CHATTERINO_HAVE_PLUGINS
+#    include "controllers/plugins/api/BetterBrowserEvent.hpp"
 #    include "controllers/plugins/api/ChannelRef.hpp"
 #    include "controllers/plugins/Plugin.hpp"
 #    include "controllers/plugins/SolTypes.hpp"
@@ -35,6 +36,7 @@ enum class LogLevel { Debug, Info, Warning, Critical };
 
 /**
  * @includefile controllers/plugins/api/EventType.hpp
+ * @includefile controllers/plugins/api/BetterBrowserEvent.hpp
  */
 
 /**
@@ -83,6 +85,7 @@ struct CompletionEvent {
 };
 
 sol::table toTable(lua_State *L, const CompletionEvent &ev);
+sol::table toTable(lua_State *L, const ::chatterino::BetterBrowserEvent &ev);
 
 /* @lua-fragment
 
@@ -116,10 +119,11 @@ sol::table toTable(lua_State *L, const CompletionEvent &ev);
  */
 
 /**
- * Registers a callback to be invoked when completions for a term are requested.
+ * Registers a callback to be invoked for the selected event type. Better Browser
+ * events are read-only projections and callback return values are ignored.
  *
- * @lua@param type c2.EventType.CompletionRequested
- * @lua@param func fun(event: CompletionEvent): CompletionList The callback to be invoked.
+ * @lua@param type c2.EventType.CompletionRequested|c2.EventType.BetterBrowserEvent
+ * @lua@param func fun(event: CompletionEvent|BetterBrowserEvent): CompletionList|nil The callback to be invoked.
  * @exposed c2.register_callback
  */
 void c2_register_callback(ThisPluginState L, EventType evtType,

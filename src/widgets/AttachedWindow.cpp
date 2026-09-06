@@ -215,12 +215,20 @@ AttachedWindow *AttachedWindow::get(void *target, const GetArgs &args)
             if (item.hwnd == target)
             {
                 item.winId = args.winId;
+                item.sessionId = args.sessionId;
+                item.window->sessionId_ = args.sessionId;
+                item.window->generation_ = args.generation;
+                item.window->onLoss_ = args.onLoss;
+                item.window->lossReported_ = false;
                 return item.window;
             }
         }
 
         auto *window = new AttachedWindow(target);
-        items.push_back(Item{target, window, args.winId});
+        window->sessionId_ = args.sessionId;
+        window->generation_ = args.generation;
+        window->onLoss_ = args.onLoss;
+        items.push_back(Item{target, window, args.winId, args.sessionId});
         return window;
     }();
 
@@ -263,6 +271,8 @@ AttachedWindow *AttachedWindow::get(void *target, const GetArgs &args)
     if (show)
     {
 #ifdef USEWINSDK
+        // A maximize/restore animation is short and self-clearing, so deferring
+        // to its settle timer is safe.
         if (window->targetWindowTransitioning_)
         {
             return window;
@@ -282,12 +292,14 @@ AttachedWindow *AttachedWindow::getForeground(const GetArgs &args)
 }
 #endif
 
-void AttachedWindow::detach(const QString &winId)
+void AttachedWindow::detach(const QString &winId, const QString &sessionId)
 {
     for (auto it = items.begin(); it != items.end();)
     {
-        if (it->winId == winId)
+        if (it->winId == winId &&
+            (sessionId.isEmpty() || it->sessionId == sessionId))
         {
+            it->window->onLoss_ = {};
             it->window->deleteLater();
             it = items.erase(it);
         }
@@ -296,6 +308,16 @@ void AttachedWindow::detach(const QString &winId)
             ++it;
         }
     }
+}
+
+void AttachedWindow::reportLoss(QString reason)
+{
+    if (this->lossReported_ || this->sessionId_.isEmpty() || !this->onLoss_)
+    {
+        return;
+    }
+    this->lossReported_ = true;
+    this->onLoss_(this->sessionId_, this->generation_, std::move(reason));
 }
 
 void AttachedWindow::setChannel(ChannelPtr channel)
@@ -326,11 +348,23 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
     this->targetWindowStateInitialized_ = true;
 
     // Set the browser window as the owner of this window to prevent Z-order flickering
-    ::SetWindowLongPtr(hwnd, GWLP_HWNDPARENT,
-                       reinterpret_cast<LONG_PTR>(attached));
-    ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER |
-                       SWP_FRAMECHANGED);
+    ::SetLastError(0);
+    const auto previousOwner = ::SetWindowLongPtr(
+        hwnd, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(attached));
+    if (previousOwner == 0 && ::GetLastError() != 0)
+    {
+        this->reportLoss(QStringLiteral("failed-to-own-overlay"));
+        this->deleteLater();
+        return;
+    }
+    if (::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER |
+                           SWP_FRAMECHANGED) == 0)
+    {
+        this->reportLoss(QStringLiteral("failed-to-position-overlay"));
+        this->deleteLater();
+        return;
+    }
 
     // Location changes are delivered immediately by the WinEvent hook. Keep
     // the timer as a fallback and for foreground/Z-order maintenance.
@@ -340,11 +374,26 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
         // check process id
         if (!this->validProcessName_)
         {
-            DWORD processId;
-            ::GetWindowThreadProcessId(attached, &processId);
+            DWORD processId = 0;
+            if (::GetWindowThreadProcessId(attached, &processId) == 0 ||
+                processId == 0)
+            {
+                this->timer_.stop();
+                this->reportLoss(QStringLiteral("target-window-lost"));
+                this->deleteLater();
+                return;
+            }
 
             HANDLE process = ::OpenProcess(
                 PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, processId);
+
+            if (process == nullptr)
+            {
+                this->timer_.stop();
+                this->reportLoss(QStringLiteral("target-process-lost"));
+                this->deleteLater();
+                return;
+            }
 
             std::unique_ptr<TCHAR[]> filename(new TCHAR[512]);
             DWORD filenameLength =
@@ -370,6 +419,8 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
                     qCWarning(chatterinoWidget)
                         << "NM Illegal caller" << qfilename;
                     this->timer_.stop();
+                    this->reportLoss(
+                        QStringLiteral("unsupported-browser-target"));
                     this->deleteLater();
                     return;
                 }
@@ -457,14 +508,13 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
     // an error. If we query the process first and check the filename then it
     // will return and empty string that doens't match.
     ::SetLastError(0);
-    RECT rect;
-    ::GetWindowRect(attached, &rect);
-
-    if (::GetLastError() != 0)
+    RECT rect{};
+    if (::GetWindowRect(attached, &rect) == 0)
     {
         qCWarning(chatterinoWidget) << "NM GetLastError()" << ::GetLastError();
 
         this->timer_.stop();
+        this->reportLoss(QStringLiteral("target-window-lost"));
         this->deleteLater();
         return;
     }

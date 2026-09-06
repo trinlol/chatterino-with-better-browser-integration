@@ -43,6 +43,7 @@
 #include <QPainter>
 #include <QSignalBlocker>
 #include <QTimer>
+#include <QUuid>
 #include <qwindow.h>
 
 #include <algorithm>
@@ -79,19 +80,10 @@ bool trySendPendingRewardViaBrowser(TwitchChannel *channel,
         return false;
     }
 
-    if (getApp()->getTwitch()->getWatchingChannel().get() !=
-        channel->sharedFromThis())
-    {
-        return false;
-    }
-
-    QJsonObject payload{
-        {u"action"_s, u"sendNativeChat"_s},
-        {u"message"_s, message},
-        {u"channel"_s, channel->getName()},
-    };
-    sendToBrowserExtension(payload);
-    return true;
+    const auto requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    return NativeMessagingServer::sendNativeChat(channel->getName(), message,
+                                                 requestId) ==
+           ipc::DeliveryStatus::Delivered;
 }
 
 class BackwardsSearchLineEdit : public QLineEdit
@@ -185,6 +177,10 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
             }
         },
         this->signalHolder_);
+
+    // Settings are already loaded before a split is constructed. Attach the
+    // highlighter immediately instead of waiting for a later settings change.
+    this->checkSpellingChanged();
 
     // Initialize spellcheck timers
     this->hoverTimer_.setSingleShot(true);
@@ -684,7 +680,10 @@ QString SplitInput::handleSendMessage(const std::vector<QString> &arguments)
         if (auto *tc = dynamic_cast<TwitchChannel *>(c.get());
             tc && trySendPendingRewardViaBrowser(tc, sendMessage))
         {
-            this->postMessageSend(message, arguments);
+            // Browser dispatch is not Twitch acceptance. Preserve the draft
+            // until a definitive result is visible; importantly, do not retry
+            // automatically after an uncertain external acceptance.
+            this->postMessageSend(message, {"keepInput"});
             return "";
         }
 

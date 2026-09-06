@@ -26,6 +26,7 @@
 #    include "mocks/TwitchIrcServer.hpp"
 #    include "NetworkHelpers.hpp"
 #    include "singletons/Logging.hpp"
+#    include "singletons/Settings.hpp"
 #    include "singletons/WindowManager.hpp"
 #    include "Test.hpp"
 
@@ -35,6 +36,7 @@
 
 #    include <memory>
 #    include <optional>
+#    include <type_traits>
 #    include <utility>
 
 using namespace chatterino;
@@ -363,6 +365,105 @@ TEST_F(PluginTest, testCompletion)
     ASSERT_EQ((*lua).get<std::string>("full_text_content"), "foo exclusive");
     ASSERT_EQ((*lua).get<int>("cursor_position"), 13);
     ASSERT_EQ((*lua).get<bool>("is_first_word"), false);
+}
+
+TEST_F(PluginTest, BetterBrowserEventIsReadOnlyAndIsolated)
+{
+    this->configure();
+
+    auto enabled = getSettings()->enabledPlugins.getValue();
+    enabled.append("second");
+    getSettings()->enabledPlugins.setValue(enabled);
+
+    ASSERT_TRUE(this->lua
+                    ->script(R"lua(
+        _G.browser_event = nil
+        c2.register_callback(c2.EventType.BetterBrowserEvent, function(event)
+            _G.browser_event = event
+            return { control = "ignored" }
+        end)
+    )lua")
+                    .valid());
+
+    PluginMeta meta;
+    meta.name = "Second";
+    meta.license = "MIT";
+    meta.homepage = "https://github.com/Chatterino/chatterino2";
+    meta.description = "Second plugin for Better Browser event tests";
+    QDir secondDir =
+        QDir(app->paths_.pluginsDirectory).absoluteFilePath("second");
+    secondDir.mkpath(".");
+    auto second =
+        std::make_unique<Plugin>("second", luaL_newstate(), meta, secondDir);
+    auto *rawSecond = second.get();
+    PluginControllerAccess::plugins().insert({"second", std::move(second)});
+    PluginControllerAccess::openLibrariesFor(rawSecond);
+    sol::state_view secondLua(PluginControllerAccess::state(rawSecond));
+    ASSERT_TRUE(secondLua
+                    .script(R"lua(
+        c2.register_callback(c2.EventType.BetterBrowserEvent, function(_)
+            error("isolated Better Browser callback failure")
+        end)
+    )lua")
+                    .valid());
+
+    PluginMeta disabledMeta = meta;
+    disabledMeta.name = "Disabled";
+    QDir disabledDir =
+        QDir(app->paths_.pluginsDirectory).absoluteFilePath("disabled");
+    disabledDir.mkpath(".");
+    auto disabled = std::make_unique<Plugin>("disabled", luaL_newstate(),
+                                             disabledMeta, disabledDir);
+    auto *rawDisabled = disabled.get();
+    PluginControllerAccess::plugins().insert({"disabled", std::move(disabled)});
+    PluginControllerAccess::openLibrariesFor(rawDisabled);
+    sol::state_view disabledLua(PluginControllerAccess::state(rawDisabled));
+    ASSERT_TRUE(disabledLua
+                    .script(R"lua(
+        _G.disabled_called = false
+        c2.register_callback(c2.EventType.BetterBrowserEvent, function(_)
+            _G.disabled_called = true
+        end)
+    )lua")
+                    .valid());
+
+    PluginControllerAccess::plugins().insert(
+        {"unloaded",
+         UnloadedPlugin("unloaded", meta, QDir(app->paths_.pluginsDirectory))});
+
+    static_assert(std::is_same_v<
+                  decltype(std::declval<PluginController &>()
+                               .dispatchBetterBrowserEvent(
+                                   std::declval<const BetterBrowserEvent &>())),
+                  void>);
+
+    app->plugins.dispatchBetterBrowserEvent(BetterBrowserEvent{
+        .event = "attached",
+        .sessionId = "browser-session-12345678",
+        .generation = 9,
+        .channel = "example",
+        .source = "private-graphql",
+        .status = "ready",
+        .reason = "acknowledged",
+        .activityKind = "poll",
+        .activityTitle = "Best map?",
+        .activityStatus = "started",
+    });
+
+    sol::table event = (*this->lua)["browser_event"];
+    ASSERT_TRUE(event.valid());
+    EXPECT_EQ(event.get<int>("schema_version"), 1);
+    EXPECT_EQ(event.get<std::string>("event"), "attached");
+    EXPECT_EQ(event.get<std::string>("session_id"), "12345678");
+    EXPECT_EQ(event.get<qint64>("generation"), 9);
+    EXPECT_EQ(event.get<std::string>("channel"), "example");
+    EXPECT_EQ(event.get<std::string>("source"), "private-graphql");
+    EXPECT_EQ(event.get<std::string>("status"), "ready");
+    EXPECT_EQ(event.get<std::string>("reason"), "acknowledged");
+    EXPECT_EQ(event.get<std::string>("activity_kind"), "poll");
+    EXPECT_EQ(event.get<std::string>("activity_title"), "Best map?");
+    EXPECT_EQ(event.get<std::string>("activity_status"), "started");
+    EXPECT_FALSE(disabledLua.get<bool>("disabled_called"));
 }
 
 TEST_F(PluginTest, testChannel)

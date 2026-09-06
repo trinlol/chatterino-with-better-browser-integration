@@ -6,9 +6,12 @@
 
 #include "common/Atomic.hpp"
 #include "util/Expected.hpp"
+#include "util/IpcQueue.hpp"
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QMutex>
 #include <QString>
 #include <QThread>
 
@@ -63,6 +66,43 @@ void writeToCout(const QByteArray &array);
 /// Outbound messages from Chatterino GUI to the browser extension host.
 void sendToBrowserExtension(const QJsonObject &obj);
 
+/// The desktop-side record of an acknowledged overlay.  The opaque session
+/// ID, not the channel name, is the primary key because a channel may appear
+/// in multiple browser tabs/windows.
+struct AttachmentSession {
+    QString sessionId;
+    QString browserWindowId;
+    qint64 tabId = -1;
+    qint64 generation = -1;
+    QString channel;
+    quintptr browserHwnd = 0;
+    qint64 leaseExpiresAt = 0;
+    QString winId;
+    bool ready = false;
+};
+
+class AttachmentSessionRegistry
+{
+public:
+    enum class PrepareResult { Prepared, AlreadyCurrent, Stale, Conflict };
+
+    PrepareResult prepare(const AttachmentSession &candidate,
+                          std::optional<AttachmentSession> *replaced = nullptr);
+    PrepareResult renewLease(const AttachmentSession &candidate);
+    bool markReady(const QString &sessionId, qint64 generation);
+    bool remove(const QString &sessionId, qint64 generation);
+    std::vector<AttachmentSession> expire(qint64 now);
+    std::optional<AttachmentSession> uniqueReadyForChannel(
+        const QString &channel) const;
+    bool containsReady(const QString &sessionId, qint64 generation) const;
+    bool matchesReadyIdentity(const AttachmentSession &candidate) const;
+    bool empty() const;
+
+private:
+    mutable QMutex mutex_;
+    QHash<QString, AttachmentSession> sessions_;
+};
+
 class NativeMessagingServer final
 {
 public:
@@ -77,6 +117,11 @@ public:
 
     static NativeMessagingServer *instance();
     static bool isBrowserAttached();
+    /// Returns a delivery result only when exactly one live browser overlay
+    /// owns `channel`; ambiguous duplicate-channel sessions are never routed.
+    static ipc::DeliveryStatus sendNativeChat(const QString &channel,
+                                              const QString &message,
+                                              const QString &requestId);
 
 private:
     class ReceiverThread : public QThread
@@ -95,6 +140,11 @@ private:
         void handlePinnedMessage(const QJsonObject &root);
         void handleRewardPending(const QJsonObject &root);
         void handleRewardClear(const QJsonObject &root);
+        void handleLeaseRenew(const QJsonObject &root);
+        void handleReconcile(const QJsonObject &root);
+        void handleNativeChatResult(const QJsonObject &root);
+
+        void expireSessions();
 
         NativeMessagingServer &parent_;
     };
@@ -104,10 +154,15 @@ private:
     void updatePinnedMessage(const QJsonObject &root);
     void updateRewardPending(const QJsonObject &root);
     void clearRewardPending(const QJsonObject &root);
+    void reportSession(const AttachmentSession &session, QStringView status,
+                       QStringView reason = {}, QStringView requestId = {});
+    void loseSession(const QString &sessionId, qint64 generation,
+                     QStringView reason);
 
     ReceiverThread *thread;
     static NativeMessagingServer *instance_;
-    bool browserAttached_ = false;
+    AttachmentSessionRegistry sessions_;
+    bool legacyBrowserAttached_ = false;
 
     /// This vector contains all channels that are open the user's browser.
     /// These channels are joined to be able to switch channels more quickly.

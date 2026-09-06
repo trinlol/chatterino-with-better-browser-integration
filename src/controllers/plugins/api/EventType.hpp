@@ -12,6 +12,7 @@ namespace chatterino::lua::api {
  */
 enum class EventType {
     CompletionRequested,
+    BetterBrowserEvent,
 };
 
 }  // namespace chatterino::lua::api

@@ -9,6 +9,7 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <functional>
 #include <memory>
 
 namespace chatterino {
@@ -30,6 +31,9 @@ public:
         int width = -1;
         int height = -1;
         bool fullscreen = false;
+        QString sessionId;
+        qint64 generation = -1;
+        std::function<void(QString, qint64, QString)> onLoss;
     };
 
     ~AttachedWindow() override;
@@ -38,7 +42,7 @@ public:
 #ifdef USEWINSDK
     static AttachedWindow *getForeground(const GetArgs &args);
 #endif
-    static void detach(const QString &winId);
+    static void detach(const QString &winId, const QString &sessionId = {});
 
     void setChannel(ChannelPtr channel);
 
@@ -63,12 +67,14 @@ private:
         void *hwnd;
         AttachedWindow *window;
         QString winId;
+        QString sessionId;
     };
 
     static std::vector<Item> items;
 
     void attachToHwnd(void *attached);
     void updateWindowRect(void *attached);
+    void reportLoss(QString reason);
 
     void *target_;
     double x_ = -1;
@@ -77,6 +83,10 @@ private:
     int height_ = -1;
     bool fullscreen_ = false;
     bool requestedVisible_ = false;
+    QString sessionId_;
+    qint64 generation_ = -1;
+    std::function<void(QString, qint64, QString)> onLoss_;
+    bool lossReported_ = false;
 
 #ifdef USEWINSDK
     bool validProcessName_ = false;
