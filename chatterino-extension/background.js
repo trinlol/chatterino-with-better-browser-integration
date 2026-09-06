@@ -1,6 +1,45 @@
 if (typeof importScripts === "function") {
-  importScripts("protocol.js");
+  importScripts("protocol.js", "extension-lifecycle.js");
 }
+
+// [BACKGROUND-STARTUP] Verify background script loads
+console.log('[BACKGROUND-STARTUP] Background script loaded at:', new Date().toISOString());
+console.log('[BACKGROUND-STARTUP] Native messaging available:', !!chrome.runtime.connectNative);
+
+// Unit-test and migration hosts may evaluate this composition root without
+// importScripts. Keep a tiny compatible fallback; production MV3 workers load
+// the dependency-light seams above.
+const Lifecycle = globalThis.ChatterinoLifecycle ?? {
+  createBackoffPolicy: () => ({
+    reset() {},
+    next() {
+      return { attempt: 1, delay: 1000, retryAt: Date.now() + 1000 };
+    },
+  }),
+  createConnectionState: () => ({
+    state: "idle",
+    retryAt: 0,
+    retryAttempt: 0,
+    transition(next) {
+      this.state = next;
+      return { retryAt: 0, retryAttempt: 0 };
+    },
+    snapshot() {
+      return { state: "idle", retryAt: 0, retryAttempt: 0 };
+    },
+  }),
+  createSessionStore: () => ({
+    all: async () => ({}),
+    get: async () => null,
+    put: async () => {},
+    remove: async () => {},
+    clear: async () => {},
+  }),
+  createTransitionRing: () => ({
+    record() {},
+    snapshot: () => [],
+  }),
+};
 
 const ignoredPages = new Set([
   "directory",
@@ -135,19 +174,137 @@ function matchChannelName(url) {
 
 const appName = "com.chatterino.chatterino";
 let port = null;
-let portConnectBlocked = false;
+let portConnectBlocked = false; // legacy health field; state remains recoverable
 let lastPortConnectAttempt = 0;
 let lastNativeError = "";
 let lastNativeConnectedAt = 0;
 const PORT_CONNECT_COOLDOWN_MS = 5000;
+const PORT_RETRY_MAX_MS = 60000;
+// Keep the lease comfortably longer than the one-minute reconciliation alarm
+// so a delayed alarm still has time to renew an otherwise healthy session.
+const NATIVE_LEASE_MS = 180000;
 const ATTACH_ACK_TIMEOUT_MS = 750;
 const ATTACH_MAX_ATTEMPTS = 40;
 const STARTUP_REPLAY_WINDOW_MS = 15000;
+const nativeConnection = Lifecycle.createConnectionState();
+const nativeBackoff = Lifecycle.createBackoffPolicy({
+  baseMs: PORT_CONNECT_COOLDOWN_MS,
+  maxMs: PORT_RETRY_MAX_MS,
+});
+const sessionStore = Lifecycle.createSessionStore(
+  typeof chrome !== "undefined" ? chrome.storage?.session : undefined
+);
+const transitionRing = Lifecycle.createTransitionRing();
+let nativeRetryTimer = null;
+let nativeSupportsV2 = false;
+let nativeRetryAt = 0;
+let nativeRetryAlarmName = "chatterino-native-reconnect";
+let workerRecoveryPending = true;
 // Starting Chatterino temporarily takes OS focus from Edge. Permit one recent
 // readiness-triggered geometry reply to cross that focus transition.
 const pendingStartupReplayTabs = new Map();
 const pendingAttachRequests = new Map();
+// Invalidate asynchronous measurements as soon as the visible tab changes.
+const windowRevisions = new Map();
+function windowRevision(windowId) {
+  return windowRevisions.get(String(windowId)) || 0;
+}
+function invalidateWindow(windowId) {
+  windowRevisions.set(String(windowId), windowRevision(windowId) + 1);
+  clearPendingAttach(windowId);
+}
+async function isCurrentChannelTab(tabId, windowId, channel) {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  return tab?.active === true && tab.windowId === Number(windowId) &&
+    matchChannelName(tab.url) === channel;
+}
 let nextAttachRequestId = 1;
+
+function recordTransition(event, details = {}) {
+  transitionRing.record("background", event, {
+    ...details,
+    state: nativeConnection.state,
+  });
+}
+
+function setNativeState(next, details = {}) {
+  const previous = nativeConnection.state;
+  const transition = nativeConnection.transition(next, details);
+  nativeRetryAt = transition.retryAt || 0;
+  portConnectBlocked = next === "blocked";
+  recordTransition("connection-state", {
+    from: previous,
+    to: next,
+    ...details,
+  });
+  void persistRecoveryState();
+}
+
+async function persistRecoveryState() {
+  try {
+    await chrome.storage.session.set({
+      nativeLifecycle: {
+        state: nativeConnection.state,
+        retryAt: nativeRetryAt,
+        retryAttempt: nativeConnection.retryAttempt,
+        lastError: lastNativeError,
+      },
+    });
+  } catch {
+    // The worker can still operate if session storage is temporarily absent.
+  }
+}
+
+async function rehydrateRecoveryState() {
+  try {
+    const { nativeLifecycle } =
+      await chrome.storage.session.get("nativeLifecycle");
+    if (nativeLifecycle?.retryAt > Date.now()) {
+      nativeRetryAt = nativeLifecycle.retryAt;
+      lastNativeError = String(nativeLifecycle.lastError || "");
+      setNativeState("backoff", {
+        retryAt: nativeRetryAt,
+        retryAttempt: nativeLifecycle.retryAttempt || 0,
+        reason: "worker-rehydrated",
+      });
+    }
+  } catch {
+    // Reconciliation below remains the source of truth when storage is empty.
+  }
+}
+
+function scheduleNativeReconnect(reason = "retry", immediate = false) {
+  if (nativeRetryTimer !== null) {
+    clearTimeout(nativeRetryTimer);
+    nativeRetryTimer = null;
+  }
+  const retry = immediate
+    ? { attempt: nativeConnection.retryAttempt, delay: 0, retryAt: Date.now() }
+    : nativeBackoff.next(reason);
+  nativeRetryAt = retry.retryAt;
+  setNativeState(reason === "configuration" ? "blocked" : "backoff", {
+    retryAt: retry.retryAt,
+    retryAttempt: retry.attempt,
+    reason,
+  });
+
+  if (chrome.alarms?.create) {
+    try {
+      chrome.alarms.create(nativeRetryAlarmName, {
+        when: Math.max(Date.now() + 50, retry.retryAt),
+      });
+    } catch {
+      // setTimeout below is the in-process fallback.
+    }
+  }
+  nativeRetryTimer = setTimeout(
+    () => {
+      nativeRetryTimer = null;
+      if (Date.now() >= nativeRetryAt) connectPort(true);
+    },
+    Math.max(0, retry.delay)
+  );
+}
 
 async function safeGetWindow(windowId) {
   if (windowId === undefined || windowId === chrome.windows.WINDOW_ID_NONE) {
@@ -182,6 +339,102 @@ function clearPendingAttach(windowId) {
   pendingAttachRequests.delete(key);
 }
 
+function createSessionId() {
+  if (typeof globalThis.crypto?.randomUUID !== "function") {
+    throw new Error("secure session identifiers are unavailable");
+  }
+  return `browser:${globalThis.crypto.randomUUID()}`;
+}
+
+async function ensureDesiredSession(windowId, tabId, channel) {
+  const sessions = await sessionStore.all();
+  const existing = Object.values(sessions).find(
+    (candidate) =>
+      Number(candidate.windowId) === Number(windowId) &&
+      Number(candidate.tabId) === Number(tabId)
+  );
+  const normalizedChannel = String(channel || "").toLowerCase();
+  const channelChanged =
+    existing &&
+    String(existing.channel || "").toLowerCase() !== normalizedChannel;
+  const newAttachment = channelChanged || existing?.desired === false;
+  const sessionId = existing?.sessionId || createSessionId();
+  const session = {
+    sessionId,
+    windowId: Number(windowId),
+    tabId: Number.isInteger(tabId) ? tabId : undefined,
+    channel: normalizedChannel,
+    generation: existing
+      ? Number(existing.generation || 0) + (newAttachment ? 1 : 0)
+      : 1,
+    desired: true,
+    attached: newAttachment ? false : existing?.attached === true,
+    retryAt: existing?.retryAt || 0,
+    retryAttempt: existing?.retryAttempt || 0,
+    leaseExpiresAt: newAttachment ? 0 : existing?.leaseExpiresAt || 0,
+  };
+  await sessionStore.put(session);
+  return session;
+}
+
+async function sessionsForWindow(windowId) {
+  const sessions = await sessionStore.all();
+  return Object.values(sessions).filter(
+    (session) => String(session.windowId) === String(windowId)
+  );
+}
+
+async function sendOverlayState(session, state, reason = "") {
+  if (!session?.tabId) return;
+  try {
+    await chrome.tabs.sendMessage(session.tabId, {
+      action: "nativeAttachState",
+      state,
+      reason,
+      sessionId: session.sessionId,
+      generation: session.generation,
+      leaseExpiresAt: session.leaseExpiresAt || 0,
+    });
+  } catch {
+    // A closed or navigating tab will be reconciled from persisted desired state.
+  }
+}
+
+async function markSessionLost(message, reason) {
+  const sessions = await sessionStore.all();
+  const candidates = Object.values(sessions).filter((session) => {
+    if (message.sessionId && session.sessionId !== message.sessionId)
+      return false;
+    if (
+      message.generation !== undefined &&
+      session.generation !== message.generation
+    )
+      return false;
+    if (
+      message.tabId !== undefined &&
+      Number(session.tabId) !== Number(message.tabId)
+    )
+      return false;
+    if (
+      message.browserWindowId !== undefined &&
+      Number(session.windowId) !== Number(message.browserWindowId)
+    )
+      return false;
+    if (
+      message.winId !== undefined &&
+      String(session.windowId) !== String(message.winId)
+    )
+      return false;
+    return true;
+  });
+  for (const session of candidates) {
+    session.attached = false;
+    session.leaseExpiresAt = 0;
+    await sessionStore.put(session);
+    await sendOverlayState(session, "revealed", reason);
+  }
+}
+
 function scheduleAttachRetry(windowId, requestId) {
   const key = String(windowId);
   const pending = pendingAttachRequests.get(key);
@@ -208,17 +461,46 @@ function scheduleAttachRetry(windowId, requestId) {
   }, ATTACH_ACK_TIMEOUT_MS);
 }
 
-function postAttachUntilAcknowledged(windowId, message) {
+function postAttachUntilAcknowledged(windowId, message, sessionMetadata = {}) {
   clearPendingAttach(windowId);
 
-  const requestId = `${Date.now()}-${nextAttachRequestId++}`;
+  // Protocol v2 uses one correlation ID end-to-end. The native host prefers
+  // requestId and mirrors it into attachRequestId in its acknowledgement, so
+  // generating a second ID here makes every valid acknowledgement look stale.
+  const requestId =
+    message.requestId ||
+    message.attachRequestId ||
+    `${Date.now()}-${nextAttachRequestId++}`;
+  const correlatedMessage = { ...message, attachRequestId: requestId };
+  if (Number(message.protocolVersion) >= 2) {
+    correlatedMessage.requestId = requestId;
+  }
   const pending = {
     attempts: 1,
-    message: { ...message, attachRequestId: requestId },
+    message: correlatedMessage,
     requestId,
+    sessionId: sessionMetadata.sessionId || message.sessionId || null,
+    tabId: sessionMetadata.tabId ?? message.tabId,
+    generation: sessionMetadata.generation ?? message.generation,
+    revision: sessionMetadata.revision ?? windowRevision(windowId),
     timerId: null,
   };
   pendingAttachRequests.set(String(windowId), pending);
+
+  if (pending.sessionId) {
+    void sessionStore.put({
+      sessionId: pending.sessionId,
+      windowId: Number(windowId),
+      tabId: pending.tabId,
+      channel: message.name,
+      generation: pending.generation,
+      desired: true,
+      attached: false,
+      retryAt: 0,
+      retryAttempt: 0,
+      leaseExpiresAt: 0,
+    });
+  }
 
   const nativePort = getPort();
   if (nativePort) {
@@ -228,58 +510,181 @@ function postAttachUntilAcknowledged(windowId, message) {
 }
 
 function acknowledgeAttachedWindow(message) {
-  const key = String(message.winId ?? "");
+  console.log('[ATTACH-DEBUG] acknowledgeAttachedWindow called');
+  const key = String(message.winId ?? message.browserWindowId ?? "");
+  console.log('[ATTACH-DEBUG] Window key:', key);
   const pending = pendingAttachRequests.get(key);
-  if (!pending || pending.requestId !== message.attachRequestId) return;
+  console.log('[ATTACH-DEBUG] Pending request:', pending);
+  console.log('[ATTACH-DEBUG] All pending keys:', Array.from(pendingAttachRequests.keys()));
 
-  clearPendingAttach(key);
-  void AttachedWindows.markAttached(key);
+  const responseRequestId = message.attachRequestId ?? message.requestId;
+  console.log('[ATTACH-DEBUG] Response request ID:', responseRequestId);
+  console.log('[ATTACH-DEBUG] Expected request ID:', pending?.requestId);
+
+  if (!pending || pending.requestId !== responseRequestId) {
+    console.error('[ATTACH-DEBUG] ACKNOWLEDGEMENT REJECTED!', {
+      reason: !pending ? 'no pending request' : 'request ID mismatch',
+      expected: pending?.requestId,
+      received: responseRequestId
+    });
+    return;
+  }
+
+  console.log('[ATTACH-DEBUG] Acknowledgement accepted, proceeding...');
+
+  void (async () => {
+    if (!(await isCurrentChannelTab(pending.tabId, key, pending.message.name)) ||
+        pendingAttachRequests.get(key) !== pending ||
+        pending.revision !== windowRevision(key)) return;
+    clearPendingAttach(key);
+    await AttachedWindows.markAttached(key);
+    const session = message.sessionId
+      ? await sessionStore.get(message.sessionId)
+      : pending.sessionId
+        ? await sessionStore.get(pending.sessionId)
+        : null;
+    if (session) {
+      if (!session.desired || pending.revision !== windowRevision(key)) return;
+      if (
+        message.generation !== undefined &&
+        message.generation !== session.generation
+      ) {
+        return;
+      }
+      session.attached = true;
+      session.leaseExpiresAt = nativeSupportsV2
+        ? Number(message.leaseExpiresAt) || Date.now() + NATIVE_LEASE_MS
+        : 0;
+      await sessionStore.put(session);
+      if (pending.revision !== windowRevision(key)) return;
+      console.log('[ATTACH-DEBUG] About to send overlay state "attached" to tab:', session.tabId, 'session:', session);
+      await sendOverlayState(session, "attached");
+      console.log('[ATTACH-DEBUG] Sent overlay state "attached"');
+    }
+  })();
 }
 
 // gets the port for communication with chatterino
 function getPort() {
-  if (portConnectBlocked) {
-    return null;
-  }
-  if (port) {
+  if (port && nativeConnection.state === "connected") {
     return port;
+  }
+  if (nativeRetryAt > Date.now()) {
+    return null;
   }
   connectPort();
   return port;
 }
 
 // connect to port
-function connectPort() {
-  if (portConnectBlocked) {
+function connectPort(fromRetry = false) {
+  if (port || nativeConnection.state === "connecting") {
     return;
   }
   const now = Date.now();
-  if (now - lastPortConnectAttempt < PORT_CONNECT_COOLDOWN_MS) {
+  if (!fromRetry && now - lastPortConnectAttempt < PORT_CONNECT_COOLDOWN_MS) {
     return;
   }
   lastPortConnectAttempt = now;
+  setNativeState("connecting", { reason: fromRetry ? "retry" : "demand" });
 
+  console.log('[ATTACH-DEBUG] Attempting to connect to native host:', appName);
   try {
     port = chrome.runtime.connectNative(appName);
+    console.log('[ATTACH-DEBUG] Native host connection successful');
     lastNativeError = "";
     lastNativeConnectedAt = Date.now();
+    nativeBackoff.reset();
+    nativeRetryAt = 0;
+    setNativeState("connected", { reason: "connected" });
   } catch (error) {
-    portConnectBlocked = true;
     port = null;
     lastNativeError = error?.message || String(error);
+    console.error("[ATTACH-DEBUG] Native messaging connect failed:", error);
     console.warn("[Chatterino] Native messaging connect failed:", error);
+    scheduleNativeReconnect(
+      /forbidden|not found|specified native messaging host/i.test(
+        lastNativeError
+      )
+        ? "configuration"
+        : "connect-failed"
+    );
     return;
   }
 
   port.onMessage.addListener((msg) => {
+    if (msg?.action === "nativeChatResult") {
+      void routeNativeChatResult(msg);
+      return;
+    }
     if (typeof msg === "object" && msg.type === "status") {
+      if (
+        msg.status === "nativeChatResult" ||
+        msg.action === "nativeChatResult"
+      ) {
+        void routeNativeChatResult(msg);
+        return;
+      }
       switch (msg.status) {
         case "native-host-ready":
         case "desktop-ready":
+          nativeSupportsV2 =
+            Number(msg.protocolVersion) >= 2 ||
+            msg.capabilities?.includes?.("sessions") === true;
+          console.log(
+            "[ATTACH-DEBUG] Handshake received:",
+            msg.status,
+            "protocolVersion:",
+            msg.protocolVersion,
+            "=> nativeSupportsV2:",
+            nativeSupportsV2
+          );
+          if (nativeSupportsV2) {
+            recordTransition("native-capabilities", {
+              protocolVersion: msg.protocolVersion,
+            });
+          }
           void requestActiveTwitchChatRect();
           break;
         case "chat-attached":
+          console.log('[ATTACH-DEBUG] Native sent chat-attached:', {
+            winId: msg.winId,
+            browserWindowId: msg.browserWindowId,
+            attachRequestId: msg.attachRequestId,
+            requestId: msg.requestId,
+            sessionId: msg.sessionId,
+            generation: msg.generation,
+            leaseExpiresAt: msg.leaseExpiresAt
+          });
           acknowledgeAttachedWindow(msg);
+          break;
+        case "lease-renewed":
+          void (async () => {
+            const session = msg.sessionId
+              ? await sessionStore.get(msg.sessionId)
+              : null;
+            const leaseExpiresAt = Number(msg.leaseExpiresAt);
+            if (
+              !session ||
+              (msg.generation !== undefined &&
+                Number(msg.generation) !== Number(session.generation)) ||
+              !Number.isFinite(leaseExpiresAt) ||
+              leaseExpiresAt <= Date.now()
+            ) {
+              return;
+            }
+            session.attached = true;
+            session.leaseExpiresAt = leaseExpiresAt;
+            await sessionStore.put(session);
+            await sendOverlayState(session, "attached");
+          })();
+          break;
+        case "attachment-lost":
+        case "attachment-rejected":
+          void markSessionLost(msg, msg.reason || msg.status);
+          break;
+        case "reconcile":
+          void reconcileDesiredSessions();
           break;
         case "exiting-host":
           console.info(
@@ -300,19 +705,22 @@ function connectPort() {
     const lastError = chrome.runtime.lastError?.message ?? "";
     lastNativeError = lastError;
 
-    port = null;
+    console.error(
+      "[ATTACH-DEBUG] Native port DISCONNECTED. lastError:",
+      lastError || "(none)",
+      "| connected for",
+      Date.now() - lastNativeConnectedAt,
+      "ms"
+    );
 
-    if (
-      lastError.includes("forbidden") ||
-      lastError.includes("not found") ||
-      lastError.includes("Specified native messaging host")
-    ) {
-      portConnectBlocked = true;
-      console.warn(
-        "[Chatterino] Native messaging is blocked. Restart Chatterino after loading this extension, or add its extension ID under Settings → General → Extra extension IDs.",
-        lastError
-      );
-    }
+    port = null;
+    nativeSupportsV2 = false;
+    void markSessionLost({}, "native-disconnected");
+    scheduleNativeReconnect(
+      /forbidden|not found|specified native messaging host/i.test(lastError)
+        ? "configuration"
+        : "disconnect"
+    );
   });
 }
 
@@ -324,24 +732,108 @@ function disconnectPort() {
   }
 }
 
+async function reconcileDesiredSessions() {
+  const sessions = await sessionStore.all();
+  const tabs = await chrome.tabs
+    .query({ url: "*://*.twitch.tv/*" })
+    .catch(() => []);
+  const liveTabIds = new Set(tabs.map((tab) => tab.id));
+  for (const session of Object.values(sessions)) {
+    if (!session.desired) continue;
+    if (!liveTabIds.has(session.tabId)) {
+      await sessionStore.remove(session.sessionId);
+      continue;
+    }
+    // A service-worker restart invalidates the in-memory port and any pending
+    // acknowledgement. Reveal first; a fresh matching ack may hide it again.
+    if (workerRecoveryPending && session.attached) {
+      session.attached = false;
+      await sessionStore.put(session);
+      await sendOverlayState(session, "revealed", "worker-recovery");
+    }
+    if (session.leaseExpiresAt && session.leaseExpiresAt <= Date.now()) {
+      session.attached = false;
+      session.leaseExpiresAt = 0;
+      await sessionStore.put(session);
+      await sendOverlayState(session, "revealed", "lease-expired");
+    } else if (
+      nativeSupportsV2 &&
+      session.attached &&
+      session.leaseExpiresAt &&
+      session.leaseExpiresAt - Date.now() < NATIVE_LEASE_MS / 2
+    ) {
+      forwardNativeMessage({
+        action: "leaseRenew",
+        protocolVersion: 2,
+        sessionId: session.sessionId,
+        browserWindowId: Number(session.windowId),
+        tabId: session.tabId,
+        generation: session.generation,
+        name: session.channel,
+        leaseExpiresAt: Date.now() + NATIVE_LEASE_MS,
+      });
+    }
+    try {
+      await chrome.tabs.sendMessage(session.tabId, {
+        action: "requestChatRect",
+        sessionId: session.sessionId,
+        generation: session.generation,
+      });
+    } catch {
+      // The content script may still be loading; onTabSelected will retry.
+    }
+  }
+  workerRecoveryPending = false;
+  if (!port && Date.now() >= nativeRetryAt) getPort();
+}
+
+if (chrome.alarms?.onAlarm?.addListener) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === nativeRetryAlarmName) {
+      nativeRetryTimer = null;
+      if (Date.now() >= nativeRetryAt) connectPort(true);
+    }
+    if (alarm.name === "chatterino-reconcile") {
+      void reconcileDesiredSessions();
+    }
+  });
+  try {
+    chrome.alarms.create("chatterino-reconcile", { periodInMinutes: 1 });
+  } catch {
+    // Firefox/older test harnesses may not expose alarms.
+  }
+}
+
+if (chrome.runtime?.onStartup?.addListener) {
+  chrome.runtime.onStartup.addListener(() => {
+    workerRecoveryPending = true;
+    void rehydrateRecoveryState().then(reconcileDesiredSessions);
+  });
+}
+void rehydrateRecoveryState().then(reconcileDesiredSessions);
+
 // tab activated
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  if (activeInfo.windowId !== undefined) invalidateWindow(activeInfo.windowId);
   const tab = await chrome.tabs.get(activeInfo.tabId).catch(() => null);
-  if (!tab?.url) return;
+  if (!tab?.active) return;
 
-  const window = await safeGetWindow(tab.windowId);
-  if (!window?.focused) return;
-
-  await onTabSelected(tab.url, tab);
+  // `tab.url` is empty whenever we lack host permission for the activated
+  // tab's origin, which is the normal case for every non-Twitch page. Bailing
+  // out here used to skip the detach entirely, leaving the native overlay
+  // drawn on top of the newly activated tab. An unreadable URL is itself proof
+  // that this is not a Twitch channel, so fall through to onTabSelected and
+  // let it detach.
+  await onTabSelected(tab.url || tab.pendingUrl || "", tab);
 });
+
 
 // url changed
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (!tab.highlighted) return;
-
-  const window = await safeGetWindow(tab.windowId);
-  if (!window?.focused) return;
-
+  if (!tab.active) return;
+  if (changeInfo.url || changeInfo.status === "loading") {
+    await tryDetach(tab.windowId);
+  }
   await onTabSelected(tab.url, tab);
 });
 
@@ -365,7 +857,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
   // this returns all tabs when the query fails
   const tabs = await chrome.tabs.query({
     windowId: windowId,
-    highlighted: true,
+    active: true,
   });
   if (tabs.length === 1) {
     let tab = tabs[0];
@@ -384,6 +876,12 @@ async function onTabSelected(url, tab, { startupReplay = false } = {}) {
     return;
   }
 
+  const sessions = await sessionsForWindow(tab.windowId);
+  if (sessions.some((session) => session.desired &&
+      (session.tabId !== tab.id || session.channel !== channelName))) {
+    await tryDetach(tab.windowId);
+  }
+
   // A chat-resized message can be emitted while the tab is in the background.
   // Those messages are intentionally ignored below, because attaching the
   // native window to an inactive tab would put it over the wrong browser
@@ -399,7 +897,17 @@ async function onTabSelected(url, tab, { startupReplay = false } = {}) {
     }
 
     try {
-      await chrome.tabs.sendMessage(tab.id, { action: "requestChatRect" });
+      const request = { action: "requestChatRect" };
+      if (nativeSupportsV2) {
+        request.sessionId = (
+          await ensureDesiredSession(
+            tab.windowId,
+            tab.id,
+            matchChannelName(tab.url || "")
+          )
+        ).sessionId;
+      }
+      await chrome.tabs.sendMessage(tab.id, request);
     } catch (error) {
       if (startupReplay) {
         pendingStartupReplayTabs.delete(tab.id);
@@ -428,14 +936,20 @@ async function getIntegrationHealth() {
     native: {
       connected: Boolean(port),
       blocked: portConnectBlocked,
+      state: nativeConnection.state,
+      retryAt: nativeRetryAt,
+      retryAttempt: nativeConnection.retryAttempt,
       lastError: lastNativeError,
       connectedAt: lastNativeConnectedAt,
-      protocolVersion: globalThis.ChatterinoProtocol.CURRENT_VERSION,
+      protocolVersion: nativeSupportsV2
+        ? globalThis.ChatterinoProtocol.V2_VERSION
+        : globalThis.ChatterinoProtocol.CURRENT_VERSION,
     },
     tab: tab
       ? { id: tab.id, channel: matchChannelName(tab.url || "") || "" }
       : null,
     content,
+    transitions: transitionRing.snapshot(),
     checkedAt: Date.now(),
   };
 }
@@ -477,10 +991,12 @@ function forwardNativeMessage(message) {
   }
   const port = getPort();
   if (port) {
+    console.log('[ATTACH-DEBUG] Sending message to native host:', outbound);
     port.postMessage(outbound);
     return;
   }
 
+  console.log('[ATTACH-DEBUG] No persistent port, using sendNativeMessage:', outbound);
   chrome.runtime.sendNativeMessage(appName, outbound, () => {
     if (chrome.runtime.lastError) {
       console.warn(
@@ -495,38 +1011,134 @@ async function findTwitchTabForChannel(channelName) {
   const tabs = await chrome.tabs.query({ url: "*://*.twitch.tv/*" });
   if (channelName) {
     const normalized = channelName.toLowerCase();
-    const matched = tabs.find((tab) => {
+    const matches = tabs.filter((tab) => {
       const name = matchChannelName(tab.url || "");
       return name && name.toLowerCase() === normalized;
     });
-    if (matched) {
-      return matched;
+    if (matches.length === 1) {
+      return matches[0];
     }
+    // A legacy channel-only response is ambiguous when the same channel is
+    // open in more than one tab. Never guess and duplicate a chat action.
+    return null;
   }
 
   const highlighted = tabs.filter((tab) => tab.highlighted);
-  return highlighted[0] || tabs[0] || null;
+  return highlighted.length === 1 ? highlighted[0] : null;
 }
 
 async function routeSendNativeChat(message) {
-  const tab = await findTwitchTabForChannel(message.channel);
-  if (!tab?.id) {
+  const isV2 = Number(message?.protocolVersion) >= 2;
+  const boundedReason = (value, fallback) => {
+    const reason = typeof value === "string" ? value.trim() : "";
+    return reason.length <= 96 && /^[a-z0-9][a-z0-9._-]*$/i.test(reason)
+      ? reason
+      : fallback;
+  };
+  const postV2Result = (status, reason) => {
+    forwardNativeMessage({
+      action: "nativeChatResult",
+      protocolVersion: 2,
+      sessionId: message.sessionId,
+      browserWindowId: message.browserWindowId,
+      tabId: message.tabId,
+      generation: message.generation,
+      requestId: message.requestId,
+      status,
+      reason: boundedReason(reason, "unknown"),
+    });
+  };
+
+  if (isV2) {
+    if (
+      typeof message.sessionId !== "string" ||
+      typeof message.requestId !== "string" ||
+      !/^[a-z0-9._:-]{1,128}$/i.test(message.requestId) ||
+      !Number.isInteger(message.generation) ||
+      message.generation < 0 ||
+      !Number.isInteger(message.tabId) ||
+      message.tabId < 0 ||
+      (!Number.isInteger(message.browserWindowId) &&
+        !(
+          typeof message.browserWindowId === "string" &&
+          /^(?:0|[1-9][0-9]*)$/.test(message.browserWindowId)
+        ))
+    ) {
+      return;
+    }
+    // Version 2 commands are session-exact. In particular, never fall back to
+    // a channel lookup: a channel may be open in more than one tab/window.
+    const session = await sessionStore.get(message.sessionId);
+    if (!session) {
+      postV2Result("rejected", "unknown-session");
+      return;
+    }
+    if (Number(message.generation) !== Number(session.generation)) {
+      postV2Result("rejected", "stale-generation");
+      return;
+    }
+    if (
+      Number(message.browserWindowId) !== Number(session.windowId) ||
+      Number(message.tabId) !== Number(session.tabId) ||
+      String(message.channel || "").toLowerCase() !==
+        String(session.channel || "").toLowerCase() ||
+      session.attached !== true ||
+      Number(session.leaseExpiresAt) <= Date.now()
+    ) {
+      postV2Result("rejected", "identity-mismatch");
+      return;
+    }
+
+    const targetTab = await chrome.tabs.get(session.tabId).catch(() => null);
+    if (
+      !targetTab ||
+      Number(targetTab.windowId) !== Number(session.windowId) ||
+      String(matchChannelName(targetTab.url || "") || "").toLowerCase() !==
+        String(session.channel || "").toLowerCase()
+    ) {
+      postV2Result("rejected", "tab-context-mismatch");
+      return;
+    }
+
+    try {
+      const response = await chrome.tabs.sendMessage(session.tabId, {
+        action: "sendNativeChat",
+        message: message.message,
+        sessionId: session.sessionId,
+        browserWindowId: session.windowId,
+        tabId: session.tabId,
+        generation: session.generation,
+        requestId: message.requestId,
+      });
+      if (response?.ok === true) {
+        postV2Result("accepted", "delivered");
+      } else if (response?.uncertain === true) {
+        postV2Result(
+          "uncertain",
+          boundedReason(response.reason, "delivery-uncertain")
+        );
+      } else {
+        postV2Result(
+          "rejected",
+          boundedReason(response?.reason || response?.error, "rejected")
+        );
+      }
+    } catch (error) {
+      // A disconnected tab may have handled the message immediately before
+      // Chrome reported the delivery error, so do not claim a definitive reject.
+      console.warn("[Chatterino] Failed to route native chat send:", error);
+      postV2Result("uncertain", "tab-send-exception");
+    }
     return;
   }
-
-  try {
-    await chrome.tabs.sendMessage(tab.id, {
-      action: "sendNativeChat",
-      message: message.message,
-      channel: message.channel,
-    });
-  } catch (error) {
-    console.warn("[Chatterino] Failed to route native chat send:", error);
-  }
+  // v0/v1 attachment remains compatible, but channel-only chat delivery is a
+  // state-changing command over an unauthenticated shared IPC queue. Reject it
+  // instead of allowing a local queue writer to choose a Twitch target.
 }
 
 // receiving messages from content scripts and the popup
 chrome.runtime.onMessage.addListener((message, sender, callback) => {
+  if (!message || typeof message !== "object") return;
   if (
     message.action === "engagement" ||
     message.action === "prediction" ||
@@ -534,6 +1146,12 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
     message.action === "rewardPending" ||
     message.action === "rewardClear"
   ) {
+    if (
+      !sender.tab?.id ||
+      !/^https:\/\/([a-z0-9-]+\.)*twitch\.tv\//i.test(sender.tab.url || "")
+    ) {
+      return;
+    }
     forwardNativeMessage(message);
     return;
   }
@@ -549,9 +1167,25 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
       (async () => {
         await Settings.set(message.key, message.value);
 
-        for (const id of await AttachedWindows.detachAll()) {
-          // they're already cleared
-          await sendDetach(id);
+        if (message.key === "replaceTwitchChat" && message.value === false) {
+          // Turning the integration off must fully undo it, not just tell the
+          // desktop to let go. tryDetach also clears the stored sessions and
+          // tells each overlay to reveal Twitch's own chat again; without that
+          // the chat stayed hidden and the integration still looked loaded.
+          const windowIds = new Set([
+            ...(await AttachedWindows.detachAll()),
+            ...Object.values(await sessionStore.all())
+              .map((session) => Number(session.windowId))
+              .filter((id) => Number.isInteger(id)),
+          ]);
+          for (const id of windowIds) {
+            await tryDetach(id);
+          }
+        } else {
+          for (const id of await AttachedWindows.detachAll()) {
+            // they're already cleared
+            await sendDetach(id);
+          }
         }
         await updateBadge();
       })();
@@ -587,19 +1221,29 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
         startupReplayDeadline !== undefined &&
         startupReplayDeadline >= Date.now();
 
-      // is tab highlighted
-      if (!sender.tab.highlighted) return;
+      // Multi-selected tabs are highlighted too; only the visible tab may attach.
+      if (!sender.tab?.active) return;
+      const measurementRevision = windowRevision(sender.tab.windowId);
+      const measurementChannel = matchChannelName(sender.tab.url);
+      if (!measurementChannel) return;
 
       // is window focused
       safeGetWindow(sender.tab.windowId).then(async (window) => {
         if (!window) return;
-        if (!window.focused && !isStartupReplay) return;
+        // Chatterino's attach contract is foreground-window based. Never send
+        // a geometry replay while some other application owns focus: doing so
+        // can bind the overlay to that unrelated HWND and break move/resize
+        // tracking. Native readiness still requests fresh geometry; the next
+        // focused browser event performs the attach.
+        if (!window.focused) return;
 
         const dpr = message.dpr ?? 1;
         // devicePixelRatio combines both zoom and display scaling set in the
         // system. But the UI elements (sidebars) are unaffected by the zoom
         // level of the tab itself. So we need to separate the two.
         const scaleFactor = await calcDisplayScaleFactor(sender.tab.id, dpr);
+        if (measurementRevision !== windowRevision(sender.tab.windowId) ||
+            !(await isCurrentChannelTab(sender.tab.id, sender.tab.windowId, measurementChannel))) return;
         const zoom = dpr / scaleFactor;
         // adjust for sidebars and vertical tabs
         let xOffset = (message.viewportX ?? 0) / scaleFactor;
@@ -611,22 +1255,35 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
         };
 
         // attach to window
+        const session = await ensureDesiredSession(
+          sender.tab.windowId,
+          sender.tab.id,
+          matchChannelName(sender.tab.url)
+        );
+        await sendOverlayState(session, "prepare");
+        if (measurementRevision !== windowRevision(sender.tab.windowId)) return;
         await tryAttach(sender.tab.windowId, window.state == "fullscreen", {
           name: matchChannelName(sender.tab.url),
           size: size,
           browserWindowFocused: window.focused,
           startupReplay: isStartupReplay,
-        });
+          tabId: sender.tab.id,
+          sessionId: session.sessionId,
+          generation: session.generation,
+        }, measurementRevision);
       });
       break;
     case "detach":
-      tryDetach(sender.tab.windowId);
+      // A background Twitch tab may finish navigating after another tab won.
+      chrome.tabs.get(sender.tab.id).then((tab) => {
+        if (tab.active) return tryDetach(tab.windowId);
+      }).catch(() => {});
       break;
   }
 });
 
 // attach chatterino to a chrome window
-async function tryAttach(windowId, fullscreen, data) {
+async function tryAttach(windowId, fullscreen, data, revision = windowRevision(windowId)) {
   data.action = "select";
   if (await Settings.get("replaceTwitchChat")) {
     if (fullscreen) {
@@ -639,11 +1296,41 @@ async function tryAttach(windowId, fullscreen, data) {
   data.winId = "" + windowId;
   data.version = 0;
 
-  if (data.attach || data.attach_fullscreen) {
-    postAttachUntilAcknowledged(windowId, data);
+  if (nativeSupportsV2 && data.sessionId) {
+    data.protocolVersion = 2;
+    data.browserWindowId = Number(windowId);
+    data.leaseExpiresAt = Date.now() + NATIVE_LEASE_MS;
+    data.requestId =
+      data.attachRequestId || `${Date.now()}-${nextAttachRequestId++}`;
+  }
+
+  const outboundData = { ...data };
+  if (!(await isCurrentChannelTab(data.tabId, windowId, data.name)) ||
+      revision !== windowRevision(windowId)) return;
+  if (!nativeSupportsV2) {
+    for (const field of [
+      "sessionId",
+      "generation",
+      "tabId",
+      "browserWindowId",
+      "requestId",
+      "protocolVersion",
+      "leaseExpiresAt",
+    ]) {
+      delete outboundData[field];
+    }
+  }
+
+  if (outboundData.attach || outboundData.attach_fullscreen) {
+    postAttachUntilAcknowledged(windowId, outboundData, {
+      sessionId: data.sessionId,
+      tabId: data.tabId,
+      generation: data.generation,
+      revision,
+    });
   } else {
     const nativePort = getPort();
-    if (nativePort) nativePort.postMessage(data);
+    if (nativePort) nativePort.postMessage(outboundData);
   }
 }
 
@@ -652,19 +1339,83 @@ async function tryAttach(windowId, fullscreen, data) {
  * @param {number} windowId
  */
 async function tryDetach(windowId) {
-  clearPendingAttach(windowId);
-  if (await AttachedWindows.isAttached(windowId)) {
-    sendDetach(windowId);
+  invalidateWindow(windowId);
+  const sessions = (await sessionsForWindow(windowId)).filter(
+    (session) => session.desired || session.attached
+  );
+  for (const session of sessions) {
+    session.desired = false;
+    session.attached = false;
+    session.leaseExpiresAt = 0;
+    await sessionStore.put(session);
+    await sendOverlayState(session, "revealed", "detach");
+  }
+
+  // `AttachedWindows` is only written by acknowledgeAttachedWindow, which needs
+  // an in-memory pending request. After a service-worker restart that bookkeeping
+  // is gone while Chatterino is still drawing, so gating the native detach on it
+  // left the overlay pinned over unrelated tabs. A live session is equally good
+  // evidence that something is attached and must be torn down.
+  const wasAttached = await AttachedWindows.isAttached(windowId);
+  if (wasAttached || sessions.length > 0) {
+    await sendDetach(windowId, sessions);
+  }
+  if (wasAttached) {
     await AttachedWindows.markDetatched(windowId);
   }
 }
 
-function sendDetach(winID) {
-  forwardNativeMessage({
+
+async function sendDetach(winID, knownSessions) {
+  // tryDetach has already cleared its sessions by the time it calls here, so it
+  // passes them in explicitly; other callers look them up.
+  const sessions = knownSessions ?? (await sessionsForWindow(winID));
+  const base = {
     action: "detach",
     version: 0,
     winId: winID.toString(),
-  });
+  };
+  if (!nativeSupportsV2 || sessions.length === 0) {
+    forwardNativeMessage(base);
+    return;
+  }
+  // One window can own several sessions (channel change, or a second Twitch
+  // tab). Detaching only the first left the rest attached.
+  for (const session of sessions) {
+    forwardNativeMessage({
+      ...base,
+      protocolVersion: 2,
+      sessionId: session.sessionId,
+      browserWindowId: Number(session.windowId),
+      tabId: session.tabId,
+      generation: session.generation,
+      // The desktop v2 parser requires a complete attachment identity
+      // (non-empty channel included); without it every detach is rejected as
+      // malformed-message and the overlay stays pinned.
+      channel: session.channel,
+    });
+  }
+}
+
+
+async function routeNativeChatResult(message) {
+  if (!message.sessionId) return;
+  const session = await sessionStore.get(message.sessionId);
+  if (!session || Number(message.generation) !== Number(session.generation)) {
+    return;
+  }
+  try {
+    await chrome.tabs.sendMessage(session.tabId, {
+      action: "nativeChatResult",
+      sessionId: session.sessionId,
+      requestId: message.requestId,
+      generation: session.generation,
+      status: message.status,
+      reason: message.reason,
+    });
+  } catch {
+    // Navigation is reconciled by the desired session on the next wakeup.
+  }
 }
 
 async function updateBadge() {

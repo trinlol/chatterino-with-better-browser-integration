@@ -185,13 +185,28 @@
     return false;
   }
 
+  // Twitch opens a "How many Channel Points do you want to use?" prompt once an
+  // outcome is picked. It reads like a voting surface — a dialog full of
+  // prediction-tagged buttons — but adopting it as the banner source parks it
+  // off-screen, which is precisely what stops a viewer from placing the bet.
+  const BET_PROMPT_PATTERN =
+    /how many .{0,24}points|points do you want|points to (?:use|bet|spend)|use .{0,24}points/i;
+
+  function isPredictionBetPrompt(surface) {
+    const text = String(surface?.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return BET_PROMPT_PATTERN.test(text);
+  }
+
   function isGenericVotingSurface(surface, kind) {
     if (
       !surface ||
       surface.closest?.(
         '.onsite-notifications, [data-test-selector="onsite-notifications"], [data-test-selector="onsite-notifications-toast-manager"]'
       ) ||
-      global.ChatterinoNotificationUi?.isNotificationsSurface(surface)
+      global.ChatterinoNotificationUi?.isNotificationsSurface(surface) ||
+      isPredictionBetPrompt(surface)
     ) {
       return false;
     }
@@ -250,6 +265,7 @@
     getElementPath,
     isGenericVotingSurface,
     isFullscreenActive,
+    isPredictionBetPrompt,
     resolveActivationTarget,
     resolveElementPath,
   };

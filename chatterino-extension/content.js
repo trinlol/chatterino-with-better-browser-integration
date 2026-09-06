@@ -103,6 +103,22 @@
   let syncInProgress = false;
   const MIN_SYNC_INTERVAL_MS = 250;
 
+  function recordObserverCallback(startedAt) {
+    const metrics = window.ChatterinoPerformanceMetrics;
+    if (!metrics?.recordObserverCallback) return;
+    const now = window.performance?.now?.() ?? Date.now();
+    metrics.recordObserverCallback(Math.max(0, now - startedAt));
+  }
+
+  function measureObserverWork(callback) {
+    const startedAt = window.performance?.now?.() ?? Date.now();
+    try {
+      return callback();
+    } finally {
+      recordObserverCallback(startedAt);
+    }
+  }
+
   let rewardPendingActive = false;
 
   const NATIVE_CHAT_INPUT_SELECTORS = [
@@ -383,6 +399,12 @@
     const attemptPosition = (triesLeft) => {
       if (positionNativeRewardDialog(replica)) {
         startRewardDialogWatcher(replica);
+        return;
+      }
+      // While a prediction is accepting entries Twitch answers the points
+      // button with the bet prompt instead of the reward centre.
+      if (positionNativePredictionDialog(replica)) {
+        startPredictionDialogWatcher(replica);
         return;
       }
       if (triesLeft > 0) {
@@ -740,6 +762,7 @@
   }
 
   let rewardDialogWatchId = null;
+  let predictionDialogWatchId = null;
   let intentionalRewardDialogOpen = false;
   let unintendedDismissTimer = null;
   let lastSuccessfulClaimAt = 0;
@@ -920,6 +943,10 @@
     stopRewardDialogWatcher();
     stopUnintendedDismissWatcher();
     stopChatIdentityDialogWatcher();
+    stopPredictionDialogWatcher();
+    findNativePredictionDialog()?.classList.remove(
+      "chatterino-native-prediction-dialog"
+    );
     removeBadgeReplica();
     removePointsReplica();
     document.getElementById("chatterino-points-fallback")?.remove();
@@ -946,6 +973,156 @@
     setTimeout(() => {
       stopRewardDialogWatcher();
     }, 60000);
+  }
+
+  // Prediction bet prompt — Twitch's "How many Channel Points do you want to
+  // use?" modal. Picking an outcome in the toolbar replica forwards the click
+  // to the native control, which is parked off-screen at left:-10000px, so
+  // Twitch anchors the prompt to that hidden control and it opens outside the
+  // viewport. Reveal it and shift it beside the toolbar, exactly like the
+  // reward centre, so a viewer can actually spend their points.
+  function findNativePredictionDialog() {
+    const marked = document.querySelector(
+      ".chatterino-native-prediction-dialog"
+    );
+    if (marked?.isConnected) {
+      return marked;
+    }
+
+    const dedicated = [
+      'div[role="dialog"]:has([data-test-selector*="prediction-bet"])',
+      'div[role="dialog"]:has([data-a-target*="prediction-bet"])',
+      'div[role="dialog"]:has([class*="prediction-bet"])',
+    ];
+    for (const selector of dedicated) {
+      const dialog = document.querySelector(selector);
+      if (dialog && !dialog.closest("#chatterino-toolbar-portal")) {
+        return dialog;
+      }
+    }
+
+    for (const dialog of document.querySelectorAll(
+      'div[role="dialog"], div.ReactModal__Content'
+    )) {
+      if (
+        dialog.closest("#chatterino-toolbar-portal") ||
+        dialog.querySelector(".reward-center__content")
+      ) {
+        continue;
+      }
+      if (window.ChatterinoVotingUi?.isPredictionBetPrompt(dialog)) {
+        return dialog;
+      }
+    }
+    return null;
+  }
+
+  function ensurePredictionDialogScrollable(popover) {
+    const scrollSelectors = [
+      '[class*="scrollable"]',
+      '[class*="Scrollable"]',
+      ".simplebar-content-wrapper",
+      ".simplebar-scrollable-node",
+      "[data-simplebar-scrollable]",
+    ];
+    for (const selector of scrollSelectors) {
+      popover.querySelectorAll(selector).forEach((el) => {
+        el.style.setProperty("pointer-events", "auto", "important");
+        el.style.setProperty("visibility", "visible", "important");
+        el.style.setProperty("touch-action", "pan-y", "important");
+        const overflowY = getComputedStyle(el).overflowY;
+        if (overflowY === "hidden" || overflowY === "clip") {
+          el.style.setProperty("overflow-y", "auto", "important");
+        }
+      });
+    }
+  }
+
+  function positionNativePredictionDialog(anchorEl) {
+    const popover = findNativePredictionDialog();
+    if (!popover || !anchorEl) {
+      return false;
+    }
+
+    // The prompt is never the banner source. If an earlier sync adopted it,
+    // hand it back before measuring so it is not stuck at left:-10000px.
+    popover.classList.remove("chatterino-native-voting-source");
+    popover.classList.add("chatterino-native-prediction-dialog");
+    popover.style.setProperty("z-index", "2147483647", "important");
+    ensurePredictionDialogScrollable(popover);
+
+    // Measured-delta placement for the same reason as the reward dialog: the
+    // prompt stays inside the React root (never reparented) and its ancestors
+    // carry transforms, so `position: fixed` would not resolve to the viewport.
+    const anchorRect = anchorEl.getBoundingClientRect();
+    const popRect = popover.getBoundingClientRect();
+    if (popRect.width === 0 || popRect.height === 0) {
+      return false;
+    }
+
+    const prev = popover.__ccTranslate || { x: 0, y: 0 };
+    const baseLeft = popRect.left - prev.x;
+    const baseTop = popRect.top - prev.y;
+
+    const desiredLeft = Math.max(
+      8,
+      Math.min(anchorRect.left, window.innerWidth - popRect.width - 8)
+    );
+    let desiredTop = anchorRect.bottom + 8;
+    if (desiredTop + popRect.height > window.innerHeight - 8) {
+      desiredTop = anchorRect.top - popRect.height - 8;
+    }
+    desiredTop = Math.max(
+      8,
+      Math.min(desiredTop, window.innerHeight - popRect.height - 8)
+    );
+
+    const dx = Math.round(desiredLeft - baseLeft);
+    const dy = Math.round(desiredTop - baseTop);
+    if (dx !== prev.x || dy !== prev.y) {
+      popover.__ccTranslate = { x: dx, y: dy };
+      popover.style.setProperty(
+        "transform",
+        `translate(${dx}px, ${dy}px)`,
+        "important"
+      );
+    }
+    return true;
+  }
+
+  function stopPredictionDialogWatcher() {
+    if (predictionDialogWatchId) {
+      clearInterval(predictionDialogWatchId);
+      predictionDialogWatchId = null;
+    }
+  }
+
+  function startPredictionDialogWatcher(anchorEl) {
+    stopPredictionDialogWatcher();
+    predictionDialogWatchId = setInterval(() => {
+      if (!findNativePredictionDialog()) {
+        stopPredictionDialogWatcher();
+        return;
+      }
+      positionNativePredictionDialog(anchorEl);
+    }, 100);
+
+    setTimeout(() => {
+      stopPredictionDialogWatcher();
+    }, 60000);
+  }
+
+  function schedulePredictionDialogPositioning(anchorEl) {
+    const attempt = (triesLeft) => {
+      if (positionNativePredictionDialog(anchorEl)) {
+        startPredictionDialogWatcher(anchorEl);
+        return;
+      }
+      if (triesLeft > 0) {
+        requestAnimationFrame(() => attempt(triesLeft - 1));
+      }
+    };
+    requestAnimationFrame(() => attempt(40));
   }
 
   function isChatShellWiped() {
@@ -1820,6 +1997,9 @@
               sourceRoot
             )
           ) {
+            if (kind === "prediction") {
+              schedulePredictionDialogPositioning(replica);
+            }
             requestAnimationFrame(() => scheduleSync());
             setTimeout(scheduleSync, 100);
           }
@@ -1948,45 +2128,8 @@
     }
   }
 
-  function handlePredictionFallback(channelName) {
-    activityStore.removeDom("prediction");
-    activityStore.applyGraphql(gqlState);
-    const prediction = activityStore.current("prediction");
-    if (!prediction?.title) {
-      document.getElementById("chatterino-prediction-fallback")?.remove();
-      return;
-    }
-
-    let pill = document.getElementById("chatterino-prediction-fallback");
-    if (!pill) {
-      pill = document.createElement("button");
-      pill.id = "chatterino-prediction-fallback";
-      pill.className = "chatterino-prediction-fallback-pill";
-      pill.type = "button";
-      pill.title = "Open Twitch prediction voting";
-      pill.innerHTML = '<span class="dot"></span><span class="label"></span>';
-      pill.addEventListener("click", () => {
-        if (
-          window.ChatterinoVotingUi?.activateVotingTrigger(
-            document,
-            "prediction",
-            pill
-          )
-        ) {
-          requestAnimationFrame(scheduleSync);
-          setTimeout(scheduleSync, 100);
-          setTimeout(scheduleSync, 300);
-        }
-      });
-    }
-
-    pill.setAttribute("aria-label", `Vote on prediction: ${prediction.title}`);
-    pill.querySelector(".label").textContent = `Vote: ${prediction.title}`;
-    mountInSlot(pill, 1);
-    sendPredictionMessage(channelName);
-  }
-
   function cleanupPredictionUi() {
+    stopPredictionDialogWatcher();
     document.getElementById("chatterino-prediction-min-icon")?.remove();
     document.getElementById("chatterino-prediction-fallback")?.remove();
     document.getElementById("chatterino-prediction-replica")?.remove();
@@ -2063,6 +2206,7 @@
       return;
     }
     syncInProgress = true;
+    const syncStartedAt = window.performance?.now?.() ?? Date.now();
     observer.disconnect();
     try {
       syncGqlFromDomAttributes();
@@ -2142,18 +2286,12 @@
       } else {
         activityStore.removeDom("prediction");
         cleanupPredictionUi();
-        if (
-          gqlState?.prediction?.title &&
-          (companionActive || isChatShellWiped() || channelName)
-        ) {
-          handlePredictionFallback(channelName);
-        } else {
-          sendPredictionMessage(channelName);
-        }
+        sendPredictionMessage(channelName);
       }
 
       positionToolbarPortal();
     } finally {
+      recordObserverCallback(syncStartedAt);
       syncInProgress = false;
       observeTarget();
     }
@@ -2217,6 +2355,10 @@
   });
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.action === "nativeAttachState") {
+      sendResponse({ ok: true });
+      return true;
+    }
     if (message?.action === "getIntegrationHealth") {
       sendResponse({
         channel: currentChannel,
@@ -2240,6 +2382,24 @@
       sendResponse(result);
       return true;
     }
+    if (message?.action === "nativeChatResult") {
+      // Results are session-exact and observable by optional UI/plugin layers;
+      // do not clear the user's draft unless the native side reports a
+      // definitive success.
+      window.dispatchEvent(
+        new CustomEvent("chatterino-native-chat-result", {
+          detail: {
+            sessionId: message.sessionId,
+            requestId: message.requestId,
+            generation: message.generation,
+            status: message.status,
+            reason: message.reason,
+          },
+        })
+      );
+      sendResponse({ ok: true });
+      return true;
+    }
     return false;
   });
 
@@ -2247,7 +2407,7 @@
   pollIntervalId = setInterval(scheduleSync, SAFETY_POLL_MS);
 
   const observer = new MutationObserver(() => {
-    scheduleSync();
+    measureObserverWork(() => scheduleSync());
   });
 
   let shellObserved = false;
@@ -2269,6 +2429,7 @@
   observeTarget();
   let bootstrapObserveTimer = null;
   const bootstrapObserver = new MutationObserver(() => {
+    const startedAt = window.performance?.now?.() ?? Date.now();
     if (shellObserved && streamChatObserved) {
       return;
     }
@@ -2282,6 +2443,7 @@
         bootstrapObserver.disconnect();
       }
     }, 1000);
+    recordObserverCallback(startedAt);
   });
   bootstrapObserver.observe(document.documentElement, {
     childList: true,
@@ -2289,9 +2451,11 @@
   });
 
   const claimBonusObserver = new MutationObserver(() => {
+    const startedAt = window.performance?.now?.() ?? Date.now();
     if (findClaimBonusButton()) {
       scheduleAutoClaimAttempt();
     }
+    recordObserverCallback(startedAt);
   });
   claimBonusObserver.observe(document.documentElement, {
     childList: true,

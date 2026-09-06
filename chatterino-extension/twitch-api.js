@@ -1,6 +1,12 @@
 (function () {
   "use strict";
 
+  // anti-wipe can be evaluated more than once during Twitch SPA navigation.
+  // Do not stack fetch/XHR hooks or polling loops when that happens.
+  if (window.__chatterinoCompanionGql?.__version === 2) {
+    return;
+  }
+
   const DEFAULT_CLAIM_COMMUNITY_POINTS_HASH =
     "46aaeebe02c99afdf4fc97c7c0cba964124bf6b0af229395f1f6d1feed05b3d0";
 
@@ -15,6 +21,10 @@
   const CONTEXT_POLL_MS = 45000;
   const CONTEXT_POLL_INITIAL_MS = 1000;
   const CLAIM_RETRY_MIN_MS = 30000;
+  const GQL_REQUEST_TIMEOUT_MS = 10000;
+  const ADAPTER_FAILURE_THRESHOLD = 3;
+  const ADAPTER_COOLDOWN_MS = 120000;
+  const ADAPTER_FRESHNESS_MS = 90000;
 
   const CHANNEL_POINTS_CONTEXT_HASHES = [
     "7fe050e3761eb2cf258d70ee1a21cbd76fa8cf3d7e7b12fc437e7029d446b5e3",
@@ -37,7 +47,80 @@
     poll: null,
     rewards: [],
     lastUpdate: 0,
+    adapter: {
+      source: "private-graphql",
+      updatedAt: 0,
+      freshUntil: 0,
+      supported: false,
+      failure: "uninitialized",
+      consecutiveFailures: 0,
+      cooldownUntil: 0,
+    },
   };
+
+  function isPollingAllowed() {
+    return (
+      Boolean(getCurrentChannelLogin()) && document.visibilityState !== "hidden"
+    );
+  }
+
+  function adapterStatus() {
+    return {
+      source: state.adapter.source,
+      updatedAt: state.adapter.updatedAt,
+      freshUntil: state.adapter.freshUntil,
+      supported: state.adapter.supported,
+      failure: state.adapter.failure,
+      consecutiveFailures: state.adapter.consecutiveFailures,
+      cooldownUntil: state.adapter.cooldownUntil,
+    };
+  }
+
+  function recordAdapterSuccess() {
+    const now = Date.now();
+    state.adapter = {
+      ...state.adapter,
+      updatedAt: now,
+      freshUntil: now + ADAPTER_FRESHNESS_MS,
+      supported: true,
+      failure: "",
+      consecutiveFailures: 0,
+      cooldownUntil: 0,
+    };
+  }
+
+  function recordAdapterFailure(reason) {
+    const now = Date.now();
+    const failures = state.adapter.consecutiveFailures + 1;
+    const cooldownUntil =
+      failures >= ADAPTER_FAILURE_THRESHOLD ? now + ADAPTER_COOLDOWN_MS : 0;
+    state.adapter = {
+      ...state.adapter,
+      updatedAt: now,
+      freshUntil: 0,
+      supported: false,
+      failure: String(reason || "network"),
+      consecutiveFailures: failures,
+      cooldownUntil,
+    };
+  }
+
+  function adapterCircuitOpen() {
+    return state.adapter.cooldownUntil > Date.now();
+  }
+
+  async function fetchWithTimeout(url, init = {}) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      GQL_REQUEST_TIMEOUT_MS
+    );
+    try {
+      return await window.fetch(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
 
   function getCurrentChannelLogin() {
     const path = window.location.pathname.toLowerCase();
@@ -78,6 +161,12 @@
     state.prediction = null;
     state.poll = null;
     state.rewards = [];
+    state.adapter = {
+      ...state.adapter,
+      freshUntil: 0,
+      supported: false,
+      failure: "channel-change",
+    };
   }
 
   function shouldApplyPointsForChannel(channelLogin) {
@@ -303,6 +392,7 @@
       "data-cc-gql-rewards",
       JSON.stringify(state.rewards.slice(0, 80))
     );
+    root.setAttribute("data-cc-gql-adapter", JSON.stringify(adapterStatus()));
     root.setAttribute("data-cc-gql-updated", String(state.lastUpdate));
 
     window.dispatchEvent(
@@ -692,10 +782,19 @@
   function handleGqlPayload(payload) {
     try {
       const body = typeof payload === "string" ? JSON.parse(payload) : payload;
+      if (!body || typeof body !== "object" || hasGraphqlErrors(body)) {
+        recordAdapterFailure("schema");
+        emitUpdate();
+        return false;
+      }
       extractFromBody(body);
+      recordAdapterSuccess();
       emitUpdate();
+      return true;
     } catch (_) {
-      // ignore malformed payloads
+      recordAdapterFailure("schema");
+      emitUpdate();
+      return false;
     }
   }
 
@@ -814,13 +913,17 @@
 
   async function refreshChannelPointsContext() {
     const channelLogin = getCurrentChannelLogin();
-    if (!channelLogin) {
+    if (!channelLogin || document.visibilityState === "hidden") {
+      return false;
+    }
+    if (adapterCircuitOpen()) {
       return false;
     }
 
+    let failure = "network";
     for (const sha256Hash of getChannelPointsContextHashes()) {
       try {
-        const response = await fetch("https://gql.twitch.tv/gql", {
+        const response = await fetchWithTimeout("https://gql.twitch.tv/gql", {
           method: "POST",
           credentials: "include",
           headers: buildGqlHeaders(),
@@ -836,37 +939,62 @@
           }),
         });
         if (!response.ok) {
+          failure = response.status === 429 ? "rate-limited" : "network";
+          break;
+        }
+        let body;
+        try {
+          body = await response.json();
+        } catch (_) {
+          failure = "schema";
           continue;
         }
-        const body = await response.json();
         if (isPersistedQueryNotFound(body)) {
+          failure = "hash";
           continue;
         }
         channelPointsContextHash = sha256Hash;
-        handleGqlPayload(body);
-        return true;
+        return handleGqlPayload(body);
       } catch (_) {
-        // try next hash
+        failure = "network";
+        break;
       }
     }
+    recordAdapterFailure(failure);
+    emitUpdate();
     return false;
   }
 
-  function scheduleContextPoll() {
+  function hasGraphqlErrors(body) {
+    const entries = Array.isArray(body) ? body : [body];
+    return entries.some(
+      (entry) => Array.isArray(entry?.errors) && entry.errors.length > 0
+    );
+  }
+
+  function scheduleContextPoll(delayMs = CONTEXT_POLL_MS) {
     clearTimeout(contextPollTimer);
-    contextPollTimer = setTimeout(async () => {
-      await refreshChannelPointsContext();
-      scheduleContextPoll();
-    }, CONTEXT_POLL_MS);
+    contextPollTimer = null;
+    if (!isPollingAllowed()) {
+      return;
+    }
+    const cooldownDelay = Math.max(0, state.adapter.cooldownUntil - Date.now());
+    contextPollTimer = setTimeout(
+      async () => {
+        try {
+          await refreshChannelPointsContext();
+        } finally {
+          scheduleContextPoll();
+        }
+      },
+      Math.max(delayMs, cooldownDelay)
+    );
   }
 
   function restartContextPolling() {
     clearTimeout(contextPollTimer);
-    void refreshChannelPointsContext();
-    contextPollTimer = setTimeout(async () => {
-      await refreshChannelPointsContext();
-      scheduleContextPoll();
-    }, CONTEXT_POLL_INITIAL_MS);
+    contextPollTimer = null;
+    scheduleContextPoll(CONTEXT_POLL_INITIAL_MS);
   }
 
   async function claimViaGql(channelId, claimId) {
@@ -875,7 +1003,7 @@
     }
     claimInFlight = true;
     try {
-      const response = await fetch("https://gql.twitch.tv/gql", {
+      const response = await fetchWithTimeout("https://gql.twitch.tv/gql", {
         method: "POST",
         credentials: "include",
         headers: buildGqlHeaders(),
@@ -896,10 +1024,23 @@
         }),
       });
       if (!response.ok) {
+        recordAdapterFailure(
+          response.status === 429 ? "rate-limited" : "network"
+        );
+        emitUpdate();
         return false;
       }
-      const body = await response.json();
-      handleGqlPayload(body);
+      let body;
+      try {
+        body = await response.json();
+      } catch (_) {
+        recordAdapterFailure("schema");
+        emitUpdate();
+        return false;
+      }
+      if (!handleGqlPayload(body)) {
+        return false;
+      }
       const entries = Array.isArray(body) ? body : [body];
       const claimFailed = entries.some(
         (entry) =>
@@ -913,6 +1054,8 @@
       emitUpdate();
       return true;
     } catch (_) {
+      recordAdapterFailure("network");
+      emitUpdate();
       return false;
     } finally {
       claimInFlight = false;
@@ -1004,25 +1147,36 @@
     } catch (_) {
       // ignore
     }
-    this.addEventListener("load", function () {
-      try {
-        if (
-          this.__ccGqlUrl &&
-          String(this.__ccGqlUrl).includes("gql.twitch.tv") &&
-          this.responseText
-        ) {
-          handleGqlPayload(this.responseText);
+    try {
+      this.addEventListener("load", function () {
+        try {
+          if (
+            this.__ccGqlUrl &&
+            String(this.__ccGqlUrl).includes("gql.twitch.tv") &&
+            this.responseText
+          ) {
+            handleGqlPayload(this.responseText);
+          }
+        } catch (_) {
+          // Never let a private GraphQL observer alter Twitch's XHR lifecycle.
         }
-      } catch (_) {
-        // ignore
-      }
-    });
+      });
+    } catch (_) {
+      // Preserve the original XHR behavior if listener instrumentation fails.
+    }
     return originalSend.apply(this, args);
   };
 
   window.__chatterinoCompanionGql = {
+    __version: 2,
     getState() {
       return structuredClone(state);
+    },
+    getAdapterStatus() {
+      return adapterStatus();
+    },
+    async refreshContext() {
+      return refreshChannelPointsContext();
     },
     async claimChannelPoints() {
       return claimChannelPoints();
@@ -1049,6 +1203,15 @@
 
   window.addEventListener("chatterino-companion-reward-cancelled", () => {
     clearPendingRewardTimeout();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      clearTimeout(contextPollTimer);
+      contextPollTimer = null;
+      return;
+    }
+    restartContextPolling();
   });
 
   document.addEventListener(

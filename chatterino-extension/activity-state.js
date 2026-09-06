@@ -2,6 +2,57 @@
   "use strict";
 
   const ACTIVITY_KINDS = Object.freeze(["poll", "prediction"]);
+  const METRIC_SAMPLE_LIMIT = 128;
+
+  class PerformanceMetrics {
+    constructor(now = () => global.performance?.now?.() ?? Date.now()) {
+      this.now = now;
+      this.callbackCount = 0;
+      this.callbackDurations = [];
+      this.activityPublications = 0;
+    }
+
+    recordCallback(durationMs) {
+      this.callbackCount += 1;
+      if (!Number.isFinite(durationMs) || durationMs < 0) return;
+      this.callbackDurations.push(durationMs);
+      if (this.callbackDurations.length > METRIC_SAMPLE_LIMIT) {
+        this.callbackDurations.shift();
+      }
+    }
+
+    measureCallback(callback) {
+      const started = this.now();
+      try {
+        return callback();
+      } finally {
+        this.recordCallback(Math.max(0, this.now() - started));
+      }
+    }
+
+    recordActivityPublication() {
+      this.activityPublications += 1;
+    }
+
+    snapshot() {
+      const sorted = [...this.callbackDurations].sort(
+        (left, right) => left - right
+      );
+      const p95Index = sorted.length ? Math.ceil(sorted.length * 0.95) - 1 : -1;
+      return {
+        callbackCount: this.callbackCount,
+        callbackDurationSamples: sorted.length,
+        callbackDurationP95: p95Index >= 0 ? sorted[p95Index] : 0,
+        activityPublications: this.activityPublications,
+      };
+    }
+
+    static isP95WithinBaseline(baseline, candidate, allowance = 0.1) {
+      const base = Number(baseline?.callbackDurationP95) || 0;
+      const actual = Number(candidate?.callbackDurationP95) || 0;
+      return base === 0 ? actual === 0 : actual <= base * (1 + allowance);
+    }
+  }
 
   function normalizeOptions(options) {
     if (!Array.isArray(options)) return [];
@@ -83,14 +134,28 @@
     });
   }
 
+  function normalizeAdapterMetadata(metadata, now) {
+    const updatedAt = normalizeTimestamp(metadata?.updatedAt) || now;
+    const freshUntil = normalizeTimestamp(metadata?.freshUntil);
+    return {
+      source: String(metadata?.source || "unknown"),
+      updatedAt,
+      freshUntil,
+      supported: metadata?.supported !== false,
+      failure: metadata?.failure ? String(metadata.failure) : "",
+    };
+  }
+
   class ActivityStore {
-    constructor(now = () => Date.now()) {
+    constructor(now = () => Date.now(), metrics = new PerformanceMetrics()) {
       this.now = now;
+      this.metrics = metrics;
       this.channel = "";
       this.dom = { poll: null, prediction: null };
       this.graphql = { poll: null, prediction: null };
       this.published = { poll: "removed", prediction: "removed" };
       this.deadlines = { poll: null, prediction: null };
+      this.graphqlMetadata = normalizeAdapterMetadata(null, this.now());
     }
 
     setChannel(channel) {
@@ -102,11 +167,18 @@
       this.dom = { poll: null, prediction: null };
       this.graphql = { poll: null, prediction: null };
       this.deadlines = { poll: null, prediction: null };
+      this.graphqlMetadata = normalizeAdapterMetadata(null, this.now());
       this.resetPublications();
       return true;
     }
 
     applyGraphql(snapshot) {
+      if (snapshot == null || snapshot?.adapter) {
+        this.graphqlMetadata = normalizeAdapterMetadata(
+          snapshot?.adapter,
+          Number(this.now()) || Date.now()
+        );
+      }
       for (const kind of ACTIVITY_KINDS) {
         this.graphql[kind] = normalizeActivity(
           kind,
@@ -129,11 +201,14 @@
 
     current(kind) {
       if (!ACTIVITY_KINDS.includes(kind)) return null;
-      const activity = mergeActivities(
-        kind,
-        this.dom[kind],
-        this.graphql[kind]
-      );
+      const now = Number(this.now()) || Date.now();
+      const graphql =
+        !this.graphqlMetadata.supported ||
+        (this.graphqlMetadata.freshUntil > 0 &&
+          this.graphqlMetadata.freshUntil <= now)
+          ? null
+          : this.graphql[kind];
+      const activity = mergeActivities(kind, this.dom[kind], graphql);
       if (!activity) {
         this.deadlines[kind] = null;
         return null;
@@ -144,7 +219,6 @@
         return { ...activity, closesAt: 0, durationSeconds: 0 };
       }
 
-      const now = Number(this.now()) || Date.now();
       const key = JSON.stringify({
         title: activity.title,
         options: activity.options,
@@ -176,6 +250,7 @@
       const fingerprint = publicationFingerprint(activity);
       if (fingerprint === this.published[kind]) return null;
       this.published[kind] = fingerprint;
+      this.metrics.recordActivityPublication();
       return activity
         ? { lifecycle: "upsert", activity }
         : { lifecycle: "remove", activity: null };
@@ -193,16 +268,24 @@
         channel: this.channel,
         poll: this.current("poll"),
         prediction: this.current("prediction"),
+        adapter: { ...this.graphqlMetadata },
+        metrics: this.metrics.snapshot(),
       };
+    }
+
+    recordObserverCallback(durationMs) {
+      this.metrics.recordCallback(durationMs);
     }
   }
 
   global.ChatterinoActivity = {
     ACTIVITY_KINDS,
     ActivityStore,
+    PerformanceMetrics,
     mergeActivities,
     normalizeActivity,
     normalizeTimestamp,
     publicationFingerprint,
+    normalizeAdapterMetadata,
   };
 })(window);

@@ -199,3 +199,42 @@ test("the Twitch notifications inbox is never treated as voting UI", async () =>
     false
   );
 });
+
+test("the prediction bet prompt is never adopted as the voting banner", async () => {
+  const votingUi = await loadVotingUi();
+  // Twitch's points prompt looks like a voting surface: it says "prediction"
+  // and is full of prediction-tagged buttons. Adopting it as the banner source
+  // parks it off-screen, which is what stopped viewers placing a bet.
+  const betPrompt = {
+    textContent:
+      "Prediction — How many Channel Points do you want to use? 1,000 5,000 10,000 Place bet",
+    closest() {
+      return null;
+    },
+    querySelectorAll() {
+      return [{}, {}, {}, {}];
+    },
+  };
+
+  assert.equal(votingUi.isPredictionBetPrompt(betPrompt), true);
+  assert.equal(
+    votingUi.isGenericVotingSurface(betPrompt, "prediction"),
+    false
+  );
+});
+
+test("a real prediction banner is still treated as voting UI", async () => {
+  const votingUi = await loadVotingUi();
+  const banner = {
+    textContent: "Prediction Will the streamer win? Team A 1,234 Team B 567",
+    closest() {
+      return null;
+    },
+    querySelectorAll() {
+      return [{}, {}];
+    },
+  };
+
+  assert.equal(votingUi.isPredictionBetPrompt(banner), false);
+  assert.equal(votingUi.isGenericVotingSurface(banner, "prediction"), true);
+});

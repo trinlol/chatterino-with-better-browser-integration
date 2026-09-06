@@ -6,7 +6,8 @@ html.chatterino-companion-active
   [class*="scrollable"]:not(
     :is(
       .chatterino-native-reward-dialog *,
-      .chatterino-native-chat-identity-dialog *
+      .chatterino-native-chat-identity-dialog *,
+      .chatterino-native-prediction-dialog *
     )
   ),
 html.chatterino-companion-active .chat-scrollable-area__message-container,
@@ -387,41 +388,6 @@ html.chatterino-badge-replica-active
   border-color: #00f593 !important;
 }
 
-.chatterino-prediction-fallback-pill {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 6px !important;
-  appearance: none !important;
-  background-color: #063f31 !important;
-  border: 1px solid #00f593 !important;
-  border-radius: 4px !important;
-  padding: 4px 10px !important;
-  height: 30px !important;
-  color: #efeff1 !important;
-  font-size: 12px !important;
-  font-weight: 600 !important;
-  cursor: pointer !important;
-  flex-shrink: 0 !important;
-  white-space: nowrap !important;
-}
-
-.chatterino-prediction-fallback-pill:hover {
-  background-color: #075942 !important;
-}
-
-.chatterino-prediction-fallback-pill:focus-visible {
-  outline: 2px solid #ffffff !important;
-  outline-offset: 2px !important;
-}
-
-.chatterino-prediction-fallback-pill .dot {
-  width: 8px !important;
-  height: 8px !important;
-  border-radius: 50% !important;
-  background: #00f593 !important;
-  flex-shrink: 0 !important;
-}
-
 /* Inline poll banner — move native Twitch poll DOM into toolbar slot */
 .chatterino-moved-poll-inline {
   position: relative !important;
@@ -560,6 +526,37 @@ html.chatterino-companion-active
   .simplebar-content-wrapper,
 html.chatterino-companion-active
   .chatterino-native-reward-dialog
+  .simplebar-scrollable-node {
+  pointer-events: auto !important;
+  overflow-y: auto !important;
+  touch-action: pan-y !important;
+}
+
+/* Prediction bet prompt ("How many Channel Points do you want to use?").
+   Twitch anchors it to the outcome control, which companion mode parks
+   off-screen, so content.js shifts it beside the toolbar. It stays in the
+   React root, so force it visible and clickable wherever it was mounted. */
+html.chatterino-companion-active .chatterino-native-prediction-dialog,
+html.chatterino-companion-active .chatterino-native-prediction-dialog *,
+.chatterino-native-prediction-dialog,
+.chatterino-native-prediction-dialog * {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+.chatterino-native-prediction-dialog {
+  z-index: 2147483647 !important;
+  opacity: 1 !important;
+}
+
+html.chatterino-companion-active
+  .chatterino-native-prediction-dialog
+  [class*="scrollable"],
+html.chatterino-companion-active
+  .chatterino-native-prediction-dialog
+  .simplebar-content-wrapper,
+html.chatterino-companion-active
+  .chatterino-native-prediction-dialog
   .simplebar-scrollable-node {
   pointer-events: auto !important;
   overflow-y: auto !important;

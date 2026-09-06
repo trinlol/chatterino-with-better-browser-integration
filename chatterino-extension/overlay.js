@@ -8,6 +8,15 @@
   let errorDiv = null;
 
   let showingChat = false;
+  // Attachment is a prepare -> matching acknowledgement -> reversible hide
+  // transaction. Twitch's React subtree is never replaced by this script.
+  let attachment = {
+    phase: "idle",
+    sessionId: null,
+    generation: null,
+    leaseTimer: null,
+    preparedAt: 0,
+  };
   let notificationsSuppressed = false;
   let notificationsTogglePendingUntil = 0;
   let shiftedNotificationsPanel = null;
@@ -78,12 +87,10 @@
       window.chatDiv = x;
 
       if (x != undefined && x.children.length >= 1) {
-        x.children[0].innerHTML =
-          '<div style="width: 340px; height: 100%; justify-content: center; display: flex; flex-direction: column; text-align: center; color: #999; user-select: none; background: #222;"></div>';
-
-        errorDiv = x.children[0].children[0];
-        updateErrors();
-
+        // Do not touch the React-owned child tree here. The background will
+        // send nativeAttachState(attached) only after a matching native ack.
+        // Until then Twitch remains fully usable (fail-open).
+        errorDiv = null;
         installedObjects.rightColumn = true;
       } else {
         retry = true;
@@ -213,6 +220,82 @@
     }
   }
 
+  function sameAttachment(message) {
+    if (attachment.phase === "idle") return false;
+    if (message.sessionId && attachment.sessionId) {
+      if (message.sessionId !== attachment.sessionId) return false;
+    }
+    if (
+      message.generation !== undefined &&
+      attachment.generation !== null &&
+      Number(message.generation) !== Number(attachment.generation)
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  function revealChat(reason = "native-unavailable") {
+    if (attachment.leaseTimer !== null) {
+      clearTimeout(attachment.leaseTimer);
+      attachment.leaseTimer = null;
+    }
+    attachment.phase = "revealed";
+    document.documentElement.classList.remove("chatterino-companion-active");
+    document.documentElement.removeAttribute(
+      "data-chatterino-companion-active"
+    );
+    window.dispatchEvent(
+      new CustomEvent("chatterino-companion-revealed", { detail: { reason } })
+    );
+  }
+
+  function commitHide(message) {
+    console.log('[OVERLAY-DEBUG] commitHide called with message:', message);
+    if (!sameAttachment(message)) {
+      console.error('[OVERLAY-DEBUG] commitHide ABORTED - sameAttachment returned false');
+      return;
+    }
+    console.log('[OVERLAY-DEBUG] sameAttachment check passed, proceeding with commit');
+    if (attachment.leaseTimer !== null) {
+      clearTimeout(attachment.leaseTimer);
+      attachment.leaseTimer = null;
+    }
+    attachment.phase = "attached";
+    console.log('[OVERLAY-DEBUG] Phase set to "attached", dispatching chatterino-companion-active event');
+    document.documentElement.classList.add("chatterino-companion-active");
+    document.documentElement.setAttribute(
+      "data-chatterino-companion-active",
+      message.sessionId || "native-ack"
+    );
+    window.dispatchEvent(
+      new CustomEvent("chatterino-companion-active", {
+        detail: { reason: "native-ack", sessionId: message.sessionId },
+      })
+    );
+    console.log('[OVERLAY-DEBUG] Event dispatched successfully');
+    const leaseMs = globalThis.ChatterinoLifecycle.leaseDelay(
+      message.leaseExpiresAt
+    );
+    if (leaseMs !== null) {
+      attachment.leaseTimer = setTimeout(() => {
+        revealChat("lease-expired");
+        chrome.runtime.sendMessage({ type: "detach" });
+      }, leaseMs);
+    }
+  }
+  function prepareAttachment(message = {}) {
+    console.log('[OVERLAY-DEBUG] prepareAttachment called with:', {
+      sessionId: message.sessionId,
+      generation: message.generation
+    });
+    attachment.phase = "prepared";
+    attachment.sessionId = message.sessionId || null;
+    attachment.generation = message.generation ?? null;
+    attachment.preparedAt = Date.now();
+    console.log('[OVERLAY-DEBUG] Attachment state after prepare:', attachment);
+  }
+
   function updateErrors() {
     if (!errorDiv) return;
 
@@ -264,6 +347,28 @@
     errors.sendMessage = true;
     updateErrors();
   }
+
+  // The setting is read once at load, so a later toggle from the popup would
+  // otherwise leave this page in its previous mode until a manual reload. React
+  // to the change directly: reveal Twitch's own chat when the integration is
+  // turned off, and re-measure so it can attach again when turned back on.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes.replaceTwitchChat) {
+      return;
+    }
+    const enabled = Boolean(changes.replaceTwitchChat.newValue);
+    settings.replaceTwitchChat = enabled;
+    if (!enabled) {
+      revealChat("setting-disabled");
+      attachment.phase = "idle";
+      attachment.sessionId = null;
+      attachment.generation = null;
+      chrome.runtime.sendMessage({ type: "detach" });
+      return;
+    }
+    installedObjects = {};
+    installChatterino();
+  });
 
   try {
     chrome.runtime.sendMessage({ type: "get-os" }, (os) => {
@@ -358,8 +463,43 @@
   // were in the background, when their initial chat-resized message is
   // correctly ignored to avoid attaching over an inactive window.
   chrome.runtime.onMessage.addListener((message) => {
+    console.log('[OVERLAY-DEBUG] Message received:', message);
+
     if (message?.action === "requestChatRect") {
+      console.log('[OVERLAY-DEBUG] Preparing attachment (requestChatRect)');
+      prepareAttachment(message);
       queryChatRect();
+      return;
+    }
+    if (message?.action === "nativeAttachState") {
+      console.log('[OVERLAY-DEBUG] Native attach state:', message.state);
+      console.log('[OVERLAY-DEBUG] Current attachment phase:', attachment.phase);
+      console.log('[OVERLAY-DEBUG] Message sessionId:', message.sessionId, 'Attachment sessionId:', attachment.sessionId);
+      console.log('[OVERLAY-DEBUG] Message generation:', message.generation, 'Attachment generation:', attachment.generation);
+
+      if (message.state === "prepare") {
+        console.log('[OVERLAY-DEBUG] Calling prepareAttachment');
+        prepareAttachment(message);
+      } else if (message.state === "attached") {
+        console.log('[OVERLAY-DEBUG] Calling commitHide');
+        const sameResult = sameAttachment(message);
+        console.log('[OVERLAY-DEBUG] sameAttachment returned:', sameResult);
+        if (!sameResult) {
+          console.error('[OVERLAY-DEBUG] commitHide will be SKIPPED - sameAttachment check failed!');
+          console.error('[OVERLAY-DEBUG] Failure reason:', {
+            phase: attachment.phase,
+            sessionIdMatch: message.sessionId === attachment.sessionId,
+            generationMatch: message.generation === attachment.generation
+          });
+        }
+        commitHide(message);
+      } else if (
+        ["revealed", "rejected", "lost", "detached"].includes(message.state)
+      ) {
+        if (sameAttachment(message) || !message.sessionId) {
+          revealChat(message.reason || message.state);
+        }
+      }
     }
   });
 

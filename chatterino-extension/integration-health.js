@@ -15,9 +15,12 @@
     const content = health?.content ?? null;
     let level = "ok";
     let headline = "Connected";
-    if (native.blocked) {
+    if (native.blocked && !native.state) {
       level = "error";
       headline = "Native host blocked";
+    } else if (native.state === "blocked") {
+      level = "warning";
+      headline = "Native host unavailable (retrying)";
     } else if (!native.connected) {
       level = "warning";
       headline = "Native host disconnected";
@@ -30,7 +33,7 @@
     }
 
     const lines = [
-      `Native: ${native.connected ? "connected" : native.blocked ? "blocked" : "disconnected"}`,
+      `Native: ${native.connected ? "connected" : native.state || (native.blocked ? "blocked" : "disconnected")}`,
       `Channel: ${content?.channel || tab?.channel || "none"}`,
       `Chat: ${content?.companionActive ? "attached" : "not attached"}`,
       `Poll: ${content?.activities?.poll?.title || "none"}`,
@@ -38,6 +41,11 @@
       `GraphQL: ${formatAge(content?.graphqlUpdatedAt, now)}`,
     ];
     if (native.lastError) lines.push(`Error: ${native.lastError}`);
+    if (native.retryAt && native.retryAt > now) {
+      lines.push(
+        `Retry: in ${Math.ceil((native.retryAt - now) / 1000)}s (scheduled)`
+      );
+    }
     return { level, headline, lines };
   }
 

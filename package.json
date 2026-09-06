@@ -11,6 +11,10 @@
   "scripts": {
     "test": "npm run test:extension",
     "test:extension": "node scripts/validate-extension.mjs && node scripts/validate-release-contract.mjs",
+    "test:e2e:contract": "node --test chatterino-extension/tests/e2e/*.test.mjs",
+    "test:fixture:prediction-bet": "node scripts/prediction-bet-popup-fixture.mjs",
+    "test:browser-native": "npm run test:extension && npm run test:e2e:contract",
+    "smoke:browser-native:windows": "powershell -ExecutionPolicy Bypass -File scripts/browser-integration/run-windows-smoke.ps1",
     "package:extension": "node scripts/package-extension.mjs"
   },
   "repository": {
