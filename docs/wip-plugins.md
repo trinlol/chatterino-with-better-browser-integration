@@ -219,6 +219,25 @@ c2.register_callback(
 )
 ```
 
+#### `register_callback(c2.EventType.BetterBrowserEvent, handler)`
+
+Registers a read-only callback for normalized Better Browser lifecycle and
+activity changes. The callback return value is ignored. The event table uses
+schema version `1` and contains `event`, a shortened opaque `session_id`,
+`generation`, `channel`, `source`, `status`, and `reason`. Activity events can
+also contain `activity_kind`, `activity_title`, and `activity_status`.
+
+The callback never receives native-messaging frames, window handles, OAuth
+material, chat text, reward payloads, or browser-control capabilities.
+
+```lua
+c2.register_callback(c2.EventType.BetterBrowserEvent, function(event)
+    if event.status == "ready" then
+        c2.log(c2.LogLevel.Info, "Better Browser attached to", event.channel)
+    end
+end)
+```
+
 #### `current_account()`
 
 Returns a `TwitchAccount` representing the current account.

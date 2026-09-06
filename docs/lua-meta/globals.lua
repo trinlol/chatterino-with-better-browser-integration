@@ -18,9 +18,27 @@ c2.LogLevel = {
 ---@enum c2.EventType
 c2.EventType = {
     CompletionRequested = {}, ---@type c2.EventType.CompletionRequested
+    BetterBrowserEvent = {}, ---@type c2.EventType.BetterBrowserEvent
 }
 
 -- End src/controllers/plugins/api/EventType.hpp
+
+-- Begin src/controllers/plugins/api/BetterBrowserEvent.hpp
+
+---@class BetterBrowserEvent
+---@field schema_version integer The fixed schema version. It is `1` for this event shape.
+---@field event string A normalized lifecycle or activity event name.
+---@field session_id string A shortened opaque session identifier, never the full browser session ID.
+---@field generation integer The monotonic session generation.
+---@field channel string The normalized Twitch channel login, when known.
+---@field source string The normalized data source, such as `dom` or `private-graphql`.
+---@field status string The normalized lifecycle or activity status.
+---@field reason string A bounded, non-sensitive transition reason.
+---@field activity_kind? string The activity kind, when this is an activity event.
+---@field activity_title? string The activity title, when this is an activity event.
+---@field activity_status? string The activity status, when this is an activity event.
+
+-- End src/controllers/plugins/api/BetterBrowserEvent.hpp
 
 ---@class CommandContext
 ---@field words string[] The words typed when executing the command. For example `/foo bar baz` will result in `{"/foo", "bar", "baz"}`.
@@ -1088,10 +1106,11 @@ c2.HTTPMethod = {
 ---@return boolean ok  Returns `true` if everything went ok, `false` if a command with this name exists.
 function c2.register_command(name, handler) end
 
---- Registers a callback to be invoked when completions for a term are requested.
+--- Registers a callback to be invoked for the selected event type. Better Browser
+--- events are read-only projections and callback return values are ignored.
 ---
----@param type c2.EventType.CompletionRequested
----@param func fun(event: CompletionEvent): CompletionList The callback to be invoked.
+---@param type c2.EventType.CompletionRequested|c2.EventType.BetterBrowserEvent
+---@param func fun(event: CompletionEvent|BetterBrowserEvent): CompletionList|nil The callback to be invoked.
 function c2.register_callback(type, func) end
 
 --- Writes a message to the Chatterino log.

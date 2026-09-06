@@ -154,14 +154,35 @@ declare namespace c2 {
         hide_others: boolean;
     }
 
+    /** A read-only normalized Better Browser lifecycle or activity event. */
+    class BetterBrowserEvent {
+        /** Fixed event-schema version; currently 1. */
+        schema_version: 1;
+        event: string;
+        /** Short opaque suffix only; never a full browser session ID. */
+        session_id: string;
+        generation: number;
+        channel: string;
+        source: string;
+        status: string;
+        reason: string;
+        activity_kind?: string;
+        activity_title?: string;
+        activity_status?: string;
+    }
+
     enum EventType {
         CompletionRequested = "CompletionRequested",
+        BetterBrowserEvent = "BetterBrowserEvent",
     }
 
     type CbFuncCompletionsRequested = (ev: CompletionEvent) => CompletionList;
+    type CbFuncBetterBrowserEvent = (ev: BetterBrowserEvent) => void;
     type CbFunc<T> = T extends EventType.CompletionRequested
         ? CbFuncCompletionsRequested
-        : never;
+        : T extends EventType.BetterBrowserEvent
+          ? CbFuncBetterBrowserEvent
+          : never;
 
     function register_callback<T>(type: T, func: CbFunc<T>): void;
     function later(callback: () => void, msec: number): void;

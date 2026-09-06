@@ -1,0 +1,41 @@
+name: Browser/native contract
+
+on:
+  push:
+    paths:
+      - "chatterino-extension/**"
+      - "scripts/browser-integration/**"
+      - "scripts/validate-extension.mjs"
+      - "package.json"
+      - "release-contract.json"
+      - "docs/testing/browser-native-release-gate.md"
+      - ".github/workflows/browser-native-e2e.yml"
+  pull_request:
+    paths:
+      - "chatterino-extension/**"
+      - "scripts/browser-integration/**"
+      - "scripts/validate-extension.mjs"
+      - "package.json"
+      - "release-contract.json"
+      - "docs/testing/browser-native-release-gate.md"
+      - ".github/workflows/browser-native-e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Native messaging contract (hosted Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run test:e2e:contract
+      - name: Explain real-app boundary
+        shell: pwsh
+        run: |
+          Write-Host "Hosted runner result is a deterministic contract gate only."
+          Write-Host "The Windows 11/Edge Stable packaged smoke matrix remains required by docs/testing/browser-native-release-gate.md."

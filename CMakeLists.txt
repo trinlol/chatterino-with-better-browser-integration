@@ -13,6 +13,7 @@ include(CMakeDependentOption)
 
 list(APPEND CMAKE_MODULE_PATH
     "${CMAKE_SOURCE_DIR}/cmake"
+    "${CMAKE_SOURCE_DIR}"
     )
 
 if(WIN32 AND NOT MINGW)
@@ -39,7 +40,7 @@ option(CHATTERINO_FORCE_LTO "Don't check if LTO is supported" OFF)
 option(CHATTERINO_PLUGINS "Enable ALPHA plugin support in Chatterino" ON)
 option(CHATTERINO_USE_GDI_FONTENGINE "Use the legacy GDI fontengine instead of the new DirectWrite one on Windows (Qt 6.8.0 and later)" ON)
 option(CHATTERINO_ALLOW_PRIVATE_QT_API "Allow uses of Qt's private API - when enabling this, Chatterino must use the EXACT Qt version it was compiled against" OFF)
-option(CHATTERINO_SPELLCHECK "Enable spellchecking in Chatterino (requires Hunspell)" OFF)
+option(CHATTERINO_SPELLCHECK "Enable spellchecking in Chatterino (requires Hunspell)" ON)
 option(CHATTERINO_NIGHTLY_BUILD "Specifies whether this is a nightly build." OFF)
 
 option(CHATTERINO_SANITIZER_SUPPORT "Attempt to enable Sanitizer support on the test and app targets. Actual sanitizers can then be enabled with the SANITIZE_* options." OFF)
