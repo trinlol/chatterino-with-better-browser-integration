@@ -483,6 +483,10 @@ EmotePopup::EmotePopup(QWidget *parent)
     auto makeView = [&](QString tabTitle, bool addToNotebook = true) {
         auto *view = new ChannelView(nullptr);
 
+        // Marks this view as part of the emote picker so overlay decorations
+        // (favourite stars) know to draw here but not in chat views.
+        view->setProperty("chatterinoEmotePopupView", true);
+
         view->setOverrideFlags(MessageElementFlags{
             MessageElementFlag::Default, MessageElementFlag::AlwaysShow,
             MessageElementFlag::EmoteImage});

@@ -65,8 +65,18 @@ std::optional<EmotePtr> emoteFromLayoutElement(MessageLayoutElement *element)
 }
 
 void drawFavouriteStar(QPainter &painter, const QRectF &rect,
-                       MessageLayoutElement *element, QWidget * /*hostWidget*/)
+                       MessageLayoutElement *element, QWidget *hostWidget)
 {
+    // The favourite star is an emote-picker affordance: only draw it when the
+    // view being painted is one of the emote popup's views, never in chat.
+    // (windowRole is X11-only in Qt 6, so the popup marks its views with a
+    // dynamic property instead - see EmotePopup::makeView.)
+    if (hostWidget == nullptr ||
+        !hostWidget->property("chatterinoEmotePopupView").toBool())
+    {
+        return;
+    }
+
     auto emote = emoteFromLayoutElement(element);
     if (!emote)
     {

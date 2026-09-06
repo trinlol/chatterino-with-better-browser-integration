@@ -4,6 +4,10 @@
 
 ### Unreleased
 
+#### Fixed
+
+- The favourite-emote star now only appears in the emote picker popup, not on emotes posted in chat
+
 #### Added
 
 - `/nuke <text> <timeout|ban|delete> <range>` mass-moderation command with a live preview above the chat input while typing (for example `/nuke bots 10m 30s`); `/nuke stop` cancels active nukes — ported from [Moltorino](https://codeberg.org/MoltoBenne/Moltorino)
