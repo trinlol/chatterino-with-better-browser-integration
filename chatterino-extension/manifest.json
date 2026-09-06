@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/chrome-manifest",
   "manifest_version": 3,
   "name": "Chatterino Better Browser",
-  "version": "2.6.3",
+  "version": "2.6.4",
   "description": "Replaces Twitch chat with Chatterino Better Browser and syncs polls, predictions, pinned messages, and channel points.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4D8JIc1Plb2P6BebXD3saQVqStgmKZpJNxa0O4VRzBUsPZSCe4Y1nxV++E6SxRx1WwzAW7AiZza4TcSqCAJLshLaqZRSFY5Q5x7cLzGF3w+XT73rVG4Qj6S1T0vFo59ZyUPrQ+/SS0fRYlq4DidfyYmi5+SNHMdXy7lAY+oFoUeACxLUDIql6bfIDUovzShBIEToBHwCn5zqHZOpKeCKwb010WlFcgm6omaTfLsRnRHCQ1oNfFhaJBid4KhVzpczpqPOZLmylZDy/35ek2vGjKH582YZHw1HHXLlXVXSXy1ZuWyHeT2BcWk2++loNXAXO7jAMozc0yU6fQyAcOHF6wIDAQAB",
   "permissions": ["tabs", "nativeMessaging", "storage", "alarms"],
