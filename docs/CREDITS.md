@@ -18,6 +18,12 @@ fork by MoltoBenne (MIT License):
 - `/spam` and `/pyramid` fun commands (same files as `/nuke`)
 - `/founders` command (`src/controllers/commands/builtin/twitch/GetFounders.*`,
   `IvrApi::getFounders`)
+- `/blockterm` and `/unblockterm` commands
+  (`src/controllers/commands/builtin/twitch/BlockedTerms.*` plus the
+  blocked-term operations in `TwitchGql.*`)
+- `/leadmod` and `/unleadmod` commands
+  (`src/controllers/commands/builtin/twitch/LeadModerator.*` plus the
+  channel-role mutations and user lookup in `TwitchGql.*`)
 - Prediction popout dialog (`src/widgets/dialogs/PredictionDialog.*`) with
   its GQL layer (`src/providers/twitch/api/TwitchGql.*`), the
   `TwitchChannel` prediction state/refresh plumbing, the channel point

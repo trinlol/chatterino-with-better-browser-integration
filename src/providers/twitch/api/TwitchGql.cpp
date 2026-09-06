@@ -886,4 +886,309 @@ void TwitchGql::getChannelPoints(
         .execute();
 }
 
+// ---------------------------------------------------------------------------
+// Blocked terms, user lookup and lead-moderator role mutations - ported from
+// Moltorino for the /blockterm, /unblockterm, /leadmod and /unleadmod
+// commands.
+// ---------------------------------------------------------------------------
+
+void TwitchGql::addChannelBlockedTerm(
+    const QString &channelId, const QString &phrase, const QString &oauthToken,
+    std::function<void()> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    QJsonObject input;
+    input.insert("channelID", channelId);
+    input.insert("phrase", phrase);
+    input.insert("phrases", QJsonArray{phrase});
+    input.insert("isModEditable", true);
+
+    QJsonObject variables;
+    variables.insert("input", input);
+
+    makePersistedGqlRequest(
+        "AddChannelBlockedTerm",
+        "10f4c5c8dd6817c21058040b50181040e91e894ca324b14beda6b5f5e429aa02",
+        variables, oauthToken)
+        .onSuccess([successCallback, failureCallback](
+                       const NetworkResult &result) {
+            auto doc = result.parseRapidJson();
+
+            QString errorMessage;
+            if (!checkMutationResponse(doc, "addChannelBlockedTerm", true,
+                                       errorMessage))
+            {
+                failureCallback(
+                    errorMessage.isEmpty()
+                        ? "Twitch API Error: Failed to add blocked term"
+                        : "Twitch API Error: " + errorMessage);
+                return;
+            }
+            successCallback();
+        })
+        .onError([failureCallback](const NetworkResult &result) {
+            failureCallback("Network Error: " +
+                            QString::number(result.status().value_or(0)));
+        })
+        .execute();
+}
+
+void TwitchGql::getChannelBlockedTerms(
+    const QString &channelId, const QString &oauthToken,
+    std::function<void(QVector<GqlBlockedTerm>)> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    QJsonObject variables;
+    variables.insert("channelID", channelId);
+
+    makePersistedGqlRequest(
+        "BlockedTerms",
+        "022dc6d166de51129700aa03482dca9e5fffc3a7045ba7f1deeaa3046a39577f",
+        variables, oauthToken)
+        .onSuccess([successCallback, failureCallback](
+                       const NetworkResult &result) {
+            auto doc = result.parseRapidJson();
+
+            const auto topError = gqlFirstErrorMessage(doc);
+            if (!topError.isEmpty())
+            {
+                failureCallback("Twitch API Error: " + topError);
+                return;
+            }
+
+            const auto *data = gqlData(doc);
+            if (data == nullptr || !data->HasMember("channel") ||
+                !(*data)["channel"].IsObject())
+            {
+                failureCallback(
+                    "Twitch API Error: Failed to fetch blocked terms");
+                return;
+            }
+
+            const auto &channel = (*data)["channel"];
+            if (!channel.HasMember("blockedTerms") ||
+                !channel["blockedTerms"].IsObject())
+            {
+                failureCallback(
+                    "Twitch API Error: Failed to fetch blocked terms");
+                return;
+            }
+
+            QVector<GqlBlockedTerm> terms;
+            const auto &blockedTerms = channel["blockedTerms"];
+
+            auto appendTerm = [&terms](const rapidjson::Value &node) {
+                if (!node.IsObject())
+                {
+                    return;
+                }
+                GqlBlockedTerm term;
+                if (rj::getSafe(node, "id", term.id) &&
+                    rj::getSafe(node, "phrase", term.phrase) &&
+                    !term.id.isEmpty() && !term.phrase.isEmpty())
+                {
+                    rj::getSafe(node, "expiresAt", term.expiresAt);
+                    terms.push_back(std::move(term));
+                }
+            };
+
+            if (blockedTerms.HasMember("edges") &&
+                blockedTerms["edges"].IsArray())
+            {
+                for (const auto &edge : blockedTerms["edges"].GetArray())
+                {
+                    if (edge.IsObject() && edge.HasMember("node"))
+                    {
+                        appendTerm(edge["node"]);
+                    }
+                }
+            }
+
+            if (blockedTerms.HasMember("nodes") &&
+                blockedTerms["nodes"].IsArray())
+            {
+                for (const auto &node : blockedTerms["nodes"].GetArray())
+                {
+                    appendTerm(node);
+                }
+            }
+
+            successCallback(std::move(terms));
+        })
+        .onError([failureCallback](const NetworkResult &result) {
+            failureCallback("Network Error: " +
+                            QString::number(result.status().value_or(0)));
+        })
+        .execute();
+}
+
+void TwitchGql::deleteChannelBlockedTerm(
+    const QString &channelId, const QString &termId, const QString &oauthToken,
+    std::function<void()> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    QJsonObject input;
+    input.insert("id", termId);
+    input.insert("channelID", channelId);
+
+    QJsonObject variables;
+    variables.insert("input", input);
+
+    makePersistedGqlRequest(
+        "DeleteChannelBlockedTerm",
+        "bdfacf843eb536eef2720110cf73a4540506833b17a3f15313e461e57165c813",
+        variables, oauthToken)
+        .onSuccess([successCallback, failureCallback](
+                       const NetworkResult &result) {
+            auto doc = result.parseRapidJson();
+
+            QString errorMessage;
+            if (!checkMutationResponse(doc, "deleteChannelBlockedTermByID",
+                                       true, errorMessage))
+            {
+                failureCallback(
+                    errorMessage.isEmpty()
+                        ? "Twitch API Error: Failed to remove blocked term"
+                        : "Twitch API Error: " + errorMessage);
+                return;
+            }
+            successCallback();
+        })
+        .onError([failureCallback](const NetworkResult &result) {
+            failureCallback("Network Error: " +
+                            QString::number(result.status().value_or(0)));
+        })
+        .execute();
+}
+
+void TwitchGql::getUserByLogin(
+    const QString &login, const QString &oauthToken,
+    std::function<void(std::optional<GqlUser>)> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    static constexpr char QUERY[] = R"(
+        query ChatterinoUserByLogin($login: String!) {
+            user(login: $login) {
+                id
+                login
+                displayName
+            }
+        }
+    )";
+
+    QJsonObject variables;
+    variables.insert("login", login);
+
+    makeInlineGqlRequest(QUERY, variables, oauthToken)
+        .onSuccess([successCallback, failureCallback](
+                       const NetworkResult &result) {
+            auto doc = result.parseRapidJson();
+
+            const auto topError = gqlFirstErrorMessage(doc);
+            if (!topError.isEmpty())
+            {
+                failureCallback("Twitch API Error: " + topError);
+                return;
+            }
+
+            const auto *data = gqlData(doc);
+            if (data == nullptr || !data->HasMember("user") ||
+                !(*data)["user"].IsObject())
+            {
+                failureCallback("Twitch API Error: Missing user data");
+                return;
+            }
+
+            GqlUser user;
+            const auto &node = (*data)["user"];
+            if (!rj::getSafe(node, "id", user.id) || user.id.isEmpty())
+            {
+                // A missing user is not an error for our callers.
+                successCallback(std::nullopt);
+                return;
+            }
+            rj::getSafe(node, "login", user.login);
+            rj::getSafe(node, "displayName", user.displayName);
+            successCallback(std::move(user));
+        })
+        .onError([failureCallback](const NetworkResult &result) {
+            failureCallback("Network Error: " +
+                            QString::number(result.status().value_or(0)));
+        })
+        .execute();
+}
+
+namespace {
+
+/// Shared implementation for the lead-moderator role mutations (persisted
+/// query + input{channelID, targetUserID} + payload error object).
+void runLeadModRoleMutation(
+    const QString &operationName, const QString &hash,
+    const QString &payloadName, const QString &channelId,
+    const QString &targetUserId, const QString &oauthToken,
+    const QString &fallbackError, std::function<void()> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    QJsonObject input;
+    input.insert("channelID", channelId);
+    input.insert("targetUserID", targetUserId);
+
+    QJsonObject variables;
+    variables.insert("input", input);
+
+    makePersistedGqlRequest(operationName, hash, variables, oauthToken)
+        .onSuccess([payloadName, fallbackError, successCallback,
+                    failureCallback](const NetworkResult &result) {
+            auto doc = result.parseRapidJson();
+
+            // Keep the byte array alive for the duration of the call.
+            const QByteArray payloadKey = payloadName.toUtf8();
+
+            QString errorMessage;
+            if (!checkMutationResponse(doc, payloadKey.constData(), true,
+                                       errorMessage))
+            {
+                failureCallback(
+                    errorMessage.isEmpty()
+                        ? "Twitch API Error: " + fallbackError
+                        : "Twitch API Error: " + errorMessage);
+                return;
+            }
+            successCallback();
+        })
+        .onError([failureCallback](const NetworkResult &result) {
+            failureCallback("Network Error: " +
+                            QString::number(result.status().value_or(0)));
+        })
+        .execute();
+}
+
+}  // namespace
+
+void TwitchGql::assignLeadModerator(
+    const QString &channelId, const QString &targetUserId,
+    const QString &oauthToken, std::function<void()> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    runLeadModRoleMutation(
+        "AssignChannelRole",
+        "2d373c90d0d0e6d4fe771bc6136febe6a148eb3d5700d2a0575883a043fbd581",
+        "assignChannelRole", channelId, targetUserId, oauthToken,
+        "Failed to add lead moderator", std::move(successCallback),
+        std::move(failureCallback));
+}
+
+void TwitchGql::unassignLeadModerator(
+    const QString &channelId, const QString &targetUserId,
+    const QString &oauthToken, std::function<void()> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    runLeadModRoleMutation(
+        "UnassignChannelRole",
+        "5edbf17877acdb91e65243b5148cfd15b98adc6d8f980492dcde9a7f2e8255e2",
+        "unassignChannelRole", channelId, targetUserId, oauthToken,
+        "Failed to remove lead moderator", std::move(successCallback),
+        std::move(failureCallback));
+}
+
 }  // namespace chatterino

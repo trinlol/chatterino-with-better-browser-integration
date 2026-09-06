@@ -14,12 +14,14 @@
 #include "controllers/commands/builtin/twitch/Announce.hpp"
 #include "controllers/commands/builtin/twitch/Ban.hpp"
 #include "controllers/commands/builtin/twitch/Block.hpp"
+#include "controllers/commands/builtin/twitch/BlockedTerms.hpp"
 #include "controllers/commands/builtin/twitch/ChatSettings.hpp"
 #include "controllers/commands/builtin/twitch/Chatters.hpp"
 #include "controllers/commands/builtin/twitch/DeleteMessages.hpp"
 #include "controllers/commands/builtin/twitch/GetFounders.hpp"
 #include "controllers/commands/builtin/twitch/GetModerators.hpp"
 #include "controllers/commands/builtin/twitch/GetVIPs.hpp"
+#include "controllers/commands/builtin/twitch/LeadModerator.hpp"
 #include "controllers/commands/builtin/twitch/LowTrust.hpp"
 #include "controllers/commands/builtin/twitch/Nuke.hpp"
 #include "controllers/commands/builtin/twitch/Pin.hpp"
@@ -361,6 +363,10 @@ CommandController::CommandController(const Paths &paths)
 
     this->registerCommand("/unblock", &commands::unblockUser);
 
+    this->registerCommand("/blockterm", &commands::blockTerm);
+
+    this->registerCommand("/unblockterm", &commands::unblockTerm);
+
     this->registerCommand("/user", &commands::user);
 
     this->registerCommand("/usercard", &commands::openUsercard);
@@ -424,6 +430,10 @@ CommandController::CommandController(const Paths &paths)
     this->registerCommand("/vip", &commands::addVIP);
 
     this->registerCommand("/unvip", &commands::removeVIP);
+
+    this->registerCommand("/leadmod", &commands::addLeadModerator);
+
+    this->registerCommand("/unleadmod", &commands::removeLeadModerator);
 
     this->registerCommand("/unban", &commands::unbanUser);
     this->registerCommand("/untimeout", &commands::unbanUser);

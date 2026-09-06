@@ -91,6 +91,8 @@ set(SOURCE_FILES
         controllers/commands/builtin/twitch/Ban.hpp
         controllers/commands/builtin/twitch/Block.cpp
         controllers/commands/builtin/twitch/Block.hpp
+        controllers/commands/builtin/twitch/BlockedTerms.cpp
+        controllers/commands/builtin/twitch/BlockedTerms.hpp
         controllers/commands/builtin/twitch/ChatSettings.cpp
         controllers/commands/builtin/twitch/ChatSettings.hpp
         controllers/commands/builtin/twitch/Chatters.cpp
@@ -103,6 +105,8 @@ set(SOURCE_FILES
         controllers/commands/builtin/twitch/GetModerators.hpp
         controllers/commands/builtin/twitch/GetVIPs.cpp
         controllers/commands/builtin/twitch/GetVIPs.hpp
+        controllers/commands/builtin/twitch/LeadModerator.cpp
+        controllers/commands/builtin/twitch/LeadModerator.hpp
         controllers/commands/builtin/twitch/LowTrust.cpp
         controllers/commands/builtin/twitch/LowTrust.hpp
         controllers/commands/builtin/twitch/Nuke.cpp
