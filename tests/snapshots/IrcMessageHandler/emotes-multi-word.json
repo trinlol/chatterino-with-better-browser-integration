@@ -100,8 +100,8 @@
                     },
                     "flags": "EmoteImage|EmoteText",
                     "link": {
-                        "type": "None",
-                        "value": ""
+                        "type": "InsertText",
+                        "value": "o bar ba"
                     },
                     "tooltip": "o bar ba<br>Twitch Emote",
                     "trailingSpace": false,
