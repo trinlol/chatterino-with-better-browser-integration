@@ -18,6 +18,7 @@
 #include "controllers/commands/builtin/twitch/ChatSettings.hpp"
 #include "controllers/commands/builtin/twitch/Chatters.hpp"
 #include "controllers/commands/builtin/twitch/DeleteMessages.hpp"
+#include "controllers/commands/builtin/twitch/Editor.hpp"
 #include "controllers/commands/builtin/twitch/GetFounders.hpp"
 #include "controllers/commands/builtin/twitch/GetModerators.hpp"
 #include "controllers/commands/builtin/twitch/GetVIPs.hpp"
@@ -28,6 +29,7 @@
 #include "controllers/commands/builtin/twitch/Poll.hpp"
 #include "controllers/commands/builtin/twitch/Prediction.hpp"
 #include "controllers/commands/builtin/twitch/Raid.hpp"
+#include "controllers/commands/builtin/twitch/Redeem.hpp"
 #include "controllers/commands/builtin/twitch/RemoveModerator.hpp"
 #include "controllers/commands/builtin/twitch/RemoveVIP.hpp"
 #include "controllers/commands/builtin/twitch/SendReply.hpp"
@@ -35,6 +37,7 @@
 #include "controllers/commands/builtin/twitch/ShieldMode.hpp"
 #include "controllers/commands/builtin/twitch/Shoutout.hpp"
 #include "controllers/commands/builtin/twitch/StartCommercial.hpp"
+#include "controllers/commands/builtin/twitch/Translate.hpp"
 #include "controllers/commands/builtin/twitch/Unban.hpp"
 #include "controllers/commands/builtin/twitch/UpdateChannel.hpp"
 #include "controllers/commands/builtin/twitch/UpdateColor.hpp"
@@ -434,6 +437,24 @@ CommandController::CommandController(const Paths &paths)
     this->registerCommand("/leadmod", &commands::addLeadModerator);
 
     this->registerCommand("/unleadmod", &commands::removeLeadModerator);
+
+    this->registerCommand("/editor", &commands::addEditorUser);
+
+    this->registerCommand("/uneditor", &commands::removeEditorUser);
+
+    this->registerCommand("/namehistory", &commands::nameHistory);
+
+    this->registerCommand("/logs", &commands::logs);
+
+    this->registerCommand("/translate", &commands::translate);
+
+    this->registerCommand("/translateto", &commands::translateTo);
+
+    this->registerCommand("/tl", &commands::sayTranslate);
+
+    this->registerCommand("/saytranslate", &commands::sayTranslate);
+
+    this->registerCommand("/redeem", &commands::redeem);
 
     this->registerCommand("/unban", &commands::unbanUser);
     this->registerCommand("/untimeout", &commands::unbanUser);

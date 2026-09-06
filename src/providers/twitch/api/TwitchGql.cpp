@@ -1,9 +1,11 @@
 // Ported from Moltorino (https://codeberg.org/MoltoBenne/Moltorino)
 // Copyright (c) MoltoBenne - MIT License
 // Adapted for Chatterino Better Browser:
-//  - Only the prediction-related GQL operations are ported.
-//  - TV-client request variants and other operations (polls, channel
-//    points, watch track) are not ported.
+//  - Prediction, blocked-term, role, user-lookup and channel-point reward
+//    operations are ported; other Moltorino operations (polls, watch
+//    track, follow) are not.
+//  - Auth uses the logged-in Chatterino account token; Moltorino's
+//    separate saved-account system is not ported.
 #include "providers/twitch/api/TwitchGql.hpp"
 
 #include "common/network/NetworkRequest.hpp"
@@ -11,9 +13,12 @@
 #include "util/Helpers.hpp"
 #include "util/RapidjsonHelpers.hpp"
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+
+#include <cstring>
 
 namespace chatterino {
 
@@ -24,6 +29,12 @@ namespace {
     constexpr auto TWITCH_GQL_BROWSER_USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36";
+    constexpr auto TWITCH_GQL_TV_CLIENT_ID = "ue6666qo983tsx6so1t0vnawi233wa";
+    constexpr auto TWITCH_GQL_TV_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 7.1; Smart Box C1) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36";
+    constexpr auto TWITCH_GQL_TV_ORIGIN = "https://android.tv.twitch.tv";
+    constexpr auto TWITCH_GQL_TV_REFERER = "https://android.tv.twitch.tv/";
     constexpr int TWITCH_GQL_TIMEOUT_MS = 15 * 1000;
 
     const QString &twitchGqlDeviceId()
@@ -130,6 +141,85 @@ namespace {
         return nullptr;
     }
 
+    NetworkRequest makeTvPersistedGqlRequest(const QString &operationName,
+                                             const QString &sha256Hash,
+                                             const QJsonObject &variables,
+                                             const QString &oauthToken)
+    {
+        QJsonObject payload;
+        payload.insert("operationName", operationName);
+        payload.insert("variables", variables);
+
+        QJsonObject persistedQuery;
+        persistedQuery.insert("version", 1);
+        persistedQuery.insert("sha256Hash", sha256Hash);
+
+        QJsonObject extensions;
+        extensions.insert("persistedQuery", persistedQuery);
+        payload.insert("extensions", extensions);
+
+        QJsonArray payloadArray;
+        payloadArray.append(payload);
+
+        auto request =
+            NetworkRequest("https://gql.twitch.tv/gql", NetworkRequestType::Post)
+                .timeout(TWITCH_GQL_TIMEOUT_MS)
+                .header("Client-Id", TWITCH_GQL_TV_CLIENT_ID)
+                .header("Client-Session-Id", twitchGqlSessionId())
+                .header("Client-Version", TWITCH_GQL_BROWSER_CLIENT_VERSION)
+                .header("Origin", TWITCH_GQL_TV_ORIGIN)
+                .header("Referer", TWITCH_GQL_TV_REFERER)
+                .header("User-Agent", TWITCH_GQL_TV_USER_AGENT)
+                .header("X-Device-Id", twitchGqlDeviceId())
+                .json(payloadArray);
+
+        if (!oauthToken.trimmed().isEmpty())
+        {
+            request = std::move(request).header("Authorization",
+                                                "OAuth " + oauthToken);
+        }
+
+        return request;
+    }
+
+    /// Returns the "data" object of a batched GQL response, matching the
+    /// payload whose extension operationName equals operationName.
+    const rapidjson::Value *gqlDataForOperation(const rapidjson::Document &doc,
+                                                const QString &operationName)
+    {
+        if (doc.IsArray())
+        {
+            for (const auto &payloadValue : doc.GetArray())
+            {
+                if (!payloadValue.IsObject())
+                {
+                    continue;
+                }
+                const auto &payload = payloadValue.GetObject();
+
+                QString payloadOperation;
+                if (payload.HasMember("extensions") &&
+                    payload["extensions"].IsObject() &&
+                    rj::getSafe(payload["extensions"], "operationName",
+                                payloadOperation) &&
+                    payloadOperation.compare(operationName,
+                                             Qt::CaseInsensitive) == 0 &&
+                    payload.HasMember("data") &&
+                    payload["data"].IsObject())
+                {
+                    return &payload["data"];
+                }
+            }
+            return nullptr;
+        }
+
+        if (doc.IsObject() && doc.HasMember("data") && doc["data"].IsObject())
+        {
+            return &doc["data"];
+        }
+        return nullptr;
+    }
+
     /// Returns the "data" object of a GQL response, or null if absent.
     const rapidjson::Value *gqlData(const rapidjson::Document &doc)
     {
@@ -162,6 +252,73 @@ namespace {
         }
 
         return "Twitch rejected the request";
+    }
+
+    /// Checks a TV-client mutation response: the payload object under
+    /// mutationKey must exist and its "error" value must be absent/null.
+    /// When successFlagName is non-empty, that flag must also be true.
+    bool checkTvMutationResponse(const rapidjson::Document &doc,
+                                 const QString &operationName,
+                                 const char *mutationKey,
+                                 const char *successFlagName,
+                                 const QString &fallbackError,
+                                 QString &errorMessage)
+    {
+        errorMessage = gqlFirstErrorMessage(doc);
+        if (!errorMessage.isEmpty())
+        {
+            return false;
+        }
+
+        const auto *data = gqlDataForOperation(doc, operationName);
+        if (data == nullptr || !data->HasMember(mutationKey) ||
+            !(*data)[mutationKey].IsObject())
+        {
+            errorMessage = fallbackError;
+            return false;
+        }
+
+        const auto &payload = (*data)[mutationKey];
+        if (payload.HasMember("error"))
+        {
+            const auto &payloadError = payload["error"];
+            if (!payloadError.IsNull())
+            {
+                if (payloadError.IsString())
+                {
+                    errorMessage = QString::fromUtf8(
+                        payloadError.GetString());
+                }
+                else if (payloadError.IsObject())
+                {
+                    if (payloadError.HasMember("code") &&
+                        payloadError["code"].IsString())
+                    {
+                        errorMessage = QString::fromUtf8(
+                            payloadError["code"].GetString());
+                    }
+                    else if (payloadError.HasMember("message") &&
+                             payloadError["message"].IsString())
+                    {
+                        errorMessage = QString::fromUtf8(
+                            payloadError["message"].GetString());
+                    }
+                }
+                errorMessage = fallbackError + ": " + errorMessage;
+                return false;
+            }
+        }
+
+        if (successFlagName != nullptr && strlen(successFlagName) > 0 &&
+            (!payload.HasMember(successFlagName) ||
+             !payload[successFlagName].IsBool() ||
+             !payload[successFlagName].GetBool()))
+        {
+            errorMessage = fallbackError;
+            return false;
+        }
+
+        return true;
     }
 
     /// Checks a mutation response where success means the mutation key exists
@@ -1189,6 +1346,376 @@ void TwitchGql::unassignLeadModerator(
         "unassignChannelRole", channelId, targetUserId, oauthToken,
         "Failed to remove lead moderator", std::move(successCallback),
         std::move(failureCallback));
+}
+
+// ---------------------------------------------------------------------------
+// Channel editors (/editor, /uneditor) - TV-client mutations that take the
+// target's login name. Ported from Moltorino's runTvRoleMutation.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Shared implementation for TV-client role mutations (persisted query +
+/// input{channelID, targetUserLogin} + payload error object).
+void runEditorRoleMutation(
+    const QString &operationName, const QString &hash,
+    const QString &payloadName, const QString &channelId,
+    const QString &targetLogin, const QString &oauthToken,
+    const QString &fallbackError, std::function<void()> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    QJsonObject input;
+    input.insert("channelID", channelId);
+    input.insert("targetUserLogin", targetLogin);
+
+    QJsonObject variables;
+    variables.insert("input", input);
+
+    makeTvPersistedGqlRequest(operationName, hash, variables, oauthToken)
+        .onSuccess([operationName, payloadName, fallbackError,
+                    successCallback,
+                    failureCallback](const NetworkResult &result) {
+            auto doc = result.parseRapidJson();
+
+            // Keep the byte array alive for the duration of the call.
+            const QByteArray payloadKey = payloadName.toUtf8();
+
+            QString errorMessage;
+            if (!checkTvMutationResponse(doc, operationName,
+                                         payloadKey.constData(), nullptr,
+                                         fallbackError, errorMessage))
+            {
+                failureCallback("Twitch API Error: " + errorMessage);
+                return;
+            }
+            successCallback();
+        })
+        .onError([failureCallback](const NetworkResult &result) {
+            failureCallback("Network Error: " +
+                            QString::number(result.status().value_or(0)));
+        })
+        .execute();
+}
+
+}  // namespace
+
+void TwitchGql::addEditorUser(
+    const QString &channelId, const QString &targetLogin,
+    const QString &oauthToken, std::function<void()> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    runEditorRoleMutation(
+        "AddEditorUser",
+        "3b52bf904ff9ce1b000ac2358080f538fbd1972c1869804f0d0f345d1a56676c",
+        "addEditor", channelId, targetLogin, oauthToken,
+        "Failed to add editor", std::move(successCallback),
+        std::move(failureCallback));
+}
+
+void TwitchGql::removeEditorUser(
+    const QString &channelId, const QString &targetLogin,
+    const QString &oauthToken, std::function<void()> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    runEditorRoleMutation(
+        "RemoveEditorUser",
+        "4699d38183050854dba547d07e340e72bf1f04578f1037a38a1189fa1827790f",
+        "removeEditor", channelId, targetLogin, oauthToken,
+        "Failed to remove editor", std::move(successCallback),
+        std::move(failureCallback));
+}
+
+// ---------------------------------------------------------------------------
+// Channel point rewards (/redeem) - ported from Moltorino's
+// getChannelPointRewards and redeemCustomReward.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+qint64 rewardCostFromValue(const rapidjson::Value &obj)
+{
+    if (obj.HasMember("cost") && obj["cost"].IsInt() && obj["cost"].GetInt() > 0)
+    {
+        return obj["cost"].GetInt();
+    }
+    if (obj.HasMember("defaultCost") && obj["defaultCost"].IsInt())
+    {
+        return obj["defaultCost"].GetInt();
+    }
+    return 0;
+}
+
+QString automaticRewardTitle(const QString &type)
+{
+    static const QHash<QString, QString> titles{
+        {"RANDOM_SUB_EMOTE_UNLOCK", "Unlock a Random Emote"},
+        {"CHOSEN_SUB_EMOTE_UNLOCK", "Choose an Emote to Unlock"},
+        {"CHOSEN_MODIFIED_SUB_EMOTE_UNLOCK", "Modify a Single Emote"},
+        {"SINGLE_MESSAGE_BYPASS_SUB_MODE", "Send a Message in Sub-Only"},
+        {"SEND_HIGHLIGHTED_MESSAGE", "Highlight My Message"},
+        {"SEND_ANIMATED_MESSAGE", "Message Effects"},
+        {"SEND_GIGANTIFIED_EMOTE", "Gigantify an Emote"},
+        {"CELEBRATION", "On-Screen Celebration"},
+    };
+    return titles.value(type, type);
+}
+
+QString automaticRewardPrompt(const QString &type)
+{
+    static const QHash<QString, QString> prompts{
+        {"RANDOM_SUB_EMOTE_UNLOCK",
+         "Unlock a random subscriber emote for 24 hours."},
+        {"CHOSEN_SUB_EMOTE_UNLOCK",
+         "Pick a subscriber emote to unlock for 24 hours."},
+        {"CHOSEN_MODIFIED_SUB_EMOTE_UNLOCK",
+         "Pick an emote and modifier to unlock for 24 hours."},
+        {"SINGLE_MESSAGE_BYPASS_SUB_MODE",
+         "Send one message while sub-only mode is active."},
+        {"SEND_HIGHLIGHTED_MESSAGE", "Send one highlighted message."},
+    };
+    return prompts.value(type);
+}
+
+GqlChannelPointReward channelPointRewardFromValue(
+    const rapidjson::Value &obj, bool automatic)
+{
+    GqlChannelPointReward reward;
+    reward.isAutomatic = automatic;
+    rj::getSafe(obj, "id", reward.id);
+    QString type;
+    if (automatic && rj::getSafe(obj, "type", type))
+    {
+        reward.rewardType = type;
+    }
+    else
+    {
+        reward.rewardType = QStringLiteral("CUSTOM_REWARD");
+    }
+    if (automatic)
+    {
+        reward.title = automaticRewardTitle(reward.rewardType);
+        reward.prompt = automaticRewardPrompt(reward.rewardType);
+    }
+    else
+    {
+        rj::getSafe(obj, "title", reward.title);
+        rj::getSafe(obj, "prompt", reward.prompt);
+    }
+    if (!rj::getSafe(obj, "pricingType", reward.pricingType) ||
+        reward.pricingType.isEmpty())
+    {
+        reward.pricingType = QStringLiteral("POINTS");
+    }
+    reward.cost = rewardCostFromValue(obj);
+
+    bool isEnabled = false;
+    bool isPaused = false;
+    rj::getSafe(obj, "isEnabled", isEnabled);
+    rj::getSafe(obj, "isPaused", isPaused);
+    reward.isEnabled = isEnabled && !isPaused;
+
+    reward.isInStock = true;
+    rj::getSafe(obj, "isInStock", reward.isInStock);
+
+    reward.isUserInputRequired = false;
+    rj::getSafe(obj, "isUserInputRequired", reward.isUserInputRequired);
+    return reward;
+}
+
+}  // namespace
+
+void TwitchGql::getChannelPointRewards(
+    const QString &channelLogin, const QString &oauthToken,
+    std::function<void(GqlChannelPointRewards)> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    QJsonObject variables;
+    variables.insert("channelLogin", channelLogin);
+    variables.insert("includeGoalTypes",
+                     QJsonArray{QStringLiteral("CREATOR"),
+                                QStringLiteral("BOOST")});
+
+    makeTvPersistedGqlRequest(
+        "ChannelPointsContext",
+        "7fe050e3761eb2cf258d70ee1a21cbd76fa8cf3d7e7b12fc437e7029d446b5e3",
+        variables, oauthToken)
+        .onSuccess([successCallback, failureCallback](
+                       const NetworkResult &result) {
+            auto doc = result.parseRapidJson();
+            if (doc.HasParseError())
+            {
+                failureCallback("Failed to parse GQL response");
+                return;
+            }
+
+            if (const auto error = gqlFirstErrorMessage(doc);
+                !error.isEmpty())
+            {
+                failureCallback("Twitch API Error: " + error);
+                return;
+            }
+
+            const auto *dataVal = gqlDataForOperation(
+                doc, QStringLiteral("ChannelPointsContext"));
+            if (dataVal == nullptr || !dataVal->HasMember("community") ||
+                !(*dataVal)["community"].IsObject())
+            {
+                failureCallback("Channel point rewards are unavailable");
+                return;
+            }
+
+            const auto &community = (*dataVal)["community"];
+            if (!community.HasMember("channel") ||
+                !community["channel"].IsObject())
+            {
+                failureCallback("Channel point rewards are unavailable");
+                return;
+            }
+
+            const auto &channel = community["channel"];
+            if (!channel.HasMember("communityPointsSettings") ||
+                !channel["communityPointsSettings"].IsObject())
+            {
+                failureCallback("Channel point rewards are unavailable");
+                return;
+            }
+
+            const auto &settings = channel["communityPointsSettings"];
+
+            GqlChannelPointRewards rewards;
+            rj::getSafe(community, "id", rewards.channelId);
+            rj::getSafe(community, "displayName", rewards.channelDisplayName);
+
+            if (channel.HasMember("self") && channel["self"].IsObject())
+            {
+                const auto &self = channel["self"];
+                if (self.HasMember("communityPoints") &&
+                    self["communityPoints"].IsObject() &&
+                    self["communityPoints"].HasMember("balance") &&
+                    self["communityPoints"]["balance"].IsInt64())
+                {
+                    rewards.balance =
+                        self["communityPoints"]["balance"].GetInt64();
+                }
+            }
+
+            if (settings.HasMember("customRewards") &&
+                settings["customRewards"].IsArray())
+            {
+                for (const auto &value :
+                     settings["customRewards"].GetArray())
+                {
+                    if (!value.IsObject())
+                    {
+                        continue;
+                    }
+                    auto reward =
+                        channelPointRewardFromValue(value, false);
+                    if (reward.pricingType != "POINTS" || reward.cost <= 0)
+                    {
+                        continue;
+                    }
+                    rewards.rewards.push_back(std::move(reward));
+                }
+            }
+
+            if (settings.HasMember("automaticRewards") &&
+                settings["automaticRewards"].IsArray())
+            {
+                for (const auto &value :
+                     settings["automaticRewards"].GetArray())
+                {
+                    if (!value.IsObject())
+                    {
+                        continue;
+                    }
+                    auto reward =
+                        channelPointRewardFromValue(value, true);
+                    if (reward.pricingType != "POINTS" || reward.cost <= 0)
+                    {
+                        continue;
+                    }
+                    rewards.rewards.push_back(std::move(reward));
+                }
+            }
+
+            successCallback(std::move(rewards));
+        })
+        .onError([failureCallback](const NetworkResult &result) {
+            failureCallback("Network Error: " +
+                            QString::number(result.status().value_or(0)));
+        })
+        .execute();
+}
+
+void TwitchGql::redeemChannelPointReward(
+    const QString &channelId, const GqlChannelPointReward &reward,
+    const QString &textInput, const QString &oauthToken,
+    std::function<void(qint64)> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    QJsonObject input;
+    input.insert("channelID", channelId);
+    input.insert("cost", reward.cost);
+    input.insert("pricingType", "POINTS");
+    input.insert("rewardID", reward.id);
+    input.insert("title", reward.title);
+    input.insert("transactionID", generateUuid().remove('{').remove('}').remove('-'));
+    if (reward.prompt.trimmed().isEmpty())
+    {
+        input.insert("prompt", QJsonValue(QJsonValue::Null));
+    }
+    else
+    {
+        input.insert("prompt", reward.prompt);
+    }
+    if (!textInput.trimmed().isEmpty())
+    {
+        input.insert("textInput", textInput);
+    }
+
+    QJsonObject variables;
+    variables.insert("input", input);
+
+    makeTvPersistedGqlRequest(
+        "RedeemCustomReward",
+        "d56249a7adb4978898ea3412e196688d4ac3cea1c0c2dfd65561d229ea5dcc42",
+        variables, oauthToken)
+        .onSuccess([successCallback, failureCallback](
+                       const NetworkResult &result) {
+            auto doc = result.parseRapidJson();
+
+            QString errorMessage;
+            if (!checkTvMutationResponse(
+                    doc, QStringLiteral("RedeemCustomReward"),
+                    "redeemCommunityPointsCustomReward", nullptr,
+                    "Failed to redeem reward", errorMessage))
+            {
+                failureCallback("Twitch API Error: " + errorMessage);
+                return;
+            }
+
+            const auto *data = gqlDataForOperation(
+                doc, QStringLiteral("RedeemCustomReward"));
+            qint64 balance = -1;
+            if (data != nullptr)
+            {
+                const auto &payload =
+                    (*data)["redeemCommunityPointsCustomReward"];
+                if (payload.HasMember("balance") &&
+                    payload["balance"].IsInt64())
+                {
+                    balance = payload["balance"].GetInt64();
+                }
+            }
+
+            successCallback(balance);
+        })
+        .onError([failureCallback](const NetworkResult &result) {
+            failureCallback("Network Error: " +
+                            QString::number(result.status().value_or(0)));
+        })
+        .execute();
 }
 
 }  // namespace chatterino

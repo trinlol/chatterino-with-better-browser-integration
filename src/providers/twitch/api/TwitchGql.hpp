@@ -1,9 +1,10 @@
 // Ported from Moltorino (https://codeberg.org/MoltoBenne/Moltorino)
 // Copyright (c) MoltoBenne - MIT License
 // Adapted for Chatterino Better Browser:
-//  - Prediction GQL operations plus the blocked-term, user-lookup and
-//    channel-role (mod/vip/lead-mod/editor) mutations used by the
-//    /blockterm, /unblockterm, /leadmod and /unleadmod commands.
+//  - Prediction GQL operations plus the blocked-term, user-lookup,
+//    channel-role (lead-mod/editor) and channel-point reward operations
+//    used by the /blockterm, /unblockterm, /leadmod, /unleadmod, /editor,
+//    /uneditor and /redeem commands.
 //  - Auth uses the logged-in Chatterino account token; Moltorino's
 //    separate saved-account system is not ported.
 #pragma once
@@ -36,6 +37,28 @@ struct GqlUser {
     QString id;
     QString login;
     QString displayName;
+};
+
+// A channel point reward as returned by the community points GQL API.
+struct GqlChannelPointReward {
+    QString id;
+    QString title;
+    QString prompt;
+    QString rewardType;
+    QString pricingType;
+    int cost = 0;
+    bool isAutomatic = false;
+    bool isEnabled = false;
+    bool isInStock = false;
+    bool isUserInputRequired = false;
+};
+
+// Rewards plus the caller's channel point balance for a channel.
+struct GqlChannelPointRewards {
+    QString channelId;
+    QString channelDisplayName;
+    qint64 balance = -1;
+    QVector<GqlChannelPointReward> rewards;
 };
 
 class TwitchGql
@@ -104,6 +127,28 @@ public:
     static void unassignLeadModerator(
         const QString &channelId, const QString &targetUserId,
         const QString &oauthToken, std::function<void()> successCallback,
+        std::function<void(const QString &)> failureCallback);
+
+    // Channel editors (/editor, /uneditor) - TV-client mutations that take
+    // the target's login name.
+    static void addEditorUser(
+        const QString &channelId, const QString &targetLogin,
+        const QString &oauthToken, std::function<void()> successCallback,
+        std::function<void(const QString &)> failureCallback);
+    static void removeEditorUser(
+        const QString &channelId, const QString &targetLogin,
+        const QString &oauthToken, std::function<void()> successCallback,
+        std::function<void(const QString &)> failureCallback);
+
+    // Channel point rewards (/redeem)
+    static void getChannelPointRewards(
+        const QString &channelLogin, const QString &oauthToken,
+        std::function<void(GqlChannelPointRewards)> successCallback,
+        std::function<void(const QString &)> failureCallback);
+    static void redeemChannelPointReward(
+        const QString &channelId, const GqlChannelPointReward &reward,
+        const QString &textInput, const QString &oauthToken,
+        std::function<void(qint64)> successCallback,
         std::function<void(const QString &)> failureCallback);
 };
 

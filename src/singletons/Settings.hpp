@@ -369,6 +369,12 @@ public:
         "/predictions/closeOnFocusLoss",
         false,
     };
+    // Default /translate target language (ported from Moltorino, MIT,
+    // (c) MoltoBenne)
+    QStringSetting messageTranslationTargetLanguage{
+        "/translation/targetLanguage",
+        "en",
+    };
     BoolSetting mentionUsersWithAt = {"/behaviour/mentionUsersWithAt", false};
     BoolSetting showJoins = {"/behaviour/showJoins", false};
     BoolSetting showParts = {"/behaviour/showParts", false};

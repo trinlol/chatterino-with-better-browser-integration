@@ -24,6 +24,21 @@ fork by MoltoBenne (MIT License):
 - `/leadmod` and `/unleadmod` commands
   (`src/controllers/commands/builtin/twitch/LeadModerator.*` plus the
   channel-role mutations and user lookup in `TwitchGql.*`)
+- `/editor` and `/uneditor` commands
+  (`src/controllers/commands/builtin/twitch/Editor.*` plus the TV-client
+  editor mutations in `TwitchGql.*`)
+- `/namehistory` command and its cached lookup provider
+  (`src/providers/twitch/TwitchNameHistory.*`, command in
+  `src/controllers/commands/builtin/twitch/Translate.cpp`)
+- `/logs` command (`src/controllers/commands/builtin/twitch/Translate.cpp`)
+- `/translate`, `/translateto`, `/tl` (`/saytranslate`) commands and the
+  translation provider
+  (`src/providers/translation/Translator.*`, commands in
+  `src/controllers/commands/builtin/twitch/Translate.cpp`)
+- `/redeem` command, adapted as a chat command that lists and redeems
+  channel point rewards
+  (`src/controllers/commands/builtin/twitch/Redeem.*` plus the
+  channel-point reward operations in `TwitchGql.*`)
 - Prediction popout dialog (`src/widgets/dialogs/PredictionDialog.*`) with
   its GQL layer (`src/providers/twitch/api/TwitchGql.*`), the
   `TwitchChannel` prediction state/refresh plumbing, the channel point

@@ -99,6 +99,8 @@ set(SOURCE_FILES
         controllers/commands/builtin/twitch/Chatters.hpp
         controllers/commands/builtin/twitch/DeleteMessages.cpp
         controllers/commands/builtin/twitch/DeleteMessages.hpp
+        controllers/commands/builtin/twitch/Editor.cpp
+        controllers/commands/builtin/twitch/Editor.hpp
         controllers/commands/builtin/twitch/GetFounders.cpp
         controllers/commands/builtin/twitch/GetFounders.hpp
         controllers/commands/builtin/twitch/GetModerators.cpp
@@ -119,6 +121,8 @@ set(SOURCE_FILES
         controllers/commands/builtin/twitch/Prediction.hpp
         controllers/commands/builtin/twitch/Raid.cpp
         controllers/commands/builtin/twitch/Raid.hpp
+        controllers/commands/builtin/twitch/Redeem.cpp
+        controllers/commands/builtin/twitch/Redeem.hpp
         controllers/commands/builtin/twitch/RemoveModerator.cpp
         controllers/commands/builtin/twitch/RemoveModerator.hpp
         controllers/commands/builtin/twitch/RemoveVIP.cpp
@@ -133,6 +137,8 @@ set(SOURCE_FILES
         controllers/commands/builtin/twitch/Shoutout.hpp
         controllers/commands/builtin/twitch/StartCommercial.cpp
         controllers/commands/builtin/twitch/StartCommercial.hpp
+        controllers/commands/builtin/twitch/Translate.cpp
+        controllers/commands/builtin/twitch/Translate.hpp
         controllers/commands/builtin/twitch/Unban.cpp
         controllers/commands/builtin/twitch/Unban.hpp
         controllers/commands/builtin/twitch/UpdateChannel.cpp
@@ -497,6 +503,8 @@ set(SOURCE_FILES
         providers/twitch/TwitchIrc.hpp
         providers/twitch/TwitchIrcServer.cpp
         providers/twitch/TwitchIrcServer.hpp
+        providers/twitch/TwitchNameHistory.cpp
+        providers/twitch/TwitchNameHistory.hpp
         providers/twitch/TwitchUser.cpp
         providers/twitch/TwitchUser.hpp
         providers/twitch/TwitchUsers.cpp
@@ -531,6 +539,8 @@ set(SOURCE_FILES
 
         providers/twitch/api/Helix.cpp
         providers/twitch/api/Helix.hpp
+        providers/translation/Translator.cpp
+        providers/translation/Translator.hpp
 
         providers/twitch/api/TwitchGql.cpp
         providers/twitch/api/TwitchGql.hpp
