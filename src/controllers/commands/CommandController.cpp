@@ -17,9 +17,11 @@
 #include "controllers/commands/builtin/twitch/ChatSettings.hpp"
 #include "controllers/commands/builtin/twitch/Chatters.hpp"
 #include "controllers/commands/builtin/twitch/DeleteMessages.hpp"
+#include "controllers/commands/builtin/twitch/GetFounders.hpp"
 #include "controllers/commands/builtin/twitch/GetModerators.hpp"
 #include "controllers/commands/builtin/twitch/GetVIPs.hpp"
 #include "controllers/commands/builtin/twitch/LowTrust.hpp"
+#include "controllers/commands/builtin/twitch/Nuke.hpp"
 #include "controllers/commands/builtin/twitch/Pin.hpp"
 #include "controllers/commands/builtin/twitch/Poll.hpp"
 #include "controllers/commands/builtin/twitch/Prediction.hpp"
@@ -465,6 +467,12 @@ CommandController::CommandController(const Paths &paths)
     }
 
     this->registerCommand("/vips", &commands::getVIPs);
+
+    // Commands below are ported from Moltorino (MIT, (c) MoltoBenne)
+    this->registerCommand("/nuke", &commands::sendNuke);
+    this->registerCommand("/spam", &commands::sendSpam);
+    this->registerCommand("/pyramid", &commands::sendPyramid);
+    this->registerCommand("/founders", &commands::getFounders);
 
     this->registerCommand("/commercial", &commands::startCommercial);
 

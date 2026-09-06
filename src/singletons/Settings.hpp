@@ -333,6 +333,25 @@ public:
         "/behaviour/dismissedPinnedMessageIds", {}};
     BoolSetting allowDuplicateMessages = {"/behaviour/allowDuplicateMessages",
                                           true};
+    // Settings below are ported from Moltorino (MIT, (c) MoltoBenne)
+    BoolSetting nukePreviewEnabled = {
+        "/moderation/nuke/previewEnabled",
+        true,
+    };
+    BoolSetting nukeShowSummary = {
+        "/moderation/nuke/showSummary",
+        true,
+    };
+    BoolSetting nukeSkipVips = {"/moderation/nuke/skipVips", false};
+    QStringSetting nukeModerationMessage = {
+        "/moderation/nuke/moderationMessage",
+        "",
+    };
+    IntSetting spamCommandIntervalMs = {"/fun/spam/intervalMs", 30};
+    BoolSetting showSpamPyramidStatusMessages = {
+        "/fun/spam/showStatusMessages",
+        true,
+    };
     BoolSetting mentionUsersWithAt = {"/behaviour/mentionUsersWithAt", false};
     BoolSetting showJoins = {"/behaviour/showJoins", false};
     BoolSetting showParts = {"/behaviour/showParts", false};

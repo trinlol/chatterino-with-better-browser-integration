@@ -2,6 +2,14 @@
 
 ## Chatterino Better Browser
 
+### Unreleased
+
+#### Added
+
+- `/nuke <text> <timeout|ban|delete> <range>` mass-moderation command with a live preview above the chat input while typing (for example `/nuke bots 10m 30s`); `/nuke stop` cancels active nukes — ported from [Moltorino](https://codeberg.org/MoltoBenne/Moltorino)
+- `/spam <count> <message>` and `/pyramid <height> <message>` fun commands (`stop` cancels) — ported from Moltorino
+- `/founders [channel]` lists a channel's founders — ported from Moltorino
+
 ### v2.6.2 (2026-07-31)
 
 #### Fixed

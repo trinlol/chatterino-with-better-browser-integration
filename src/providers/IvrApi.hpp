@@ -5,6 +5,7 @@
 #pragma once
 
 #include "common/network/NetworkRequest.hpp"
+#include "providers/twitch/api/Helix.hpp"
 
 #include <QDate>
 #include <QJsonArray>
@@ -92,6 +93,12 @@ public:
         QString channelName, QString userName, QDate day, int limit,
         ResultCallback<std::vector<MessagePtr>> successCallback,
         IvrFailureCallback failureCallback);
+
+    // https://api.ivr.fi/v2/docs/static/index.html#/Twitch/post_twitch_founders__channel_
+    // Ported from Moltorino (MIT, (c) MoltoBenne)
+    void getFounders(QString channelName,
+                     ResultCallback<std::vector<HelixModerator>> resultCallback,
+                     IvrFailureCallback failureCallback);
 
     static void initialize();
 

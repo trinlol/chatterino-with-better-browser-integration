@@ -97,12 +97,16 @@ set(SOURCE_FILES
         controllers/commands/builtin/twitch/Chatters.hpp
         controllers/commands/builtin/twitch/DeleteMessages.cpp
         controllers/commands/builtin/twitch/DeleteMessages.hpp
+        controllers/commands/builtin/twitch/GetFounders.cpp
+        controllers/commands/builtin/twitch/GetFounders.hpp
         controllers/commands/builtin/twitch/GetModerators.cpp
         controllers/commands/builtin/twitch/GetModerators.hpp
         controllers/commands/builtin/twitch/GetVIPs.cpp
         controllers/commands/builtin/twitch/GetVIPs.hpp
         controllers/commands/builtin/twitch/LowTrust.cpp
         controllers/commands/builtin/twitch/LowTrust.hpp
+        controllers/commands/builtin/twitch/Nuke.cpp
+        controllers/commands/builtin/twitch/Nuke.hpp
         controllers/commands/builtin/twitch/Pin.cpp
         controllers/commands/builtin/twitch/Pin.hpp
         controllers/commands/builtin/twitch/Poll.cpp
