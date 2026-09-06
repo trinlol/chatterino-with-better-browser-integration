@@ -352,6 +352,23 @@ public:
         "/fun/spam/showStatusMessages",
         true,
     };
+    // Prediction popout settings (ported from Moltorino, MIT, (c) MoltoBenne)
+    BoolSetting enablePredictions = {"/predictions/enabled", true};
+    /// 0 = Open betting view (default), 1 = Open manage view
+    IntSetting predictionModAction = {"/predictions/modAction", 0};
+    BoolSetting predictionAutoCloseDialog = {
+        "/predictions/autoCloseDialog",
+        true,
+    };
+    BoolSetting limitPredictionDialogs = {"/predictions/limitPopups", true};
+    BoolSetting predictionDialogsPerChannel = {
+        "/predictions/limitPerChannel",
+        true,
+    };
+    BoolSetting predictionCloseOnFocusLoss = {
+        "/predictions/closeOnFocusLoss",
+        false,
+    };
     BoolSetting mentionUsersWithAt = {"/behaviour/mentionUsersWithAt", false};
     BoolSetting showJoins = {"/behaviour/showJoins", false};
     BoolSetting showParts = {"/behaviour/showParts", false};

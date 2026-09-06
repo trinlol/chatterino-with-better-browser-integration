@@ -18,6 +18,14 @@ fork by MoltoBenne (MIT License):
 - `/spam` and `/pyramid` fun commands (same files as `/nuke`)
 - `/founders` command (`src/controllers/commands/builtin/twitch/GetFounders.*`,
   `IvrApi::getFounders`)
+- Prediction popout dialog (`src/widgets/dialogs/PredictionDialog.*`) with
+  its GQL layer (`src/providers/twitch/api/TwitchGql.*`), the
+  `TwitchChannel` prediction state/refresh plumbing, the channel point
+  balance fetch, `formatCompactNumber`/`formatChannelPoints`
+  (`src/util/Helpers.*`), and the bare `/prediction` dialog entry point
+  (`src/controllers/commands/builtin/twitch/Prediction.cpp`). The dialog
+  authenticates with the logged-in Chatterino account instead of
+  Moltorino's separate saved-account store.
 
 Adaptations for this fork are noted in the file headers of each ported file.
 Moltorino itself is based on [Chatterino7](https://github.com/SevenTV/chatterino7)

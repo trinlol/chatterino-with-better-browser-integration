@@ -9,6 +9,7 @@
 - `/nuke <text> <timeout|ban|delete> <range>` mass-moderation command with a live preview above the chat input while typing (for example `/nuke bots 10m 30s`); `/nuke stop` cancels active nukes — ported from [Moltorino](https://codeberg.org/MoltoBenne/Moltorino)
 - `/spam <count> <message>` and `/pyramid <height> <message>` fun commands (`stop` cancels) — ported from Moltorino
 - `/founders [channel]` lists a channel's founders — ported from Moltorino
+- Prediction popout dialog: bare `/prediction` (or clicking the prediction banner) opens a pinned, draggable window with live betting stats, outcome bars, channel point wagering, and a template picker reusing your last five predictions. Broadcasters and mods additionally get create / lock / resolve / delete controls — ported from Moltorino. `/prediction --title ...` still uses the Helix create flow
 
 ### v2.6.2 (2026-07-31)
 

@@ -640,3 +640,35 @@ TEST(Helpers, splitOnce)
     ASSERT_EQ(splitOnce(u"foo bar", u'z'), pair(u"foo bar", u""));
     ASSERT_EQ(splitOnce(u"", u'z'), pair(u"", u""));
 }
+
+// formatCompactNumber/formatChannelPoints are ported from Moltorino
+// (https://codeberg.org/MoltoBenne/Moltorino), MIT License, (c) MoltoBenne.
+TEST(Helpers, formatCompactNumber)
+{
+    mock::BaseApplication app;
+
+    const auto locale = getSystemLocale();
+
+    ASSERT_EQ(formatCompactNumber(0), locale.toString(0));
+    ASSERT_EQ(formatCompactNumber(999), locale.toString(999));
+    ASSERT_EQ(formatCompactNumber(1000), "1k");
+    ASSERT_EQ(formatCompactNumber(1234), "1.2k");
+    ASSERT_EQ(formatCompactNumber(9999), "10k");
+    ASSERT_EQ(formatCompactNumber(1234567), "1.2m");
+    ASSERT_EQ(formatCompactNumber(2500000000), "2.5b");
+    ASSERT_EQ(formatCompactNumber(-5432), "-5.4k");
+}
+
+TEST(Helpers, formatChannelPoints)
+{
+    mock::BaseApplication app;
+
+    const auto locale = getSystemLocale();
+
+    ASSERT_EQ(formatChannelPoints(-1), "...");
+    ASSERT_EQ(formatChannelPoints(0), locale.toString(0));
+    ASSERT_EQ(formatChannelPoints(500), locale.toString(500));
+    ASSERT_EQ(formatChannelPoints(123456), locale.toString(123456));
+    ASSERT_EQ(formatChannelPoints(1234567), locale.toString(1234567));
+    ASSERT_EQ(formatChannelPoints(250000000), "250m");
+}

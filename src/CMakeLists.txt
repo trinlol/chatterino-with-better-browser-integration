@@ -528,6 +528,12 @@ set(SOURCE_FILES
         providers/twitch/api/Helix.cpp
         providers/twitch/api/Helix.hpp
 
+        providers/twitch/api/TwitchGql.cpp
+        providers/twitch/api/TwitchGql.hpp
+
+        widgets/dialogs/PredictionDialog.cpp
+        widgets/dialogs/PredictionDialog.hpp
+
         singletons/CrashHandler.cpp
         singletons/CrashHandler.hpp
         singletons/FileLogger.cpp
