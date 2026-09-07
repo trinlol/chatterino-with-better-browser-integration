@@ -152,7 +152,6 @@ TwitchChannel::TwitchChannel(const QString &name)
     this->signalHolder_.managedConnect(
         getApp()->getAccounts()->twitch.currentUserChanged, [this] {
             this->setMod(false);
-            this->setSubscribed(false);
             this->refreshPubSub();
             this->refreshTwitchChannelEmotes(false);
         });
@@ -991,11 +990,6 @@ bool TwitchChannel::isStaff() const
     return this->staff_;
 }
 
-bool TwitchChannel::isSubscribed() const
-{
-    return this->subscribed_;
-}
-
 void TwitchChannel::setMod(bool value)
 {
     if (this->mod_ != value)
@@ -1027,16 +1021,6 @@ void TwitchChannel::setStaff(bool value)
     if (this->staff_ != value)
     {
         this->staff_ = value;
-
-        this->userStateChanged.invoke();
-    }
-}
-
-void TwitchChannel::setSubscribed(bool value)
-{
-    if (this->subscribed_ != value)
-    {
-        this->subscribed_ = value;
 
         this->userStateChanged.invoke();
     }

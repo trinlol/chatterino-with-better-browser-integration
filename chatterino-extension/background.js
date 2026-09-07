@@ -1,5 +1,5 @@
 if (typeof importScripts === "function") {
-  importScripts("protocol.js", "extension-lifecycle.js", "log-console.js");
+  importScripts("protocol.js", "extension-lifecycle.js");
 }
 
 // [BACKGROUND-STARTUP] Verify background script loads
@@ -178,10 +178,6 @@ let portConnectBlocked = false; // legacy health field; state remains recoverabl
 let lastPortConnectAttempt = 0;
 let lastNativeError = "";
 let lastNativeConnectedAt = 0;
-let nativeConnectedSince = 0;
-let lastBadgeState = "";
-let lastCompleteSnapshot = null;
-const chunkReassembler = new (globalThis.ChatterinoLogConsole?.ChunkReassembler || (function(){}))();
 const PORT_CONNECT_COOLDOWN_MS = 5000;
 const PORT_RETRY_MAX_MS = 60000;
 // Keep the lease comfortably longer than the one-minute reconciliation alarm
@@ -598,13 +594,11 @@ function connectPort(fromRetry = false) {
     console.log('[ATTACH-DEBUG] Native host connection successful');
     lastNativeError = "";
     lastNativeConnectedAt = Date.now();
-    nativeConnectedSince = Date.now();
     nativeBackoff.reset();
     nativeRetryAt = 0;
     setNativeState("connected", { reason: "connected" });
   } catch (error) {
     port = null;
-    nativeConnectedSince = 0;
     lastNativeError = error?.message || String(error);
     console.error("[ATTACH-DEBUG] Native messaging connect failed:", error);
     console.warn("[Chatterino] Native messaging connect failed:", error);
@@ -623,13 +617,6 @@ function connectPort(fromRetry = false) {
       void routeNativeChatResult(msg);
       return;
     }
-    if (msg?.status === "log-snapshot") {
-      const completedSnapshot = chunkReassembler.processChunk?.(msg);
-      if (completedSnapshot) {
-        lastCompleteSnapshot = completedSnapshot;
-      }
-      return;
-    }
     if (typeof msg === "object" && msg.type === "status") {
       if (
         msg.status === "nativeChatResult" ||
@@ -639,18 +626,8 @@ function connectPort(fromRetry = false) {
         return;
       }
       switch (msg.status) {
-        case "log-snapshot": {
-          const completedSnapshot = chunkReassembler.processChunk?.(msg);
-          if (completedSnapshot) {
-            lastCompleteSnapshot = completedSnapshot;
-          }
-          break;
-        }
         case "native-host-ready":
         case "desktop-ready":
-          if (!nativeConnectedSince) {
-            nativeConnectedSince = Date.now();
-          }
           nativeSupportsV2 =
             Number(msg.protocolVersion) >= 2 ||
             msg.capabilities?.includes?.("sessions") === true;
@@ -737,7 +714,6 @@ function connectPort(fromRetry = false) {
     );
 
     port = null;
-    nativeConnectedSince = 0;
     nativeSupportsV2 = false;
     void markSessionLost({}, "native-disconnected");
     scheduleNativeReconnect(
@@ -1180,80 +1156,7 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
     return;
   }
 
-  if (
-    message.action === "get-log-console-data" ||
-    message.type === "get-log-console-data"
-  ) {
-    (async () => {
-      const sessions = await sessionStore.all();
-      const transitions = transitionRing.snapshot();
-      callback({
-        native: lastCompleteSnapshot,
-        local: {
-          sessionStore: sessions,
-          transitions,
-          nativeSupportsV2,
-          lastNativeError,
-          nativeConnectedSince,
-          badgeState: lastBadgeState,
-        },
-      });
-    })();
-    return true;
-  }
-
-  if (
-    message.action === "request-log-snapshot" ||
-    message.type === "request-log-snapshot"
-  ) {
-    const nativePort = getPort();
-    const payload = {
-      action: "log-snapshot",
-      channel: message.channel,
-      requestId: message.requestId || String(Date.now()),
-    };
-    if (nativePort) {
-      nativePort.postMessage(payload);
-    } else {
-      forwardNativeMessage(payload);
-    }
-    callback?.({ ok: true });
-    return true;
-  }
-
   switch (message.type) {
-    case "get-log-console-data":
-      (async () => {
-        const sessions = await sessionStore.all();
-        const transitions = transitionRing.snapshot();
-        callback({
-          native: lastCompleteSnapshot,
-          local: {
-            sessionStore: sessions,
-            transitions,
-            nativeSupportsV2,
-            lastNativeError,
-            nativeConnectedSince,
-            badgeState: lastBadgeState,
-          },
-        });
-      })();
-      return true;
-    case "request-log-snapshot": {
-      const nativePort = getPort();
-      const payload = {
-        action: "log-snapshot",
-        channel: message.channel,
-        requestId: message.requestId || String(Date.now()),
-      };
-      if (nativePort) {
-        nativePort.postMessage(payload);
-      } else {
-        forwardNativeMessage(payload);
-      }
-      callback?.({ ok: true });
-      return true;
-    }
     case "get-integration-health":
       getIntegrationHealth().then(callback);
       return true;
@@ -1520,10 +1423,8 @@ async function routeNativeChatResult(message) {
 }
 
 async function updateBadge() {
-  const badgeText = (await Settings.get("replaceTwitchChat")) ? "" : "off";
-  lastBadgeState = badgeText;
   chrome.action.setBadgeText({
-    text: badgeText,
+    text: (await Settings.get("replaceTwitchChat")) ? "" : "off",
   });
 }
 

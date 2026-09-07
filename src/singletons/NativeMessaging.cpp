@@ -44,12 +44,9 @@
 #include <syncstream>
 #include <thread>
 
-#include "messages/layouts/MessageLayout.hpp"
-#include "widgets/AttachedWindow.hpp"
-#include "widgets/helper/ChannelView.hpp"
-#include "widgets/splits/Split.hpp"
-
 #ifdef Q_OS_WIN
+#    include "widgets/AttachedWindow.hpp"
+
 #    include <Windows.h>
 #endif
 
@@ -857,9 +854,6 @@ void NativeMessagingServer::ReceiverThread::handleMessage(
         case nm::NativeAction::NativeChatResult:
             this->handleNativeChatResult(root);
             return;
-        case nm::NativeAction::LogSnapshot:
-            this->handleLogSnapshot(root);
-            return;
         case nm::NativeAction::Unknown:
             break;
     }
@@ -1263,169 +1257,6 @@ void NativeMessagingServer::ReceiverThread::handleNativeChatResult(
         {u"tabId"_s, identity.tabId},
         {u"generation"_s, identity.generation},
         {u"reason"_s, root["reason"_L1].toString()},
-    });
-}
-
-void NativeMessagingServer::ReceiverThread::handleLogSnapshot(
-    const QJsonObject &root)
-{
-    const auto requestId = root["requestId"_L1].toString();
-    const auto channelName =
-        root["channel"_L1].toString(root["name"_L1].toString());
-
-    postToThread([requestId, channelName, &parent = this->parent_] {
-        auto c = getApp()->getTwitch()->getChannelOrEmpty(channelName);
-        auto *tc = dynamic_cast<TwitchChannel *>(c.get());
-
-        QJsonObject channelObj{
-            {u"name"_s, tc ? tc->getName().trimmed() : channelName.trimmed()},
-            {u"roomId"_s, tc ? tc->roomId().trimmed() : QString{}},
-        };
-
-        QJsonObject streamObj;
-        QJsonObject modesObj;
-        QJsonObject selfObj;
-        if (tc)
-        {
-            const auto streamStatus = tc->accessStreamStatus();
-            streamObj = QJsonObject{
-                {u"live"_s, streamStatus->live},
-                {u"title"_s, streamStatus->title.trimmed()},
-                {u"game"_s, streamStatus->game.trimmed()},
-                {u"viewerCount"_s,
-                 static_cast<qint64>(streamStatus->viewerCount)},
-                {u"uptimeSeconds"_s,
-                 static_cast<qint64>(streamStatus->uptimeSeconds)},
-                {u"streamType"_s, streamStatus->streamType.trimmed()},
-            };
-
-            const auto roomModes = tc->accessRoomModes();
-            modesObj = QJsonObject{
-                {u"submode"_s, roomModes->submode},
-                {u"emoteOnly"_s, roomModes->emoteOnly},
-                {u"r9k"_s, roomModes->r9k},
-                {u"slowMode"_s, static_cast<qint64>(roomModes->slowMode)},
-                {u"followerOnly"_s,
-                 static_cast<qint64>(roomModes->followerOnly)},
-            };
-
-            selfObj = QJsonObject{
-                {u"subscribed"_s, tc->isSubscribed()},
-                {u"mod"_s, tc->isMod()},
-                {u"vip"_s, tc->isVip()},
-                {u"broadcaster"_s, tc->isBroadcaster()},
-            };
-        }
-
-        qint64 messageCount = 0;
-        QString lastUser;
-        QString lastText;
-        bool hasLastMessage = false;
-
-        const auto splits = AttachedWindow::splitsForChannel(c);
-        if (!splits.empty())
-        {
-            auto &messages =
-                splits.front()->getChannelView().getMessagesSnapshot();
-            messageCount = static_cast<qint64>(messages.size());
-            if (!messages.empty() && messages.back())
-            {
-                const auto *msg = messages.back()->getMessage();
-                if (msg)
-                {
-                    hasLastMessage = true;
-                    lastUser = msg->loginName;
-                    lastText = msg->messageText;
-                }
-            }
-        }
-        else if (tc)
-        {
-            const auto messages = tc->getMessageSnapshot();
-            messageCount = static_cast<qint64>(messages.size());
-            if (!messages.empty() && messages.back())
-            {
-                hasLastMessage = true;
-                lastUser = messages.back()->loginName;
-                lastText = messages.back()->messageText;
-            }
-        }
-
-        if (hasLastMessage && lastText.size() > 80)
-        {
-            lastText = lastText.left(80) + QString::fromUtf8("…");
-        }
-
-        QJsonObject chatObj{
-            {u"chatterCount"_s, tc ? tc->chatterCount() : 0},
-            {u"chatters"_s, tc ? tc->chatterCount() : 0},
-            {u"messageCount"_s, messageCount},
-        };
-        if (hasLastMessage)
-        {
-            chatObj[u"lastMessage"_s] = QJsonObject{
-                {u"user"_s, lastUser},
-                {u"text"_s, lastText},
-            };
-        }
-
-        QJsonObject snapshot{
-            {u"channel"_s, channelObj},
-            {u"stream"_s, streamObj},
-            {u"modes"_s, modesObj},
-            {u"self"_s, selfObj},
-            {u"chat"_s, chatObj},
-        };
-
-        const auto jsonBytes =
-            QJsonDocument(snapshot).toJson(QJsonDocument::Compact);
-
-        // Split into <= 900-byte chunks on UTF-8 boundaries
-        constexpr qsizetype MAX_CHUNK_SIZE = 750;
-        std::vector<QByteArray> chunks;
-        if (jsonBytes.isEmpty())
-        {
-            chunks.push_back(QByteArray{});
-        }
-        else
-        {
-            qsizetype offset = 0;
-            while (offset < jsonBytes.size())
-            {
-                qsizetype len =
-                    std::min(MAX_CHUNK_SIZE, jsonBytes.size() - offset);
-                if (offset + len < jsonBytes.size())
-                {
-                    while (len > 0 &&
-                           (static_cast<unsigned char>(
-                                jsonBytes[offset + len]) &
-                            0xC0) == 0x80)
-                    {
-                        --len;
-                    }
-                }
-                if (len <= 0)
-                {
-                    len = std::min(MAX_CHUNK_SIZE, jsonBytes.size() - offset);
-                }
-                chunks.push_back(jsonBytes.mid(offset, len));
-                offset += len;
-            }
-        }
-
-        const int total = static_cast<int>(chunks.size());
-        for (int seq = 0; seq < total; ++seq)
-        {
-            sendToBrowserExtension(QJsonObject{
-                {u"type"_s, u"status"_s},
-                {u"status"_s, u"log-snapshot"_s},
-                {u"requestId"_s, requestId},
-                {u"seq"_s, seq},
-                {u"total"_s, total},
-                {u"data"_s,
-                 QString::fromUtf8(chunks[static_cast<size_t>(seq)])},
-            });
-        }
     });
 }
 

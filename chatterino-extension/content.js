@@ -738,115 +738,6 @@
     unmarkChatIdentityDialog(findNativeChatIdentityDialog());
   }
 
-  let logConsolePanel = null;
-  let logConsolePollTimer = null;
-  let logsButton = null;
-
-  function closeLogConsole() {
-    if (logConsolePollTimer) {
-      clearInterval(logConsolePollTimer);
-      logConsolePollTimer = null;
-    }
-    const panel = document.getElementById("chatterino-log-console-panel");
-    if (panel) {
-      panel.remove();
-    }
-    logConsolePanel = null;
-  }
-
-  function fetchAndRenderLogConsole() {
-    if (!logConsolePanel) return;
-    chrome.runtime.sendMessage(
-      { action: "get-log-console-data", type: "get-log-console-data" },
-      (response) => {
-        if (chrome.runtime.lastError || !response || !logConsolePanel) {
-          return;
-        }
-        const LogConsole =
-          window.ChatterinoLogConsole || globalThis.ChatterinoLogConsole;
-        if (!LogConsole) return;
-        const merged = LogConsole.mergeLogData(response.native, response.local);
-        LogConsole.renderLogConsole(logConsolePanel, merged, {
-          onClose: closeLogConsole,
-        });
-      }
-    );
-  }
-
-  function requestLogSnapshot() {
-    const channelName = getTwitchChannelName();
-    chrome.runtime.sendMessage(
-      {
-        action: "request-log-snapshot",
-        type: "request-log-snapshot",
-        channel: channelName,
-        requestId: String(Date.now()),
-      },
-      () => {
-        if (chrome.runtime.lastError) {
-          // ignore transient error
-        }
-      }
-    );
-  }
-
-  function openLogConsole() {
-    if (logConsolePanel || document.getElementById("chatterino-log-console-panel")) {
-      return;
-    }
-    const panel = document.createElement("div");
-    panel.id = "chatterino-log-console-panel";
-    panel.className = "chatterino-log-console-panel";
-    document.body.appendChild(panel);
-    logConsolePanel = panel;
-
-    requestLogSnapshot();
-    fetchAndRenderLogConsole();
-
-    logConsolePollTimer = setInterval(() => {
-      requestLogSnapshot();
-      fetchAndRenderLogConsole();
-    }, 2000);
-  }
-
-  function toggleLogConsole() {
-    if (logConsolePanel || document.getElementById("chatterino-log-console-panel")) {
-      closeLogConsole();
-    } else {
-      openLogConsole();
-    }
-  }
-
-  function ensureLogsButton() {
-    let btn = document.getElementById("chatterino-logs-button");
-    if (!btn) {
-      btn = document.createElement("button");
-      btn.id = "chatterino-logs-button";
-      btn.className = "chatterino-logs-button";
-      btn.type = "button";
-      btn.title = "Toggle Chatterino Integration Logs";
-      btn.innerHTML =
-        '<span class="chatterino-logs-icon">›_</span><span class="chatterino-logs-label">Logs</span>';
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        toggleLogConsole();
-      });
-    }
-    mountInSlot(btn, 4);
-    logsButton = btn;
-    return btn;
-  }
-
-  window.addEventListener("keydown", (e) => {
-    if (
-      e.key === "Escape" &&
-      (logConsolePanel || document.getElementById("chatterino-log-console-panel"))
-    ) {
-      closeLogConsole();
-    }
-  });
-
   // When the Chatterino integration wipes the chat, the native summary dies
   // and the clone can no longer mirror it. Keep the displayed balance fresh
   // from the GQL stream instead. The points balance is the last numeric text
@@ -2371,13 +2262,6 @@
         // Native summary was destroyed (e.g. Chatterino chat wipe) — keep the
         // existing clone alive and refresh its balance from GQL data.
         updateReplicaBalanceFromGql();
-      }
-
-      if (channelName) {
-        ensureLogsButton();
-      } else {
-        document.getElementById("chatterino-logs-button")?.remove();
-        closeLogConsole();
       }
 
       const pollBanner = findPollBanner();

@@ -10,10 +10,6 @@
 
 #### Added
 
-- Prediction popout dialog opened via `/prediction` in the browser overlay parents to the attached overlay window (centering over it, staying on top of the browser, and tracking minimize/restore)
-- Room-mode banner above the chat input indicating when the channel is in emote-only mode or subscriber-only mode (automatically suppressing for subscribers, moderators, and broadcasters)
-- Right-clicking your own message now offers a top-level "Delete message" context menu action to delete it
-- Integration Log Console: terminal-style "Logs" toolbar button in the browser overlay opening an in-page slide-in diagnostics console showing real-time channel, stream, modes, chatter/message stats, and extension event history
 - `/nuke <text> <timeout|ban|delete> <range>` mass-moderation command with a live preview above the chat input while typing (for example `/nuke bots 10m 30s`); `/nuke stop` cancels active nukes — ported from [Moltorino](https://codeberg.org/MoltoBenne/Moltorino)
 - `/spam <count> <message>` and `/pyramid <height> <message>` fun commands (`stop` cancels) — ported from Moltorino
 - `/founders [channel]` lists a channel's founders — ported from Moltorino

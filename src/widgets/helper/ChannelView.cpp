@@ -2802,25 +2802,6 @@ void ChannelView::addMessageContextMenuItems(QMenu *menu,
 
     auto chan = this->effectiveSourceChannel();
     auto *twitchChannel = dynamic_cast<TwitchChannel *>(chan.get());
-    if (!layout->getMessage()->id.isEmpty() && twitchChannel != nullptr)
-    {
-        auto currentUser = getApp()->getAccounts()->twitch.getCurrent();
-        auto currentUserName = currentUser ? currentUser->getUserName() : "";
-        if (twitchChannel->hasModRights() ||
-            (currentUser && !currentUser->isAnon() &&
-             !currentUserName.isEmpty() &&
-             layout->getMessage()->loginName.compare(
-                 currentUserName, Qt::CaseInsensitive) == 0))
-        {
-            menu->addAction(
-                "&Delete message",
-                [twitchChannel, id = layout->getMessage()->id] {
-                    twitchChannel->deleteMessagesAs(
-                        id, getApp()->getAccounts()->twitch.getCurrent().get());
-                });
-        }
-    }
-
     if (!layout->getMessage()->id.isEmpty() && twitchChannel &&
         twitchChannel->hasModRights())
     {

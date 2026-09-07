@@ -143,7 +143,6 @@ private:
         void handleLeaseRenew(const QJsonObject &root);
         void handleReconcile(const QJsonObject &root);
         void handleNativeChatResult(const QJsonObject &root);
-        void handleLogSnapshot(const QJsonObject &root);
 
         void expireSessions();
 

@@ -15,12 +15,11 @@
 #include "singletons/Settings.hpp"
 #include "singletons/WindowManager.hpp"
 #include "util/Helpers.hpp"
-#include "widgets/AttachedWindow.hpp"
+#include "widgets/Window.hpp"
 #include "widgets/dialogs/PredictionDialog.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/splits/Split.hpp"
 #include "widgets/splits/SplitContainer.hpp"
-#include "widgets/Window.hpp"
 
 #include <QCommandLineParser>
 #include <QProcess>
@@ -41,12 +40,6 @@ Split *findOpenSplitForChannel(const ChannelPtr &channel)
     if (!channel)
     {
         return nullptr;
-    }
-
-    const auto attachedSplits = AttachedWindow::splitsForChannel(channel);
-    if (!attachedSplits.empty())
-    {
-        return attachedSplits.front();
     }
 
     auto *windowManager = getApp()->getWindows();
