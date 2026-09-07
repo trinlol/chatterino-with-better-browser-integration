@@ -350,6 +350,34 @@ void AttachedWindow::detach(const QString &winId, const QString &sessionId)
     }
 }
 
+std::vector<Split *> AttachedWindow::splitsForChannel(const ChannelPtr &channel)
+{
+    std::vector<Split *> splits;
+
+    if (!channel)
+    {
+        return splits;
+    }
+
+    for (const auto &item : items)
+    {
+        if (item.window != nullptr && item.window->ui_.split != nullptr)
+        {
+            if (item.window->height_ == 0 || !item.window->isVisible())
+            {
+                continue;
+            }
+
+            if (item.window->ui_.split->getChannel() == channel)
+            {
+                splits.push_back(item.window->ui_.split);
+            }
+        }
+    }
+
+    return splits;
+}
+
 void AttachedWindow::reportLoss(QString reason)
 {
     if (this->lossReported_ || this->sessionId_.isEmpty() || !this->onLoss_)

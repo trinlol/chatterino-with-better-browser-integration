@@ -11,6 +11,7 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace chatterino {
 
@@ -43,6 +44,7 @@ public:
     static AttachedWindow *getForeground(const GetArgs &args);
 #endif
     static void detach(const QString &winId, const QString &sessionId = {});
+    static std::vector<Split *> splitsForChannel(const ChannelPtr &channel);
 
     void setChannel(ChannelPtr channel);
 

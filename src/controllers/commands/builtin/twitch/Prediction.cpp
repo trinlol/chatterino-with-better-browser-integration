@@ -15,11 +15,12 @@
 #include "singletons/Settings.hpp"
 #include "singletons/WindowManager.hpp"
 #include "util/Helpers.hpp"
-#include "widgets/Window.hpp"
+#include "widgets/AttachedWindow.hpp"
 #include "widgets/dialogs/PredictionDialog.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/splits/Split.hpp"
 #include "widgets/splits/SplitContainer.hpp"
+#include "widgets/Window.hpp"
 
 #include <QCommandLineParser>
 #include <QProcess>
@@ -42,16 +43,22 @@ Split *findOpenSplitForChannel(const ChannelPtr &channel)
         return nullptr;
     }
 
+    const auto attachedSplits = AttachedWindow::splitsForChannel(channel);
+    if (!attachedSplits.empty())
+    {
+        return attachedSplits.front();
+    }
+
     auto *windowManager = getApp()->getWindows();
     if (windowManager == nullptr)
     {
-        return nullptr;
+        return attachedSplits.empty() ? nullptr : attachedSplits.front();
     }
 
     auto *window = windowManager->getLastSelectedWindow();
     if (window == nullptr)
     {
-        return nullptr;
+        return attachedSplits.empty() ? nullptr : attachedSplits.front();
     }
 
     auto *currentPage = dynamic_cast<SplitContainer *>(
@@ -83,6 +90,11 @@ Split *findOpenSplitForChannel(const ChannelPtr &channel)
                 return split;
             }
         }
+    }
+
+    if (!attachedSplits.empty())
+    {
+        return attachedSplits.front();
     }
 
     return nullptr;
