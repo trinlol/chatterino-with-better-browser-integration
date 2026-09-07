@@ -16,6 +16,28 @@ html.chatterino-companion-active [data-a-target="chat-line-message-container"] {
   pointer-events: none !important;
 }
 
+/* Hide Twitch's chat scrollbar while the Chatterino overlay replaces chat.
+   The overlay renders its own scrollbar; the native simplebar track would
+   otherwise show as a strip beside the overlay (the chat shell's rect does
+   not reserve space for it, so the overlay cannot cover it). Scoped to the
+   chat room's scroll containers so other simplebar instances (emote pickers,
+   settings menus) keep their scrollbars. */
+html.chatterino-companion-active section.chat-room .simplebar-track,
+html.chatterino-companion-active
+  section.chat-room
+  .chat-scrollable-area__scrollbar,
+html.chatterino-companion-active
+  section.chat-room
+  [class*="scrollbar"]:not(
+    :is(
+      .chatterino-native-reward-dialog *,
+      .chatterino-native-chat-identity-dialog *,
+      .chatterino-native-prediction-dialog *
+    )
+  ) {
+  visibility: hidden !important;
+}
+
 /* While a message-based reward redemption is pending, keep the native chat
    input/footer interactive so programmatic sends can complete the redeem. */
 html.chatterino-companion-active.chatterino-reward-pending

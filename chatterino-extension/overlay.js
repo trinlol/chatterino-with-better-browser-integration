@@ -396,6 +396,29 @@
   window.addEventListener("focus", queryChatRect);
   window.addEventListener("mouseup", () => setTimeout(queryChatRect, 10));
 
+  // Twitch relayouts the chat column without firing window resize (theater
+  // mode, sidebar toggles, player size changes). Track the shell itself so
+  // the overlay always matches its current rect.
+  if (typeof ResizeObserver !== "undefined") {
+    const chatShellObserver = new ResizeObserver(() => queryChatRect());
+    const observeChatShell = () => {
+      const shell = findChatDiv();
+      if (shell) {
+        chatShellObserver.observe(shell);
+        return true;
+      }
+      return false;
+    };
+    if (!observeChatShell()) {
+      // Shell not mounted yet - retry until it appears
+      const shellRetry = setInterval(() => {
+        if (observeChatShell()) {
+          clearInterval(shellRetry);
+        }
+      }, 1000);
+    }
+  }
+
   function syncNotificationsOverlay() {
     const notificationUi = window.ChatterinoNotificationUi;
     const isOpen = notificationUi?.isOpen(document) || false;

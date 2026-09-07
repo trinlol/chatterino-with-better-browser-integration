@@ -1247,11 +1247,15 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
         const zoom = dpr / scaleFactor;
         // adjust for sidebars and vertical tabs
         let xOffset = (message.viewportX ?? 0) / scaleFactor;
+        // Round to nearest instead of flooring: Twitch lays out .chat-shell
+        // with sub-pixel sizes, so flooring can shave up to 1px off each
+        // edge of the overlay, leaving visible hairline gaps at its top and
+        // right (the overlay is anchored bottom-left).
         let size = {
           x: message.rect.x * zoom + xOffset,
           pixelRatio: 1,
-          width: Math.floor(message.rect.width * zoom),
-          height: Math.floor(message.rect.height * zoom),
+          width: Math.round(message.rect.width * zoom),
+          height: Math.round(message.rect.height * zoom),
         };
 
         // attach to window

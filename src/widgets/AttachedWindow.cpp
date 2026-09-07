@@ -15,7 +15,10 @@
 #include <QVBoxLayout>
 #include <QWindow>
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 
 #ifdef USEWINSDK
@@ -25,6 +28,7 @@
 // don't even think about reordering these
 #    include "Windows.h"
 #    include "Psapi.h"
+#    include "dwmapi.h"
 // clang-format on
 #    pragma comment(lib, "Dwmapi.lib")
 #endif
@@ -108,6 +112,42 @@ void moveOverlayWindow(HWND hwnd, int x, int y, int width, int height)
     }
 
     ::SetWindowPos(hwnd, nullptr, x, y, width, height, flags);
+}
+
+/// Returns the browser window's VISIBLE bounds. GetWindowRect returns the
+/// outer rect, which includes Windows' invisible resize frame; that frame is
+/// only ~8px at 100% DPI and scales up on higher-DPI displays (or grows with
+/// classic borders). DWM's extended frame bounds track the actual visible
+/// window, so anchoring against them keeps the overlay flush with the chat.
+std::optional<RECT> getVisibleFrameBounds(HWND attached)
+{
+    RECT extended{};
+    if (FAILED(::DwmGetWindowAttribute(attached, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                       &extended, sizeof(extended))))
+    {
+        return std::nullopt;
+    }
+    return extended;
+}
+
+struct WindowInsets {
+    int left;
+    int top;
+    int right;
+    int bottom;
+};
+
+/// Visible-content insets of the browser window, in window coordinates.
+/// These are never negative: a DWM rect that somehow exceeds the outer rect
+/// clamps to zero (the overlay then anchors to the outer edge).
+WindowInsets getFrameInsets(const RECT &windowRect, const RECT &visibleRect)
+{
+    return {
+        .left = std::max(0L, visibleRect.left - windowRect.left),
+        .top = std::max(0L, visibleRect.top - windowRect.top),
+        .right = std::max(0L, windowRect.right - visibleRect.right),
+        .bottom = std::max(0L, windowRect.bottom - visibleRect.bottom),
+    };
 }
 
 }  // namespace
@@ -572,32 +612,60 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
             this->ui_.split->setFixedWidth(splitWidth);
         }
 
-        // offset
-        int o = this->fullscreen_ ? 0 : 8;
+        // Anchor against the browser's VISIBLE frame bounds rather than the
+        // outer window rect. The old code used a hardcoded 8px inset which is
+        // only correct at 100% DPI - on scaled displays the invisible resize
+        // frame is wider, leaving a gap above and beside the overlay.
+        const WindowInsets insets = [&]() -> WindowInsets {
+            if (this->fullscreen_)
+            {
+                return {0, 0, 0, 0};
+            }
+            if (const auto visible = getVisibleFrameBounds(attached))
+            {
+                return getFrameInsets(rect, *visible);
+            }
+            // DWM unavailable: fall back to the legacy fixed inset.
+            return {8, 8, 8, 8};
+        }();
 
         if (this->pixelRatio_ != -1.0)
         {
+            // The extension already positions the chat's x inside the
+            // viewport; the legacy -2px nudge compensated for the old fixed
+            // inset and is not needed with real frame metrics.
+            // int() truncates; rounding keeps sub-pixel chat dimensions from
+            // shaving a hairline off the top/right of the overlay.
             moveOverlayWindow(
                 hwnd,
-                int(rect.left + this->x_ * scale * this->pixelRatio_ + o - 2),
-                int(rect.bottom - this->height_ * scale - o),
-                int(this->width_ * scale), int(this->height_ * scale));
+                int(rect.left + insets.left +
+                    std::lround(this->x_ * scale * this->pixelRatio_)),
+                int(rect.bottom - insets.bottom -
+                    std::lround(this->height_ * scale)),
+                int(std::lround(this->width_ * scale)),
+                int(std::lround(this->height_ * scale)));
         }
         //support for old extension version 1.3
         else if (this->x_ != -1.0)
         {
-            moveOverlayWindow(hwnd, int(rect.left + this->x_ * scale + o),
-                              int(rect.bottom - this->height_ * scale - o),
-                              int(this->width_ * scale),
-                              int(this->height_ * scale));
+            moveOverlayWindow(hwnd,
+                              int(rect.left + insets.left +
+                                  std::lround(this->x_ * scale)),
+                              int(rect.bottom - insets.bottom -
+                                  std::lround(this->height_ * scale)),
+                              int(std::lround(this->width_ * scale)),
+                              int(std::lround(this->height_ * scale)));
         }
         //support for old extension version 1.2
         else
         {
-            moveOverlayWindow(hwnd, int(rect.right - this->width_ * scale - o),
-                              int(rect.bottom - this->height_ * scale - o),
-                              int(this->width_ * scale),
-                              int(this->height_ * scale));
+            moveOverlayWindow(hwnd,
+                              int(rect.right - insets.right -
+                                  std::lround(this->width_ * scale)),
+                              int(rect.bottom - insets.bottom -
+                                  std::lround(this->height_ * scale)),
+                              int(std::lround(this->width_ * scale)),
+                              int(std::lround(this->height_ * scale)));
         }
     }
 
