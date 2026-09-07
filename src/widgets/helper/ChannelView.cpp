@@ -2804,10 +2804,11 @@ void ChannelView::addMessageContextMenuItems(QMenu *menu,
     auto *twitchChannel = dynamic_cast<TwitchChannel *>(chan.get());
     if (!layout->getMessage()->id.isEmpty() && twitchChannel != nullptr)
     {
-        auto currentUserName =
-            getApp()->getAccounts()->twitch.getCurrent()->getUserName();
+        auto currentUser = getApp()->getAccounts()->twitch.getCurrent();
+        auto currentUserName = currentUser ? currentUser->getUserName() : "";
         if (twitchChannel->hasModRights() ||
-            (!currentUserName.isEmpty() &&
+            (currentUser && !currentUser->isAnon() &&
+             !currentUserName.isEmpty() &&
              layout->getMessage()->loginName.compare(
                  currentUserName, Qt::CaseInsensitive) == 0))
         {

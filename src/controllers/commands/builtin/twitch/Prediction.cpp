@@ -52,13 +52,13 @@ Split *findOpenSplitForChannel(const ChannelPtr &channel)
     auto *windowManager = getApp()->getWindows();
     if (windowManager == nullptr)
     {
-        return attachedSplits.empty() ? nullptr : attachedSplits.front();
+        return nullptr;
     }
 
     auto *window = windowManager->getLastSelectedWindow();
     if (window == nullptr)
     {
-        return attachedSplits.empty() ? nullptr : attachedSplits.front();
+        return nullptr;
     }
 
     auto *currentPage = dynamic_cast<SplitContainer *>(
@@ -90,11 +90,6 @@ Split *findOpenSplitForChannel(const ChannelPtr &channel)
                 return split;
             }
         }
-    }
-
-    if (!attachedSplits.empty())
-    {
-        return attachedSplits.front();
     }
 
     return nullptr;
