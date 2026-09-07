@@ -37,6 +37,7 @@
 #include "widgets/splits/DraggedSplit.hpp"
 #include "widgets/splits/PinnedMessageWidget.hpp"
 #include "widgets/splits/PredictionBannerWidget.hpp"
+#include "widgets/splits/RoomModeBannerWidget.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 #include "widgets/splits/SplitHeader.hpp"
 #include "widgets/splits/SplitInput.hpp"
@@ -97,6 +98,7 @@ Split::Split(QWidget *parent)
     , view_(new ChannelView(this, this, ChannelView::Context::None,
                             getSettings()->scrollbackSplitLimit))
     , predictionBannerWidget_(new PredictionBannerWidget(this))
+    , roomModeBannerWidget_(new RoomModeBannerWidget(this))
     , input_(new SplitInput(this))
     , overlay_(new SplitOverlay(this))
 {
@@ -112,6 +114,7 @@ Split::Split(QWidget *parent)
     this->vbox_->addWidget(this->pinnedBanner_);
     this->vbox_->addWidget(this->view_, 1);
     this->vbox_->addWidget(this->predictionBannerWidget_);
+    this->vbox_->addWidget(this->roomModeBannerWidget_);
     this->vbox_->addWidget(this->input_);
 
     this->input_->ui_.textEdit->installEventFilter(parent);
@@ -876,10 +879,12 @@ void Split::setChannel(IndirectChannel newChannel)
                 this->header_->updateChannelText();
             });
         this->pinnedBanner_->setChannel(tc);
+        this->roomModeBannerWidget_->setChannel(tc);
     }
     else
     {
         this->pinnedBanner_->setChannel(nullptr);
+        this->roomModeBannerWidget_->setChannel(nullptr);
     }
 
     this->indirectChannelChangedConnection_ =

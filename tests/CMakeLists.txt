@@ -68,6 +68,7 @@ set(test_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/BalancedResolverResults.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/UtilSerializeList.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/Aliases.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/RoomModeBanner.cpp
 
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/Snapshot.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/Snapshot.hpp

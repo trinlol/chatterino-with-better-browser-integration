@@ -912,6 +912,8 @@ set(SOURCE_FILES
         widgets/splits/PinnedMessageWidget.hpp
         widgets/splits/PredictionBannerWidget.cpp
         widgets/splits/PredictionBannerWidget.hpp
+        widgets/splits/RoomModeBannerWidget.cpp
+        widgets/splits/RoomModeBannerWidget.hpp
         widgets/splits/SplitInput.cpp
         widgets/splits/SplitInput.hpp
         widgets/splits/SpellCheckHoverPopup.cpp

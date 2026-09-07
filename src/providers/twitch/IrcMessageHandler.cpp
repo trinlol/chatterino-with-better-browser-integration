@@ -630,6 +630,7 @@ void IrcMessageHandler::handleUserStateMessage(Communi::IrcMessage *message)
             auto parsedBadges = parseBadges(badgesTag.toString());
             tc->setVIP(parsedBadges.contains("vip"));
             tc->setStaff(parsedBadges.contains("staff"));
+            tc->setSubscribed(parsedBadges.contains("subscriber"));
 
             hasModBadge = parsedBadges.contains("moderator") ||
                           parsedBadges.contains("lead_moderator");

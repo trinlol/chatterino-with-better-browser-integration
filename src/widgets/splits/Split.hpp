@@ -27,6 +27,7 @@ class SelectChannelDialog;
 class OverlayWindow;
 class PinnedMessageWidget;
 class PredictionBannerWidget;
+class RoomModeBannerWidget;
 
 struct SplitDescriptor;
 
@@ -175,6 +176,7 @@ private:
     PinnedMessageWidget *const pinnedBanner_;
     ChannelView *const view_;
     PredictionBannerWidget *const predictionBannerWidget_;
+    RoomModeBannerWidget *const roomModeBannerWidget_;
     SplitInput *const input_;
     SplitOverlay *const overlay_;
 
