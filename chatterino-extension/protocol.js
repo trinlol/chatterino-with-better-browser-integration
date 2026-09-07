@@ -18,6 +18,7 @@
     "leaseRenew",
     "reconcile",
     "nativeChatResult",
+    "log-snapshot",
   ]);
 
   const SESSION_FIELDS = [
@@ -49,6 +50,7 @@
           "leaseRenew",
           "reconcile",
           "nativeChatResult",
+          "log-snapshot",
         ].includes(message.action)
       ) {
         return {
@@ -58,18 +60,21 @@
       }
       if (
         message.action !== "reconcile" &&
+        message.action !== "log-snapshot" &&
         !String(message.sessionId || "").trim()
       ) {
         return { ok: false, error: "sessionId is required for protocol v2" };
       }
       if (
         message.action !== "reconcile" &&
+        message.action !== "log-snapshot" &&
         (!Number.isInteger(message.generation) || message.generation < 0)
       ) {
         return { ok: false, error: "generation is required for protocol v2" };
       }
       if (
         message.action !== "reconcile" &&
+        message.action !== "log-snapshot" &&
         (message.browserWindowId === undefined ||
           (typeof message.browserWindowId !== "number" &&
             typeof message.browserWindowId !== "string") ||

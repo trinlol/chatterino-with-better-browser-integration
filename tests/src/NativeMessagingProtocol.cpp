@@ -148,3 +148,13 @@ TEST(NativeMessagingProtocol, CurrentEngagementShapeIsValidated)
         {"channel", "example"},
     }));
 }
+
+TEST(NativeMessagingProtocol, LogSnapshotIsAccepted)
+{
+    EXPECT_EQ(parseNativeMessage({{"action", "log-snapshot"}}).action,
+              NativeAction::LogSnapshot);
+    EXPECT_EQ(parseNativeMessage({{"protocolVersion", 2},
+                                  {"action", "log-snapshot"},
+                                  {"channel", "example"}}).action,
+              NativeAction::LogSnapshot);
+}

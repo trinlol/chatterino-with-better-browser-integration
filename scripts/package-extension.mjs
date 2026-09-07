@@ -26,6 +26,7 @@ const runtimeFiles = [
   "content.js",
   "icon.png",
   "integration-health.js",
+  "log-console.js",
   "manifest.json",
   "overlay.js",
   "page-inject.js",

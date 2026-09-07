@@ -584,3 +584,336 @@ html.chatterino-companion-active
   overflow-y: auto !important;
   touch-action: pan-y !important;
 }
+
+/* ==========================================================================
+   Integration Log Console (Toolbar pill button & slide-in panel)
+   ========================================================================== */
+
+#chatterino-logs-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background-color: #18181b !important;
+  border: 1px solid #3b82f6 !important;
+  border-radius: 4px !important;
+  padding: 0 10px !important;
+  height: 30px !important;
+  color: #efeff1 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  outline: none !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease !important;
+  user-select: none !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+  line-height: normal !important;
+}
+
+#chatterino-logs-button:hover {
+  background-color: #26262b !important;
+  border-color: #60a5fa !important;
+}
+
+#chatterino-logs-button .chatterino-logs-icon {
+  color: #3b82f6 !important;
+  font-weight: bold !important;
+  font-size: 13px !important;
+}
+
+#chatterino-logs-button .chatterino-logs-label {
+  color: #efeff1 !important;
+}
+
+#chatterino-log-console-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 440px;
+  max-width: 90vw;
+  height: 100vh;
+  z-index: 2147483647;
+  background: rgba(18, 18, 24, 0.95);
+  backdrop-filter: blur(12px);
+  color: #e4e4e7;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+  overflow-y: auto;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+#chatterino-log-console-panel * {
+  box-sizing: border-box;
+}
+
+.chatterino-log-header {
+  padding: 14px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(24, 24, 32, 0.8);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.chatterino-log-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f4f4f5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chatterino-log-term-prompt {
+  color: #3b82f6;
+  font-family: monospace;
+  font-weight: bold;
+}
+
+.chatterino-log-close-btn {
+  background: transparent;
+  border: none;
+  color: #a1a1aa;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.chatterino-log-close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.chatterino-log-body {
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chatterino-log-section {
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.chatterino-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 10px 0;
+}
+
+.title-session {
+  color: #3b82f6 !important;
+}
+
+.title-channel {
+  color: #a855f7 !important;
+}
+
+.title-chat {
+  color: #22c55e !important;
+}
+
+.title-events {
+  color: #f59e0b !important;
+}
+
+.title-raw {
+  color: #9ca3af !important;
+}
+
+.chatterino-log-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chatterino-log-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.4;
+  gap: 12px;
+}
+
+.chatterino-log-label {
+  color: #a1a1aa;
+  flex-shrink: 0;
+}
+
+.chatterino-log-value {
+  color: #f4f4f5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-align: right;
+  word-break: break-word;
+}
+
+.chatterino-log-err {
+  color: #ef4444;
+}
+
+.chatterino-log-subhead {
+  font-size: 11px;
+  font-weight: 600;
+  color: #71717a;
+  text-transform: uppercase;
+  margin: 10px 0 6px 0;
+}
+
+.chatterino-log-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chatterino-log-session-item {
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+}
+
+.chatterino-log-code {
+  color: #93c5fd;
+}
+
+.chatterino-log-val {
+  color: #d4d4d8;
+  margin-left: 4px;
+}
+
+.chatterino-status-pill {
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: inline-block;
+}
+
+.chatterino-status-pill.live {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.chatterino-status-pill.offline {
+  background: rgba(156, 163, 175, 0.15);
+  color: #9ca3af;
+  border: 1px solid rgba(156, 163, 175, 0.3);
+}
+
+.chatterino-log-badges {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.chatterino-pill-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.chatterino-pill-badge.active {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.chatterino-pill-badge.inactive {
+  background: rgba(255, 255, 255, 0.04);
+  color: #71717a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chatterino-log-empty {
+  font-size: 12px;
+  color: #71717a;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+.chatterino-log-events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chatterino-log-event-row {
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chatterino-log-event-time {
+  color: #f59e0b;
+  font-size: 10px;
+}
+
+.chatterino-log-event-name {
+  color: #fef3c7;
+  font-weight: 600;
+}
+
+.chatterino-log-event-details {
+  color: #a1a1aa;
+  font-size: 10px;
+  word-break: break-all;
+}
+
+.chatterino-raw-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.chatterino-log-copy-btn {
+  background: #27272a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #e4e4e7;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.chatterino-log-copy-btn:hover {
+  background: #3f3f46;
+}
+
+.chatterino-log-json {
+  max-height: 200px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #a1a1aa;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin: 0;
+}
