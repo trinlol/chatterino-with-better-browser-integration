@@ -40,6 +40,7 @@
 #include "util/Twitch.hpp"
 #include "widgets/buttons/LabelButton.hpp"
 #include "widgets/dialogs/EmotePopup.hpp"
+#include "widgets/dialogs/MessageInspectorDialog.hpp"
 #include "widgets/dialogs/ReplyThreadPopup.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
 #include "widgets/dialogs/UserInfoPopup.hpp"
@@ -2320,8 +2321,8 @@ void ChannelView::mouseReleaseEvent(QMouseEvent *event)
                                                event->globalPosition())) > 10.F)
             {
                 this->clickTimer_.stop();
-                return;
             }
+            return;
         }
         else if (this->isLeftMouseDown_)
         {
@@ -2881,6 +2882,51 @@ void ChannelView::addMessageContextMenuItems(QMenu *menu,
                 }
             }
         });
+    }
+
+    // Developer submenu
+    if (layout && layout->getMessage())
+    {
+        menu->addSeparator();
+        auto *devMenu = menu->addMenu("&Developer");
+        auto msg = layout->getMessage();
+        auto msgPtr = layout->getMessagePtr();
+
+        devMenu->addAction("Inspect Message...", [this, msgPtr] {
+            auto *dialog = new MessageInspectorDialog(msgPtr, this);
+            dialog->setAttribute(Qt::WA_DeleteOnClose);
+            dialog->show();
+            dialog->raise();
+            dialog->activateWindow();
+        });
+
+        if (!msg->id.isEmpty())
+        {
+            devMenu->addAction("Copy Message ID", [id = msg->id] {
+                crossPlatformCopy(id);
+            });
+        }
+
+        if (!msg->userID.isEmpty())
+        {
+            devMenu->addAction("Copy Sender User ID", [userID = msg->userID] {
+                crossPlatformCopy(userID);
+            });
+        }
+
+        devMenu->addAction("Copy Message JSON", [msg] {
+            auto jsonString = QJsonDocument{msg->toJson()}.toJson(
+                QJsonDocument::Indented);
+            crossPlatformCopy(QString::fromUtf8(jsonString));
+        });
+
+        if (this->split_ != nullptr)
+        {
+            devMenu->addSeparator();
+            devMenu->addAction("Channel Developer Tools...", [this] {
+                this->split_->openChannelDevToolsDialog();
+            });
+        }
     }
 }
 

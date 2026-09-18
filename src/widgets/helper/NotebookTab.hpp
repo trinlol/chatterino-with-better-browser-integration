@@ -126,6 +126,7 @@ private:
     int normalTabWidthForHeight(int height) const;
 
     bool shouldMessageHighlight(const ChannelView &channelViewSource) const;
+    bool isKickTab() const;
 
     using HighlightSources =
         std::unordered_map<ChannelView::ChannelViewID, HighlightState>;

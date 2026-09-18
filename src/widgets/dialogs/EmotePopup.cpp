@@ -189,22 +189,6 @@ auto makeEmojiMessage(const std::vector<EmojiPtr> &emojiMap,
     return builder.release();
 }
 
-auto makeUnavailableEmoteMessage(const std::vector<QString> &emoteNames)
-{
-    MessageBuilder builder;
-    builder->flags.set(MessageFlag::Centered);
-
-    for (const auto &emoteName : emoteNames)
-    {
-        builder
-            .emplace<TextElement>(
-                emoteName, MessageElementFlags{MessageElementFlag::EmoteText,
-                                               MessageElementFlag::AlwaysShow})
-            ->setLink(Link(Link::Type::InsertText, emoteName));
-    }
-
-    return builder.release();
-}
 
 auto makeInfoTextMessage(const QString &text)
 {
@@ -836,38 +820,6 @@ void EmotePopup::updateFavouriteEmotesAndEmojis()
                                    return v.second;
                                });
         chan->addMessage(makeEmojiMessage(emojis), MessageContext::Original);
-    }
-
-    // Show favourited Emotes that are currently not available
-    std::vector<QString> unavailableEmotes;
-    for (const auto &emoteName : getSettings()->favouriteEmotes.getValue())
-    {
-        auto it = std::ranges::find_if(
-            this->favouriteEmotes_, [emoteName](const auto &emote) {
-                return emoteName == emote->name.string;
-            });
-        if (it == this->favouriteEmotes_.end())
-        {
-            unavailableEmotes.push_back(emoteName);
-        }
-    }
-    if (!unavailableEmotes.empty())
-    {
-        static const auto explainUnavailability =
-            u"Emotes can be unavailable because they are specific for a "
-            u"particular channel, you are no longer subscribed to a channel "
-            u"that provides the emotes or we were unable to verify that you "
-            u"have access to an emote due to network issues."_s;
-
-        auto msg =
-            makeInfoTextMessage("Currently unavailable favourite emotes");
-        chan->addMessage(msg, MessageContext::Original);
-
-        msg = makeInfoTextMessage(explainUnavailability);
-        chan->addMessage(msg, MessageContext::Original);
-
-        chan->addMessage(makeUnavailableEmoteMessage(unavailableEmotes),
-                         MessageContext::Original);
     }
 }
 

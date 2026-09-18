@@ -76,9 +76,10 @@ private:
     bool isMod_{};
     bool isBroadcaster_{};
 
-    Split *split_;
+    QPointer<Split> split_;
 
     QString userName_;
+
     QString userId_;
     QString avatarUrl_;
 

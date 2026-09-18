@@ -23,6 +23,7 @@
 #include "util/CustomPlayer.hpp"
 #include "util/StreamLink.hpp"
 #include "widgets/ChatterListWidget.hpp"
+#include "widgets/dialogs/MarqueeHistoryDialog.hpp"
 #include "widgets/dialogs/SelectChannelDialog.hpp"
 #include "widgets/dialogs/SelectChannelFiltersDialog.hpp"
 #include "widgets/dialogs/UserInfoPopup.hpp"
@@ -33,9 +34,10 @@
 #include "widgets/helper/SearchPopup.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/OverlayWindow.hpp"
+#include "widgets/dialogs/ChannelDevToolsDialog.hpp"
 #include "widgets/Scrollbar.hpp"
 #include "widgets/splits/DraggedSplit.hpp"
-#include "widgets/splits/PinnedMessageWidget.hpp"
+#include "widgets/splits/MarqueeWidget.hpp"
 #include "widgets/splits/PredictionBannerWidget.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 #include "widgets/splits/SplitHeader.hpp"
@@ -93,7 +95,7 @@ Split::Split(QWidget *parent)
     , channel_(Channel::getEmpty())
     , vbox_(new QVBoxLayout(this))
     , header_(new SplitHeader(this))
-    , pinnedBanner_(new PinnedMessageWidget(this))
+    , marqueeWidget_(new MarqueeWidget(this))
     , view_(new ChannelView(this, this, ChannelView::Context::None,
                             getSettings()->scrollbackSplitLimit))
     , predictionBannerWidget_(new PredictionBannerWidget(this))
@@ -109,10 +111,15 @@ Split::Split(QWidget *parent)
     this->vbox_->setContentsMargins(1, 1, 1, 1);
 
     this->vbox_->addWidget(this->header_);
-    this->vbox_->addWidget(this->pinnedBanner_);
+    this->vbox_->addWidget(this->marqueeWidget_);
     this->vbox_->addWidget(this->view_, 1);
     this->vbox_->addWidget(this->predictionBannerWidget_);
     this->vbox_->addWidget(this->input_);
+
+    this->signalHolder_.managedConnect(this->marqueeWidget_->visibilityChanged,
+                                       [this] {
+                                           this->header_->updateMarqueeButton();
+                                       });
 
     this->input_->ui_.textEdit->installEventFilter(parent);
 
@@ -734,9 +741,9 @@ SplitInput &Split::getInput()
     return *this->input_;
 }
 
-PinnedMessageWidget *Split::getPinnedBanner() const
+MarqueeWidget *Split::getMarqueeWidget() const
 {
-    return this->pinnedBanner_;
+    return this->marqueeWidget_;
 }
 
 void Split::updateInputPlaceholder()
@@ -845,6 +852,11 @@ void Split::setChannel(IndirectChannel newChannel)
 {
     this->channel_ = newChannel;
 
+    if (this->channelDevToolsDialog_)
+    {
+        this->channelDevToolsDialog_->attachChannel(newChannel.get());
+    }
+
     this->predictionBannerWidget_->setChannel(newChannel.get());
     this->view_->setChannel(newChannel.get());
 
@@ -875,11 +887,11 @@ void Split::setChannel(IndirectChannel newChannel)
             [this](const std::vector<HelixMinimalUser> &) {
                 this->header_->updateChannelText();
             });
-        this->pinnedBanner_->setChannel(tc);
+        this->marqueeWidget_->setChannel(tc);
     }
     else
     {
-        this->pinnedBanner_->setChannel(nullptr);
+        this->marqueeWidget_->setChannel(nullptr);
     }
 
     this->indirectChannelChangedConnection_ =
@@ -1242,6 +1254,22 @@ void Split::openSubPage()
     }
 }
 
+void Split::openChannelDevToolsDialog()
+{
+    if (this->channelDevToolsDialog_)
+    {
+        this->channelDevToolsDialog_->show();
+        this->channelDevToolsDialog_->raise();
+        this->channelDevToolsDialog_->activateWindow();
+        return;
+    }
+
+    this->channelDevToolsDialog_ =
+        new ChannelDevToolsDialog(this->getChannel(), this);
+    this->channelDevToolsDialog_->setAttribute(Qt::WA_DeleteOnClose);
+    this->channelDevToolsDialog_->show();
+}
+
 void Split::setFiltersDialog()
 {
     SelectChannelFiltersDialog d(this->getFilters(), this);
@@ -1298,9 +1326,21 @@ void Split::reconnect()
     this->getChannel()->reconnect();
 }
 
-void Split::togglePinnedBanner()
+void Split::toggleMarqueeBanner()
 {
-    this->pinnedBanner_->toggleUserPinned();
+    this->marqueeWidget_->toggleUserMarquee();
+    this->header_->updateMarqueeButton();
+}
+
+bool Split::isMarqueeBannerVisible() const
+{
+    return this->marqueeWidget_->isUserMarqueeVisible();
+}
+
+void Split::showMarqueeHistory()
+{
+    auto *dialog = new MarqueeHistoryDialog(this);
+    dialog->show();
 }
 
 void Split::dragEnterEvent(QDragEnterEvent *event)

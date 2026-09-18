@@ -2,11 +2,30 @@
 
 ## Chatterino Better Browser
 
+### v2.7.0 (2026-09-18)
+
+#### Added
+
+- **Themes Customization Studio**: Full-featured theme customization studio in Chatterino Settings under General with real-time live chat split preview, grouped color pickers for every UI token, and custom theme persistence (`saveAsCustom`, `importFromFile`, `exportToFile`, `deleteCustomTheme`)
+- **12 Standalone Preset Palettes**: Dracula, Catppuccin Mocha, Catppuccin Macchiato, Catppuccin Frappé, Catppuccin Latte, Nord, Tokyo Night, Gruvbox Dark, One Dark, Solarized Dark, Solarized Light, and Synthwave '84
+- **Developer Tools & Twitch Message Inspector**:
+  - `/dev` command and channel developer dashboard displaying raw numeric Twitch room ID, moderation modes, real-time message throughput (MPS), and broadcast metadata
+  - Right-click "Inspect Message..." dialog exposing Twitch message UUID, numeric author user ID, timestamp telemetry, network transit latency calculation, raw badge parameters, and JSON export
+
+#### Fixed
+
+- Fixed application crash on double-clicking usernames in chat caused by lifetime invalidation of temporary message snapshot iterators
+- Fixed cross-channel favourite emote leakage where favourite emotes from one channel displayed as text in other channels
+- Fixed startup fast-fail crash (`0xc0000409`) during console attachment on Windows
+- Fixed startup stack overflow recursion crash (`0xc00000FD`) between ThemesPage and Theme reloading
+- Removed deprecated Channel Intelligence subsystem
+
 ### Unreleased
 
 #### Fixed
 
 - The favourite-emote star now only appears in the emote picker popup, not on emotes posted in chat
+- A running prediction is no longer pasted as a static banner over the Chatterino chat; the browser extension now surfaces an under-player entry (toolbar portal replica, or a fallback pill when the native banner is hidden by companion mode) that reopens Twitch's native "How many Channel Points?" bet prompt so you can actually vote
 
 #### Added
 

@@ -8,6 +8,8 @@
 #include "common/QLogging.hpp"
 #include "debug/AssertInGuiThread.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "providers/kick/KickManager.hpp"
+#include "providers/combined/CombinedManager.hpp"
 #include "util/QMagicEnum.hpp"
 #include "widgets/Window.hpp"
 
@@ -141,6 +143,10 @@ IndirectChannel SplitDescriptor::decodeChannel() const
             return getApp()->getTwitch()->getAutomodChannel();
         case Channel::Type::Misc:
             return getApp()->getTwitch()->getChannelOrEmpty(this->channelName_);
+        case Channel::Type::Kick:
+            return getApp()->getKick()->getOrAddChannel(this->channelName_);
+        case Channel::Type::Combined:
+            return getApp()->getCombined()->getOrAddChannel(this->channelName_);
 
         case Channel::Type::None:
         case Channel::Type::Direct:

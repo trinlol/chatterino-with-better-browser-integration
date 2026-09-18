@@ -17,7 +17,9 @@ using EmotePtr = std::shared_ptr<const Emote>;
 struct UserBadgeDisplayEntry {
     EmotePtr emote;
     QString tooltip;
+    int priority{100};
 };
+
 
 class FlowLayout;
 
@@ -35,10 +37,9 @@ protected:
 private:
     void rebuild();
 
-    static constexpr int COLLAPSED_BADGE_LIMIT = 12;
-
     QVector<UserBadgeDisplayEntry> badges_;
     FlowLayout *badgeLayout_ = nullptr;
 };
+
 
 }  // namespace chatterino

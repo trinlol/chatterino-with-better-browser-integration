@@ -571,9 +571,14 @@ private:
 std::vector<QPointer<PredictionDialog>> PredictionDialog::activeDialogs_;
 
 PredictionDialog::PredictionDialog(TwitchChannel *channel, QWidget *parent)
-    : DraggablePopup(true, parent)
+    : DraggablePopup(true, nullptr)
     , channel_(channel)
 {
+    if (parent)
+    {
+        QObject::connect(parent, &QObject::destroyed, this, &QWidget::deleteLater);
+    }
+
     this->setAttribute(Qt::WA_DeleteOnClose);
     this->setObjectName("PredictionDialog");
     this->setWindowTitle("Prediction");

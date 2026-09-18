@@ -340,6 +340,108 @@ std::unique_ptr<MessageElement> EmoteElement::clone() const
     return elem;
 }
 
+TwitchGifElement::TwitchGifElement(const EmotePtr &emote, QString gifUrl,
+                                   MessageElementFlags flags,
+                                   const MessageColor &textElementColor)
+    : EmoteElement(emote, flags, textElementColor)
+    , gifUrl_(std::move(gifUrl))
+{
+    this->setLink({Link::Url, this->gifUrl_});
+    this->setTooltip(emote->tooltip.string);
+}
+
+void TwitchGifElement::ensureLink()
+{
+    if (this->linkElement_)
+    {
+        return;
+    }
+
+    auto copyStr = this->getEmote()->getCopyString();
+    this->linkElement_ = std::make_unique<LinkElement>(
+        LinkElement::Parsed{
+            .lowercase = copyStr,
+            .original = copyStr,
+        },
+        this->gifUrl_, MessageElementFlag::Text, MessageColor::Link);
+    this->linkElement_->setTrailingSpace(this->hasTrailingSpace());
+}
+
+void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
+                                      const MessageLayoutContext &ctx)
+{
+    if (ctx.flags.hasNone(this->getFlags()))
+    {
+        return;
+    }
+
+    if (getSettings()->showTwitchGifsInline.getValue() &&
+        ctx.flags.has(MessageElementFlag::EmoteImage))
+    {
+        auto image =
+            this->getEmote()->images.getImageOrLoaded(container.getImageScale());
+
+        if (image->isEmpty())
+        {
+            this->ensureLink();
+            this->linkElement_->addToContainer(container, ctx);
+            return;
+        }
+
+        auto emoteScale = getSettings()->emoteScale.getValue();
+        auto gifScale = getSettings()->twitchGifScale.getValue();
+
+        QSizeF rawSize = image->size();
+        if (rawSize.height() <= 0)
+        {
+            rawSize.setHeight(28);
+        }
+        if (rawSize.width() <= 0)
+        {
+            rawSize.setWidth(28);
+        }
+
+        qreal baseHeight = 28.0 * gifScale;
+        qreal targetH = baseHeight * container.getScale() * emoteScale;
+        qreal targetW = targetH * (rawSize.width() / rawSize.height());
+
+        qreal maxW = 180.0 * container.getScale() * emoteScale;
+        if (targetW > maxW)
+        {
+            targetW = maxW;
+            targetH = targetW * (rawSize.height() / rawSize.width());
+        }
+
+        container.addElement(
+            this->makeImageLayoutElement(image, QSizeF(targetW, targetH)));
+        return;
+    }
+
+    this->ensureLink();
+    this->linkElement_->addToContainer(container, ctx);
+}
+
+QJsonObject TwitchGifElement::toJson() const
+{
+    auto base = EmoteElement::toJson();
+    base["type"_L1] = u"TwitchGifElement"_s;
+    base["gifUrl"_L1] = this->gifUrl_;
+    return base;
+}
+
+std::string_view TwitchGifElement::type() const
+{
+    return std::remove_pointer_t<decltype(this)>::TYPE;
+}
+
+std::unique_ptr<MessageElement> TwitchGifElement::clone() const
+{
+    auto elem = std::make_unique<TwitchGifElement>(
+        this->getEmote(), this->gifUrl_, this->getFlags());
+    elem->cloneFrom(*this);
+    return elem;
+}
+
 LayeredEmoteElement::LayeredEmoteElement(
     std::vector<LayeredEmoteElement::Emote> &&emotes, MessageElementFlags flags,
     const MessageColor &textElementColor)
@@ -551,9 +653,12 @@ std::unique_ptr<MessageElement> LayeredEmoteElement::clone() const
 }
 
 // BADGE
-BadgeElement::BadgeElement(const EmotePtr &emote, MessageElementFlags flags)
+BadgeElement::BadgeElement(const EmotePtr &emote, MessageElementFlags flags,
+                           const QString &badgeKey, const QString &badgeValue)
     : MessageElement(flags)
     , emote_(emote)
+    , badgeKey_(badgeKey)
+    , badgeValue_(badgeValue)
 {
     this->setTooltip(emote->tooltip.string);
 }
@@ -580,6 +685,32 @@ EmotePtr BadgeElement::getEmote() const
     return this->emote_;
 }
 
+void BadgeElement::setEmote(const EmotePtr &emote)
+{
+    this->emote_ = emote;
+}
+
+const QString &BadgeElement::getBadgeKey() const
+{
+    return this->badgeKey_;
+}
+
+const QString &BadgeElement::getBadgeValue() const
+{
+    return this->badgeValue_;
+}
+
+bool BadgeElement::hasTwitchBadge() const
+{
+    return !this->badgeKey_.isEmpty();
+}
+
+void BadgeElement::setTwitchBadge(const QString &key, const QString &value)
+{
+    this->badgeKey_ = key;
+    this->badgeValue_ = value;
+}
+
 MessageLayoutElement *BadgeElement::makeImageLayoutElement(
     const ImagePtr &image, QSizeF size)
 {
@@ -603,7 +734,8 @@ std::string_view BadgeElement::type() const
 }
 std::unique_ptr<MessageElement> BadgeElement::clone() const
 {
-    auto elem = std::make_unique<BadgeElement>(this->emote_, this->getFlags());
+    auto elem = std::make_unique<BadgeElement>(
+        this->emote_, this->getFlags(), this->badgeKey_, this->badgeValue_);
     elem->cloneFrom(*this);
     return elem;
 }

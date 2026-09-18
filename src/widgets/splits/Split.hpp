@@ -25,8 +25,9 @@ class SplitContainer;
 class SplitOverlay;
 class SelectChannelDialog;
 class OverlayWindow;
-class PinnedMessageWidget;
+class MarqueeWidget;
 class PredictionBannerWidget;
+class ChannelDevToolsDialog;
 
 struct SplitDescriptor;
 
@@ -58,7 +59,7 @@ public:
 
     ChannelView &getChannelView();
     SplitInput &getInput();
-    [[nodiscard]] PinnedMessageWidget *getPinnedBanner() const;
+    [[nodiscard]] MarqueeWidget *getMarqueeWidget() const;
 
     IndirectChannel getIndirectChannel() const;
     ChannelPtr getChannel() const;
@@ -172,7 +173,7 @@ private:
 
     QVBoxLayout *const vbox_;
     SplitHeader *const header_;
-    PinnedMessageWidget *const pinnedBanner_;
+    MarqueeWidget *const marqueeWidget_;
     ChannelView *const view_;
     PredictionBannerWidget *const predictionBannerWidget_;
     SplitInput *const input_;
@@ -181,6 +182,7 @@ private:
     QPointer<OverlayWindow> overlayWindow_;
 
     QPointer<SelectChannelDialog> selectChannelDialog_;
+    QPointer<ChannelDevToolsDialog> channelDevToolsDialog_;
 
     pajlada::Signals::Connection channelIDChangedConnection_;
     pajlada::Signals::Connection usermodeChangedConnection_;
@@ -212,8 +214,11 @@ public Q_SLOTS:
     void showSearch(bool singleChannel);
     void openChatterList();
     void openSubPage();
+    void openChannelDevToolsDialog();
     void reconnect();
-    void togglePinnedBanner();
+    void toggleMarqueeBanner();
+    bool isMarqueeBannerVisible() const;
+    void showMarqueeHistory();
 };
 
 }  // namespace chatterino

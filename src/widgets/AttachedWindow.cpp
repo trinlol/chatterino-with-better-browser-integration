@@ -562,7 +562,14 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
     // Update topmost state based on foreground window
     HWND foreground = ::GetForegroundWindow();
     HWND root = ::GetAncestor(foreground, GA_ROOTOWNER);
-    bool isBrowserActive = (root == attached || root == hwnd);
+    DWORD foregroundPid = 0;
+    if (foreground)
+    {
+        ::GetWindowThreadProcessId(foreground, &foregroundPid);
+    }
+    bool isBrowserActive =
+        (root == attached || root == hwnd ||
+         (foregroundPid != 0 && foregroundPid == ::GetCurrentProcessId()));
 
     if (isBrowserActive != this->wasBrowserActive_)
     {
@@ -598,6 +605,10 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
 
         for (auto w : this->ui_.split->findChildren<BaseWidget *>())
         {
+            if (w->isWindow())
+            {
+                continue;
+            }
             w->setOverrideScale(ourScale);
         }
         this->ui_.split->setOverrideScale(ourScale);

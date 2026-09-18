@@ -460,6 +460,49 @@ html.chatterino-companion-active .chatterino-moved-poll-inline * {
   flex-shrink: 0 !important;
 }
 
+/* Prediction vote fallback — a toolbar entry shown beside the player when the
+   native prediction banner is gone (companion mode wiped it) but a prediction
+   is still accepting entries. Clicking it reopens Twitch's native bet prompt
+   so the viewer can actually spend their points — instead of pasting the
+   prediction as a static banner over the Chatterino chat. */
+.chatterino-prediction-vote-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background-color: #063f31 !important;
+  border: 1px solid #00f593 !important;
+  border-radius: 4px !important;
+  padding: 4px 10px !important;
+  height: 30px !important;
+  color: #efeff1 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  max-width: 240px !important;
+  white-space: nowrap !important;
+}
+
+.chatterino-prediction-vote-pill .dot {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: #00f593 !important;
+  flex-shrink: 0 !important;
+}
+
+.chatterino-prediction-vote-pill .label {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.chatterino-prediction-vote-pill:hover,
+.chatterino-prediction-vote-pill:focus-visible {
+  background-color: #0a5247 !important;
+  outline: none !important;
+}
+
 div[role="dialog"]:has(.reward-center__content),
 div.ReactModal__Content:has(.reward-center__content),
 div[role="dialog"][aria-labelledby="channel-points-reward-center-header"] {

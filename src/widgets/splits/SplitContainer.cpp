@@ -29,6 +29,7 @@
 #include <QPainterPath>
 
 #include <algorithm>
+#include <QSet>
 
 namespace chatterino {
 
@@ -962,6 +963,7 @@ void SplitContainer::refreshTabTitle()
 
     QString newTitle = "";
     bool first = true;
+    QSet<QString> seen;
 
     for (const auto &chatWidget : this->splits_)
     {
@@ -970,6 +972,13 @@ void SplitContainer::refreshTabTitle()
         {
             continue;
         }
+
+        auto lowerName = channelName.toLower();
+        if (seen.contains(lowerName))
+        {
+            continue;
+        }
+        seen.insert(lowerName);
 
         if (!first)
         {

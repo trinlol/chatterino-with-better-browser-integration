@@ -33,9 +33,14 @@ UserBadgeGridWidget::UserBadgeGridWidget(QWidget *parent)
 
 void UserBadgeGridWidget::setBadges(QVector<UserBadgeDisplayEntry> badges)
 {
+    std::stable_sort(badges.begin(), badges.end(),
+                     [](const auto &a, const auto &b) {
+                         return a.priority < b.priority;
+                     });
     this->badges_ = std::move(badges);
     this->rebuild();
 }
+
 
 void UserBadgeGridWidget::clearBadges()
 {
@@ -67,13 +72,10 @@ void UserBadgeGridWidget::rebuild()
         return;
     }
 
-    const int visibleCount =
-        std::min(static_cast<int>(this->badges_.size()), COLLAPSED_BADGE_LIMIT);
-
-    for (int i = 0; i < visibleCount; ++i)
+    for (const auto &entry : this->badges_)
     {
-        const auto &entry = this->badges_.at(i);
         if (!entry.emote)
+
         {
             continue;
         }

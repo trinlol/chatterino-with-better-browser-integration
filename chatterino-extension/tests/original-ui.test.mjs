@@ -19,13 +19,21 @@ test("the extension does not inject activity or moderation cards", async () => {
   assert.doesNotMatch(styles, /chatterino-product-slice|chatterino-moderator/);
 });
 
-test("GraphQL prediction metadata cannot create a synthetic voting button", async () => {
+test("prediction fallback reopens the native bet prompt — no synthetic voting controls", async () => {
   const content = await readFile(new URL("content.js", extensionRoot), "utf8");
   const styles = await readFile(new URL("styles.css", extensionRoot), "utf8");
 
+  // The fallback entry beside the player is allowed (it reopens Twitch's
+  // native "How many Channel Points?" prompt via activateVotingTrigger or the
+  // points replica). A synthetic GQL-built voting surface with its own
+  // outcome buttons is not.
+  assert.match(content, /handlePredictionFallback/);
+  assert.doesNotMatch(styles, /chatterino-prediction-fallback-pill/);
+
+  // The fallback must never carry its own outcome buttons — voting always
+  // happens through Twitch's native control.
   assert.doesNotMatch(
     content,
-    /handlePredictionFallback|activateVotingTrigger/
+    /chatterino-prediction-fallback[\s\S]*?role=["']radio["']/
   );
-  assert.doesNotMatch(styles, /chatterino-prediction-fallback-pill/);
 });

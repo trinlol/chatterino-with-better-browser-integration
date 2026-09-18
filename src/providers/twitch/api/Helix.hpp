@@ -221,6 +221,31 @@ struct HelixBlock {
     }
 };
 
+struct HelixSubscription {
+    QString broadcasterId;
+    QString userId;
+    QString userName;
+    QString userLogin;
+    QString tier;
+    bool isGift{false};
+    QString gifterId;
+    QString gifterLogin;
+    QString gifterName;
+
+    explicit HelixSubscription(const QJsonObject &jsonObject)
+        : broadcasterId(jsonObject.value("broadcaster_id").toString())
+        , userId(jsonObject.value("user_id").toString())
+        , userName(jsonObject.value("user_name").toString())
+        , userLogin(jsonObject.value("user_login").toString())
+        , tier(jsonObject.value("tier").toString())
+        , isGift(jsonObject.value("is_gift").toBool())
+        , gifterId(jsonObject.value("gifter_id").toString())
+        , gifterLogin(jsonObject.value("gifter_login").toString())
+        , gifterName(jsonObject.value("gifter_name").toString())
+    {
+    }
+};
+
 struct HelixCheermoteImage {
     Url imageURL1x;
     Url imageURL2x;
@@ -847,6 +872,12 @@ public:
         ResultCallback<HelixStreamMarker> successCallback,
         std::function<void(HelixStreamMarkerError)> failureCallback) = 0;
 
+    // https://dev.twitch.tv/docs/api/reference#get-broadcaster-subscriptions
+    virtual void getSubscriptions(
+        QString broadcasterId, int limit,
+        ResultCallback<std::vector<HelixSubscription>> successCallback,
+        HelixFailureCallback failureCallback) = 0;
+
     // https://dev.twitch.tv/docs/api/reference#get-user-block-list
     virtual void loadBlocks(
         QString userId, ResultCallback<std::vector<HelixBlock>> pageCallback,
@@ -1286,6 +1317,12 @@ public:
         QString broadcasterId, QString description,
         ResultCallback<HelixStreamMarker> successCallback,
         std::function<void(HelixStreamMarkerError)> failureCallback) final;
+
+    // https://dev.twitch.tv/docs/api/reference#get-broadcaster-subscriptions
+    void getSubscriptions(
+        QString broadcasterId, int limit,
+        ResultCallback<std::vector<HelixSubscription>> successCallback,
+        HelixFailureCallback failureCallback) final;
 
     // https://dev.twitch.tv/docs/api/reference#get-user-block-list
     void loadBlocks(QString userId,

@@ -580,7 +580,42 @@ void Helix::createStreamMarker(
             }
         })
         .execute();
-};
+}
+
+void Helix::getSubscriptions(
+    QString broadcasterId, int limit,
+    ResultCallback<std::vector<HelixSubscription>> successCallback,
+    HelixFailureCallback failureCallback)
+{
+    QUrlQuery urlQuery;
+    urlQuery.addQueryItem("broadcaster_id", broadcasterId);
+    urlQuery.addQueryItem("first",
+                          QString::number(std::min(100, std::max(1, limit))));
+
+    this->makeGet("subscriptions", urlQuery)
+        .onSuccess([successCallback, failureCallback](auto result) {
+            auto root = result.parseJson();
+            auto data = root.value("data");
+
+            if (!data.isArray())
+            {
+                failureCallback();
+                return;
+            }
+
+            std::vector<HelixSubscription> subscriptions;
+            for (const auto &subJson : data.toArray())
+            {
+                subscriptions.emplace_back(subJson.toObject());
+            }
+
+            successCallback(subscriptions);
+        })
+        .onError([failureCallback](auto /*result*/) {
+            failureCallback();
+        })
+        .execute();
+}
 
 void Helix::loadBlocks(QString userId,
                        ResultCallback<std::vector<HelixBlock>> pageCallback,

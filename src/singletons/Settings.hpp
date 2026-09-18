@@ -272,6 +272,13 @@ public:
     // BoolSetting useCustomWindowFrame = {"/appearance/useCustomWindowFrame",
     // false};
 
+    BoolSetting showMarquee = {"/appearance/marquee/show", true};
+    IntSetting marqueeStyle = {"/appearance/marquee/style", 0};
+    IntSetting marqueeSpeed = {"/appearance/marquee/speed", 45};
+    IntSetting marqueeFontSize = {"/appearance/marquee/fontSize", 12};
+    QStringSetting streamElementsToken = {
+        "/integrations/streamElements/token", ""};
+
     FloatSetting overlayScaleFactor = {"/appearance/overlay/scaleFactor", 1};
     IntSetting overlayBackgroundOpacity = {
         "/appearance/overlay/backgroundOpacity", 50};
@@ -503,6 +510,8 @@ public:
     };
 
     BoolSetting stackBits = {"/emotes/stackBits", false};
+    BoolSetting showTwitchGifsInline = {"/emotes/showTwitchGifsInline", true};
+    FloatSetting twitchGifScale = {"/emotes/twitchGifScale", 1.5f};
     BoolSetting removeSpacesBetweenEmotes = {
         "/emotes/removeSpacesBetweenEmotes", false};
 
@@ -524,6 +533,17 @@ public:
         "/emotes/favouriteEmojis",
         {},
     };
+
+    /// Kick
+    BoolSetting enableKickChat = {"/kick/enable", true};
+    BoolSetting kickAntiSpamFilter = {"/kick/antiSpamFilter", true};
+    IntSetting kickAntiSpamWindowSeconds = {"/kick/antiSpamWindowSeconds", 5};
+    QStringSetting kickAccountUsername = {"/kick/account/username", ""};
+    QStringSetting kickAccountToken = {"/kick/account/token", ""};
+    QStringSetting kickAccountRefreshToken = {"/kick/account/refreshToken", ""};
+    QStringSetting kickAccountUserId = {"/kick/account/userId", ""};
+    QStringSetting kickClientId = {"/kick/auth/clientId", "01M23XN6NM9H5J0Y792KZ30QP1"};
+    QStringSetting kickClientSecret = {"/kick/auth/clientSecret", "30fab96fb34069424f25656a380cb9dd0dcbad7693f88b7c67bbc42e352620ae"};
 
     /// Links
     BoolSetting linksDoubleClickOnly = {"/links/doubleClickToOpen", false};

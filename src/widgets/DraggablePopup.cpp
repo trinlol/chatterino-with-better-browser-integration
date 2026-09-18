@@ -75,6 +75,7 @@ DraggablePopup::DraggablePopup(bool closeAutomatically, QWidget *parent)
 void DraggablePopup::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::MouseButton::LeftButton &&
+        this->windowHandle() != nullptr &&
         !this->windowHandle()->startSystemMove())
     {
         this->dragTimer_.start(std::chrono::milliseconds(17));

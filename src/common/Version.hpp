@@ -35,7 +35,7 @@ namespace chatterino {
  **/
 inline const QString CHATTERINO_PRODUCT_NAME =
     QStringLiteral("Chatterino Better Browser");
-inline const QString CHATTERINO_VERSION = QStringLiteral("2.6.4");
+inline const QString CHATTERINO_VERSION = QStringLiteral("2.7.0");
 
 class Version
 {

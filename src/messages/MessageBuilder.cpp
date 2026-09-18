@@ -34,6 +34,7 @@
 #include "providers/seventv/SeventvEmotes.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/ChannelPointReward.hpp"
+#include "providers/twitch/MarqueeEvent.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchBadge.hpp"
 #include "providers/twitch/TwitchBadges.hpp"
@@ -350,7 +351,9 @@ void appendBadges(MessageBuilder *builder,
             }
         }
 
-        builder->emplace<BadgeElement>(*badgeEmote, badge.flag_)
+        builder
+            ->emplace<BadgeElement>(*badgeEmote, badge.flag_, badge.key_,
+                                    badge.value_)
             ->setTooltip(tooltip);
     }
 
@@ -383,7 +386,9 @@ std::vector<TwitchBadge> appendSharedChatBadges(
             tooltip = QString("%1 (%2)").arg(tooltip, sharedChannelName);
         }
 
-        builder->emplace<BadgeElement>(*badgeEmote, badge.flag_)
+        builder
+            ->emplace<BadgeElement>(*badgeEmote, badge.flag_, badge.key_,
+                                    badge.value_)
             ->setTooltip(tooltip);
         appendedBadges.push_back(badge);
     }
@@ -1973,6 +1978,96 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
         highlight.windowAlert = false;
     }
 
+    if (twitchChannel && builder->flags.has(MessageFlag::CheerMessage) &&
+        !tags.has("historical"))
+    {
+        MarqueeEvent event;
+        event.type = MarqueeEvent::Type::Bits;
+        event.username = builder->loginName;
+        event.displayName = builder->displayName.isEmpty()
+                                ? builder->loginName
+                                : builder->displayName;
+        event.userColor = builder->usernameColor;
+        event.bits = builder->bits;
+        event.amountText = QStringLiteral("%1 bits").arg(builder->bits);
+        event.detailText = QStringLiteral("cheered %1 bits").arg(builder->bits);
+        event.userMessage = content;
+        event.timestamp = builder->serverReceivedTime;
+
+        // Resolve cheered bits icon (e.g. Cheer100 cheermote)
+        if (auto cheer = twitchChannel->cheerEmote(
+                QStringLiteral("Cheer%1").arg(builder->bits)))
+        {
+            if (cheer->animatedEmote)
+            {
+                event.badgeImage = cheer->animatedEmote->images.getImage1();
+            }
+            else if (cheer->staticEmote)
+            {
+                event.badgeImage = cheer->staticEmote->images.getImage1();
+            }
+        }
+
+        if (!event.badgeImage)
+        {
+            for (const auto &badge : builder->twitchBadges)
+            {
+                if (badge.key_ == "bits")
+                {
+                    if (auto b = getTwitchBadge(badge, twitchChannel))
+                    {
+                        event.badgeImage = (*b)->images.getImage1();
+                        break;
+                    }
+                }
+            }
+        }
+        if (!event.badgeImage)
+        {
+            QString tier = QStringLiteral("1");
+            if (builder->bits >= 100000)
+            {
+                tier = QStringLiteral("100000");
+            }
+            else if (builder->bits >= 75000)
+            {
+                tier = QStringLiteral("75000");
+            }
+            else if (builder->bits >= 50000)
+            {
+                tier = QStringLiteral("50000");
+            }
+            else if (builder->bits >= 25000)
+            {
+                tier = QStringLiteral("25000");
+            }
+            else if (builder->bits >= 10000)
+            {
+                tier = QStringLiteral("10000");
+            }
+            else if (builder->bits >= 5000)
+            {
+                tier = QStringLiteral("5000");
+            }
+            else if (builder->bits >= 1000)
+            {
+                tier = QStringLiteral("1000");
+            }
+            else if (builder->bits >= 100)
+            {
+                tier = QStringLiteral("100");
+            }
+
+            if (auto b = getTwitchBadge(TwitchBadge{QStringLiteral("bits"), tier},
+                                        twitchChannel))
+            {
+                event.badgeImage = (*b)->images.getImage1();
+            }
+        }
+
+        twitchChannel->addMarqueeEvent(event);
+    }
+
     return {builder.release(), highlight};
 }
 
@@ -2083,14 +2178,21 @@ void MessageBuilder::addTwitchGif(const QString &id, QStringView originalText)
 {
     auto original = originalText.toString();
     QString link = u"https://i.giphy.com/" % id % u".webp";
-    auto *el = this->emplace<LinkElement>(
-        LinkElement::Parsed{
-            .lowercase = original,
-            .original = original,
-        },
-        link, MessageElementFlag::Text, MessageColor::Link);
 
-    getApp()->getLinkResolver()->resolve(el->linkInfo());
+    auto gifImage = Image::fromUrl(Url{link}, 1, QSize(56, 42));
+    auto emote = std::make_shared<Emote>(Emote{
+        .name = EmoteName{original},
+        .images = ImageSet{gifImage},
+        .tooltip = Tooltip{original},
+        .homePage = Url{link},
+        .zeroWidth = false,
+        .id = EmoteId{id},
+        .author = EmoteAuthor{},
+    });
+
+    this->emplace<TwitchGifElement>(
+        emote, link,
+        MessageElementFlags{MessageElementFlag::Emote, MessageElementFlag::Text});
 }
 
 bool MessageBuilder::isEmpty() const

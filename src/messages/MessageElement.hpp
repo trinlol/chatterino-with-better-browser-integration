@@ -556,6 +556,29 @@ private:
     EmotePtr emote_;
 };
 
+class TwitchGifElement : public EmoteElement
+{
+public:
+    static constexpr std::string_view TYPE = "twitch-gif";
+
+    TwitchGifElement(const EmotePtr &data, QString gifUrl,
+                     MessageElementFlags flags_,
+                     const MessageColor &textElementColor = MessageColor::Text);
+
+    void addToContainer(MessageLayoutContainer &container,
+                        const MessageLayoutContext &ctx) override;
+
+    QJsonObject toJson() const override;
+    std::string_view type() const override;
+    std::unique_ptr<MessageElement> clone() const override;
+
+private:
+    void ensureLink();
+
+    QString gifUrl_;
+    std::unique_ptr<LinkElement> linkElement_;
+};
+
 // A LayeredEmoteElement represents multiple Emotes layered on top of each other.
 // This class takes care of rendering animated and non-animated emotes in the
 // correct order and aligning them in the right way.
@@ -609,12 +632,20 @@ class BadgeElement : public MessageElement
 public:
     static constexpr std::string_view TYPE = "badge";
 
-    BadgeElement(const EmotePtr &data, MessageElementFlags flags_);
+    BadgeElement(const EmotePtr &data, MessageElementFlags flags_,
+                 const QString &badgeKey = QString(),
+                 const QString &badgeValue = QString());
 
     void addToContainer(MessageLayoutContainer &container,
                         const MessageLayoutContext &ctx) override;
 
     EmotePtr getEmote() const;
+    void setEmote(const EmotePtr &emote);
+
+    const QString &getBadgeKey() const;
+    const QString &getBadgeValue() const;
+    bool hasTwitchBadge() const;
+    void setTwitchBadge(const QString &key, const QString &value);
 
     QJsonObject toJson() const override;
     std::string_view type() const override;
@@ -626,6 +657,8 @@ protected:
 
 private:
     EmotePtr emote_;
+    QString badgeKey_;
+    QString badgeValue_;
 };
 
 class ModBadgeElement : public BadgeElement

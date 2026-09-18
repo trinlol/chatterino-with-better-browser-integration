@@ -9,8 +9,10 @@
 
 #include <pajlada/signals/scoped-connection.hpp>
 #include <pajlada/signals/signal.hpp>
+#include <QPointer>
 
 class QCheckBox;
+
 
 namespace chatterino {
 
@@ -45,9 +47,10 @@ private:
     ChannelPtr channel_;
     // The channel for the `threadView`
     ChannelPtr virtualChannel_;
-    Split *split_;
+    QPointer<Split> split_;
 
     struct {
+
         ChannelView *threadView = nullptr;
         SplitInput *replyInput = nullptr;
 

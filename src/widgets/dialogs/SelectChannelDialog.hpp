@@ -72,6 +72,14 @@ private:
         QLabel *channelLabel;
         QLineEdit *channelName;
 
+        detail::AutoCheckedRadioButton *kick;
+        QLabel *kickLabel;
+        QLineEdit *kickChannelName;
+
+        detail::AutoCheckedRadioButton *combined;
+        QLabel *combinedLabel;
+        QLineEdit *combinedChannelName;
+
         detail::AutoCheckedRadioButton *whispers;
         QLabel *whispersLabel;
 

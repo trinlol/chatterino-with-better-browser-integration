@@ -17,8 +17,10 @@
 #include "messages/MessageElement.hpp"
 #include "messages/MessageSink.hpp"
 #include "messages/MessageThread.hpp"
+#include "providers/twitch/MarqueeEvent.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchAccountManager.hpp"
+#include "providers/twitch/TwitchBadges.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchHelpers.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
@@ -283,6 +285,178 @@ MessagePtr parseNoticeMessage(Communi::IrcNoticeMessage *message)
     // default case
     return makeSystemMessage(message->content(),
                              calculateMessageTime(message).time());
+}
+
+void dispatchUserNoticeMarqueeEvent(Communi::IrcMessage *message,
+                                    const Communi::TagsRef &tags,
+                                    const QString &msgType,
+                                    const QString &content,
+                                    TwitchChannel *channel)
+{
+    if (channel == nullptr)
+    {
+        return;
+    }
+
+    const QString type = msgType.toLower();
+    if (type != "sub" && type != "resub" && type != "subgift" &&
+        type != "anonsubgift" && type != "submysterygift" &&
+        type != "primepaidupgrade" && type != "giftpaidupgrade" &&
+        type != "anongiftpaidupgrade" && type != "extendsub" &&
+        type != "communitypayforward" && type != "standardpayforward")
+    {
+        return;
+    }
+
+    MarqueeEvent event;
+    event.type = MarqueeEvent::Type::Subscription;
+    event.timestamp = calculateMessageTime(message);
+
+    auto parsedBadges = parseBadges(tags.getOrEmpty("badges"));
+    auto login = tags.getOrEmpty("login");
+    auto displayName = tags.getOrEmpty("display-name");
+
+    if (login.isEmpty())
+    {
+        auto nick = message->nick();
+        if (!nick.isEmpty() && nick != "tmi.twitch.tv" && !nick.contains('.'))
+        {
+            login = nick;
+        }
+    }
+    if (displayName.isEmpty())
+    {
+        displayName = login;
+    }
+    if (login.isEmpty())
+    {
+        login = displayName.toLower();
+    }
+    if (displayName.isEmpty())
+    {
+        displayName = QStringLiteral("A subscriber");
+        login = QStringLiteral("subscriber");
+    }
+
+    event.username = login;
+    event.displayName = displayName;
+
+    auto userColor = QColor::fromString(tags.getOrEmpty("color"));
+    if (!userColor.isValid())
+    {
+        userColor = QColor(150, 150, 150);
+    }
+    event.userColor = userColor;
+
+    QString monthsStr;
+
+    if (type == "sub")
+    {
+        auto plan = tags.getOrEmpty("msg-param-sub-plan");
+        QString tierName = plan == "Prime" ? QStringLiteral("Prime Sub")
+                          : plan.startsWith("2") ? QStringLiteral("Tier 2 Sub")
+                          : plan.startsWith("3") ? QStringLiteral("Tier 3 Sub")
+                          : QStringLiteral("Tier 1 Sub");
+        event.amountText = QStringLiteral("1 mo");
+        event.detailText = QStringLiteral("Subscribed (%1)").arg(tierName);
+        event.userMessage = content;
+        monthsStr = QStringLiteral("1");
+    }
+    else if (type == "resub")
+    {
+        monthsStr = tags.getOrEmpty("msg-param-cumulative-months");
+        if (monthsStr.isEmpty())
+        {
+            monthsStr = tags.getOrEmpty("msg-param-months");
+        }
+        event.amountText = QStringLiteral("%1 mo").arg(monthsStr.isEmpty() ? "1" : monthsStr);
+        event.detailText = QStringLiteral("Resubscribed for %1 months").arg(monthsStr.isEmpty() ? "1" : monthsStr);
+        event.userMessage = content;
+    }
+    else if (type == "subgift" || type == "anonsubgift")
+    {
+        if (tags.getOrEmpty("user-id") == "274598607" || displayName.isEmpty() || type == "anonsubgift")
+        {
+            event.username = QStringLiteral("ananonymousgifter");
+            event.displayName = QStringLiteral("An anonymous gifter");
+            event.userColor = QColor(150, 150, 150);
+        }
+        auto recipient = tags.getOrEmpty("msg-param-recipient-display-name");
+        if (recipient.isEmpty())
+        {
+            recipient = tags.getOrEmpty("msg-param-recipient-user-name");
+        }
+        if (recipient.isEmpty())
+        {
+            recipient = tags.getOrEmpty("msg-param-recipient-name");
+        }
+        event.amountText = QStringLiteral("Gift sub");
+        event.detailText = recipient.isEmpty()
+                               ? QStringLiteral("Gifted a sub")
+                               : QStringLiteral("Gifted sub to %1").arg(recipient);
+    }
+    else if (type == "submysterygift")
+    {
+        if (tags.getOrEmpty("user-id") == "274598607" || displayName.isEmpty())
+        {
+            event.username = QStringLiteral("ananonymousgifter");
+            event.displayName = QStringLiteral("An anonymous gifter");
+            event.userColor = QColor(150, 150, 150);
+        }
+        auto count = tags.getOrEmpty("msg-param-mass-gift-count");
+        event.amountText = QStringLiteral("%1 gift subs").arg(count.isEmpty() ? "5" : count);
+        event.detailText = QStringLiteral("Gifted %1 subs to community").arg(count.isEmpty() ? "5" : count);
+    }
+    else if (type == "extendsub")
+    {
+        event.amountText = QStringLiteral("Sub extended");
+        event.detailText = QStringLiteral("Extended their subscription");
+        event.userMessage = content;
+    }
+    else
+    {
+        event.amountText = QStringLiteral("Sub upgraded");
+        event.detailText = QStringLiteral("Upgraded subscription");
+        event.userMessage = content;
+    }
+
+    // Resolve sub badge
+    if (auto it = parsedBadges.find("subscriber"); it != parsedBadges.end())
+    {
+        if (auto chBadge = channel->twitchBadge("subscriber", it.value()))
+        {
+            event.badgeImage = (*chBadge)->images.getImage1();
+        }
+        else if (auto glBadge = getApp()->getTwitchBadges()->badge("subscriber", it.value()))
+        {
+            event.badgeImage = (*glBadge)->images.getImage1();
+        }
+    }
+    if (!event.badgeImage && !monthsStr.isEmpty())
+    {
+        if (auto chBadge = channel->twitchBadge("subscriber", monthsStr))
+        {
+            event.badgeImage = (*chBadge)->images.getImage1();
+        }
+    }
+    if (!event.badgeImage)
+    {
+        for (const auto &ver : {QStringLiteral("0"), QStringLiteral("1")})
+        {
+            if (auto chBadge = channel->twitchBadge("subscriber", ver))
+            {
+                event.badgeImage = (*chBadge)->images.getImage1();
+                break;
+            }
+            if (auto glBadge = getApp()->getTwitchBadges()->badge("subscriber", ver))
+            {
+                event.badgeImage = (*glBadge)->images.getImage1();
+                break;
+            }
+        }
+    }
+
+    channel->addMarqueeEvent(event);
 }
 
 }  // namespace
@@ -764,6 +938,11 @@ void IrcMessageHandler::parseUserNoticeMessageInto(Communi::IrcMessage *message,
         }))
     {
         return;
+    }
+
+    if (!tags.has("historical"))
+    {
+        dispatchUserNoticeMarqueeEvent(message, tags, msgType, content, channel);
     }
 
     if (msgType == "subgift")

@@ -18,8 +18,9 @@ void attachToConsole()
 #ifdef USEWINSDK
     if (AttachConsole(ATTACH_PARENT_PROCESS))
     {
-        std::ignore = freopen_s(nullptr, "CONOUT$", "w", stdout);
-        std::ignore = freopen_s(nullptr, "CONOUT$", "w", stderr);
+        FILE *dummy = nullptr;
+        std::ignore = freopen_s(&dummy, "CONOUT$", "w", stdout);
+        std::ignore = freopen_s(&dummy, "CONOUT$", "w", stderr);
     }
 #endif
 }

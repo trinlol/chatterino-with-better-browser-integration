@@ -341,6 +341,9 @@ set(SOURCE_FILES
         controllers/userdata/UserDataController.hpp
         controllers/userdata/UserData.hpp
 
+        controllers/themes/ThemeCustomizer.cpp
+        controllers/themes/ThemeCustomizer.hpp
+
         debug/Benchmark.cpp
         debug/Benchmark.hpp
 
@@ -478,6 +481,24 @@ set(SOURCE_FILES
         providers/twitch/ChannelPointReward.hpp
         providers/twitch/IrcMessageHandler.cpp
         providers/twitch/IrcMessageHandler.hpp
+        providers/twitch/MarqueeEvent.hpp
+        providers/streamelements/StreamElementsManager.cpp
+        providers/streamelements/StreamElementsManager.hpp
+        providers/kick/KickChannel.cpp
+        providers/kick/KickChannel.hpp
+        providers/kick/KickEmotes.cpp
+        providers/kick/KickEmotes.hpp
+        providers/kick/KickManager.cpp
+        providers/kick/KickManager.hpp
+        providers/kick/KickMessage.hpp
+        providers/kick/KickMessageBuilder.cpp
+        providers/kick/KickMessageBuilder.hpp
+        providers/kick/KickPusherClient.cpp
+        providers/kick/KickPusherClient.hpp
+        providers/combined/CombinedChannel.cpp
+        providers/combined/CombinedChannel.hpp
+        providers/combined/CombinedManager.cpp
+        providers/combined/CombinedManager.hpp
         providers/twitch/PubSubClient.cpp
         providers/twitch/PubSubClient.hpp
         providers/twitch/PubSubManager.cpp
@@ -772,8 +793,18 @@ set(SOURCE_FILES
         widgets/dialogs/UpdateDialog.hpp
         widgets/dialogs/UserInfoPopup.cpp
         widgets/dialogs/UserInfoPopup.hpp
+        widgets/dialogs/KickLoginDialog.cpp
+        widgets/dialogs/KickLoginDialog.hpp
+        widgets/dialogs/MarqueeHistoryDialog.cpp
+        widgets/dialogs/MarqueeHistoryDialog.hpp
         widgets/dialogs/WelcomeDialog.cpp
         widgets/dialogs/WelcomeDialog.hpp
+
+        widgets/dialogs/ChannelDevToolsDialog.cpp
+        widgets/dialogs/ChannelDevToolsDialog.hpp
+        widgets/dialogs/MessageInspectorDialog.cpp
+        widgets/dialogs/MessageInspectorDialog.hpp
+
         widgets/dialogs/switcher/NewPopupItem.cpp
         widgets/dialogs/switcher/NewPopupItem.hpp
         widgets/dialogs/switcher/NewTabItem.cpp
@@ -890,6 +921,10 @@ set(SOURCE_FILES
         widgets/settingspages/SettingsPage.hpp
         widgets/settingspages/SettingWidget.cpp
         widgets/settingspages/SettingWidget.hpp
+        widgets/settingspages/ThemePreviewWidget.cpp
+        widgets/settingspages/ThemePreviewWidget.hpp
+        widgets/settingspages/ThemesPage.cpp
+        widgets/settingspages/ThemesPage.hpp
 
         widgets/splits/ClosedSplits.cpp
         widgets/splits/ClosedSplits.hpp
@@ -908,8 +943,8 @@ set(SOURCE_FILES
         widgets/splits/SplitContainer.hpp
         widgets/splits/SplitHeader.cpp
         widgets/splits/SplitHeader.hpp
-        widgets/splits/PinnedMessageWidget.cpp
-        widgets/splits/PinnedMessageWidget.hpp
+        widgets/splits/MarqueeWidget.cpp
+        widgets/splits/MarqueeWidget.hpp
         widgets/splits/PredictionBannerWidget.cpp
         widgets/splits/PredictionBannerWidget.hpp
         widgets/splits/SplitInput.cpp
@@ -920,8 +955,6 @@ set(SOURCE_FILES
         widgets/splits/SpellCheckSuggestionItem.hpp
         widgets/splits/SplitOverlay.cpp
         widgets/splits/SplitOverlay.hpp
-        widgets/splits/PinnedMessageWidget.cpp
-        widgets/splits/PinnedMessageWidget.hpp
         )
 
 if (APPLE)

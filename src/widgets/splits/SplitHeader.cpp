@@ -31,7 +31,7 @@
 #include "widgets/dialogs/SettingsDialog.hpp"
 #include "widgets/helper/CommonTexts.hpp"
 #include "widgets/Label.hpp"
-#include "widgets/splits/PinnedMessageWidget.hpp"
+#include "widgets/splits/MarqueeWidget.hpp"
 #include "widgets/splits/Split.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 #include "widgets/TooltipWidget.hpp"
@@ -82,19 +82,6 @@ auto formatRoomModeUnclean(
     if (modes->submode)
     {
         text += "sub, ";
-    }
-    if (modes->followerOnly != -1)
-    {
-        if (modes->followerOnly != 0)
-        {
-            text += QString("follow(%1), ")
-                        .arg(formatDurationExact(
-                            std::chrono::minutes{modes->followerOnly}));
-        }
-        else
-        {
-            text += QString("follow, ");
-        }
     }
 
     return text;
@@ -328,17 +315,17 @@ void SplitHeader::initializeLayout()
         },
         this, {4, 4});
 
-    this->pinButton_ = new SvgButton(
+    this->marqueeButton_ = new SvgButton(
         {
-            .dark = ":/buttons/pinnedMessage-chat.svg",
-            .light = ":/buttons/pinnedMessage-chat.svg",
+            .dark = ":/buttons/marquee.svg",
+            .light = ":/buttons/marquee.svg",
         },
         this, {4, 4});
-    this->pinButton_->setToolTip(QStringLiteral("Toggle pinned message"));
-    this->pinButton_->setColor(this->theme->isLightTheme()
-                                   ? QColor(0x42, 0x42, 0x42)
-                                   : QColor(0xc0, 0xc0, 0xc0));
-    this->pinButton_->hide();
+    this->marqueeButton_->setToolTip(QStringLiteral("Toggle marquee banner"));
+    this->marqueeButton_->setColor(this->theme->isLightTheme()
+                                       ? QColor(0x42, 0x42, 0x42)
+                                       : QColor(0xc0, 0xc0, 0xc0));
+    this->marqueeButton_->hide();
 
     this->addButton_ = new DrawnButton(DrawnButton::Symbol::Plus,
                                        {
@@ -378,8 +365,8 @@ void SplitHeader::initializeLayout()
             w->hide();
             w->setMenu(this->createChatModeMenu());
         }),
-        // pin indicator
-        this->pinButton_,
+        // marquee indicator
+        this->marqueeButton_,
         // moderator
         this->moderationButton_,
         // chatter list
@@ -428,8 +415,8 @@ void SplitHeader::initializeLayout()
                          this->split_->openChatterList();
                      });
 
-    QObject::connect(this->pinButton_, &Button::leftClicked, this, [this]() {
-        this->split_->togglePinnedBanner();
+    QObject::connect(this->marqueeButton_, &Button::leftClicked, this, [this]() {
+        this->split_->toggleMarqueeBanner();
     });
 
     QObject::connect(this->addButton_, &Button::leftClicked, this, [this]() {
@@ -655,6 +642,12 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
                             h->getDisplaySequence(HotkeyCategory::Split,
                                                   "openSubscriptionPage"),
                             this->split_, &Split::openSubPage);
+
+        moreMenu->addAction("Channel Developer Tools...", this->split_,
+                            &Split::openChannelDevToolsDialog);
+
+        moreMenu->addAction("Recent Events History…", this->split_,
+                            &Split::showMarqueeHistory);
 
         {
             auto *action = new QAction(this);
@@ -893,20 +886,15 @@ void SplitHeader::handleChannelChanged()
             });
 
         this->channelConnections_.managedConnect(
-            twitchChannel->pinnedMessageChanged, [this]() {
-                this->updatePinButton();
+            this->split_->getMarqueeWidget()->visibilityChanged, [this]() {
+                this->updateMarqueeButton();
             });
 
-        this->channelConnections_.managedConnect(
-            this->split_->getPinnedBanner()->visibilityChanged, [this]() {
-                this->updatePinButton();
-            });
-
-        this->updatePinButton();
+        this->updateMarqueeButton();
     }
     else
     {
-        this->updatePinButton();
+        this->updateMarqueeButton();
     }
 }
 
@@ -919,7 +907,7 @@ void SplitHeader::scaleChangedEvent(float scale)
     this->dropdownButton_->setFixedWidth(w);
     this->moderationButton_->setFixedWidth(w);
     this->chattersButton_->setFixedWidth(w);
-    this->pinButton_->setFixedWidth(w);
+    this->marqueeButton_->setFixedWidth(w);
 
     this->addButton_->setFixedWidth(addSplitWidth);
 }
@@ -929,23 +917,22 @@ void SplitHeader::setAddButtonVisible(bool value)
     this->addButton_->setVisible(value);
 }
 
-void SplitHeader::updatePinButton()
+void SplitHeader::updateMarqueeButton()
 {
     auto channel = this->split_->getChannel();
     auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
-    const bool hasPinnedMessage = twitchChannel != nullptr &&
-                                  twitchChannel->getPinnedMessage() != nullptr;
+    const bool isTwitch = twitchChannel != nullptr;
 
-    this->pinButton_->setVisible(hasPinnedMessage);
-    if (hasPinnedMessage && this->split_->getPinnedBanner()->isVisible())
+    this->marqueeButton_->setVisible(isTwitch);
+    if (isTwitch && this->split_->getMarqueeWidget()->isUserMarqueeVisible())
     {
-        this->pinButton_->setColor(this->theme->accent);
+        this->marqueeButton_->setColor(this->theme->accent);
     }
     else
     {
-        this->pinButton_->setColor(this->theme->isLightTheme()
-                                       ? QColor(0x42, 0x42, 0x42)
-                                       : QColor(0xc0, 0xc0, 0xc0));
+        this->marqueeButton_->setColor(this->theme->isLightTheme()
+                                           ? QColor(0x42, 0x42, 0x42)
+                                           : QColor(0xc0, 0xc0, 0xc0));
     }
 }
 
@@ -958,7 +945,15 @@ void SplitHeader::updateChannelText()
 
     auto title = channel->getLocalizedName();
 
-    if (indirectChannel.getType() == Channel::Type::TwitchWatching)
+    if (channel->isKickChannel())
+    {
+        title = QStringLiteral("[KICK] ") + (title.isEmpty() ? channel->getName() : title);
+    }
+    else if (channel->isCombinedChannel())
+    {
+        title = QStringLiteral("[T+K] ") + (title.isEmpty() ? channel->getName() : title);
+    }
+    else if (indirectChannel.getType() == Channel::Type::TwitchWatching)
     {
         title = "watching: " + (title.isEmpty() ? "none" : title);
     }
@@ -1215,8 +1210,7 @@ void SplitHeader::themeChangedEvent()
     }
     this->titleLabel_->setPalette(palette);
 
-    // Re-apply pin button color to respect updated theme
-    this->updatePinButton();
+    this->updateMarqueeButton();
 
     auto bg = this->theme->splits.header.background;
     this->addButton_->setOptions({

@@ -38,6 +38,7 @@
 #include "providers/twitch/IrcMessageHandler.hpp"
 #include "providers/twitch/PubSubManager.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
+#include "providers/twitch/TwitchBadges.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "providers/twitch/TwitchUsers.hpp"
 #include "singletons/Settings.hpp"
@@ -841,6 +842,7 @@ void TwitchChannel::roomIdChanged()
     this->listenSevenTVCosmetics();
     getApp()->getTwitchLiveController()->add(this->sharedFromThis());
     this->refreshPinnedMessage();
+    this->refreshMarqueeSubscriptions();
     // Predictions (ported from Moltorino, MIT, (c) MoltoBenne) - the room id
     // is required for the GQL prediction fetch.
     this->refreshPrediction();
@@ -1002,6 +1004,7 @@ void TwitchChannel::setMod(bool value)
         {
             // Gained mod privileges - fetch the current pin
             this->refreshPinnedMessage();
+            this->refreshMarqueeSubscriptions();
         }
     }
 }
@@ -1943,28 +1946,91 @@ void TwitchChannel::refreshBadges()
 
 void TwitchChannel::addTwitchBadgeSets(const HelixChannelBadges &channelBadges)
 {
-    auto badgeSets = this->badgeSets_.access();
-
-    for (const auto &badgeSet : channelBadges.badgeSets)
     {
-        const auto &setID = badgeSet.setID;
-        for (const auto &version : badgeSet.versions)
+        auto badgeSets = this->badgeSets_.access();
+
+        for (const auto &badgeSet : channelBadges.badgeSets)
         {
-            auto emote = Emote{
-                .name = EmoteName{},
-                .images =
-                    ImageSet{
-                        Image::fromUrl(version.imageURL1x, 1, BASE_BADGE_SIZE),
-                        Image::fromUrl(version.imageURL2x, .5,
-                                       BASE_BADGE_SIZE * 2),
-                        Image::fromUrl(version.imageURL4x, .25,
-                                       BASE_BADGE_SIZE * 4),
-                    },
-                .tooltip = Tooltip{version.title},
-                .homePage = version.clickURL,
-            };
-            (*badgeSets)[setID][version.id] = std::make_shared<Emote>(emote);
+            const auto &setID = badgeSet.setID;
+            for (const auto &version : badgeSet.versions)
+            {
+                auto emote = Emote{
+                    .name = EmoteName{},
+                    .images =
+                        ImageSet{
+                            Image::fromUrl(version.imageURL1x, 1, BASE_BADGE_SIZE),
+                            Image::fromUrl(version.imageURL2x, .5,
+                                           BASE_BADGE_SIZE * 2),
+                            Image::fromUrl(version.imageURL4x, .25,
+                                           BASE_BADGE_SIZE * 4),
+                        },
+                    .tooltip = Tooltip{version.title},
+                    .homePage = version.clickURL,
+                };
+                (*badgeSets)[setID][version.id] = std::make_shared<Emote>(emote);
+            }
         }
+    }
+
+    this->updateBadgeElements();
+}
+
+void TwitchChannel::updateBadgeElements()
+{
+    auto snapshot = this->getMessageSnapshot();
+    bool updatedAny = false;
+
+    for (const auto &msg : snapshot)
+    {
+        for (const auto &elem : msg->elements)
+        {
+            if (auto *badgeElem = dynamic_cast<BadgeElement *>(elem.get()))
+            {
+                if (badgeElem->hasTwitchBadge())
+                {
+                    const auto &badgeKey = badgeElem->getBadgeKey();
+                    const auto &badgeValue = badgeElem->getBadgeValue();
+                    if (badgeKey == "subscriber" || badgeKey == "bits")
+                    {
+                        if (auto newEmote = this->twitchBadge(badgeKey, badgeValue))
+                        {
+                            if (badgeElem->getEmote() != *newEmote)
+                            {
+                                badgeElem->setEmote(*newEmote);
+                                if (badgeKey == "subscriber")
+                                {
+                                    auto badgeInfoIt = msg->twitchBadgeInfos.find(badgeKey);
+                                    if (badgeInfoIt != msg->twitchBadgeInfos.end())
+                                    {
+                                        const auto &subTier = badgeValue.length() > 3 ? badgeValue.at(0) : '1';
+                                        const auto &subMonths = badgeInfoIt->second;
+                                        badgeElem->setTooltip(
+                                            QString("%1 (%2%3 months)")
+                                                .arg((*newEmote)->tooltip.string)
+                                                .arg(subTier != '1' ? QString("Tier %1, ").arg(subTier) : "")
+                                                .arg(subMonths));
+                                    }
+                                    else
+                                    {
+                                        badgeElem->setTooltip((*newEmote)->tooltip.string);
+                                    }
+                                }
+                                else if (badgeKey == "bits")
+                                {
+                                    badgeElem->setTooltip(QString("Twitch cheer %0").arg(badgeValue));
+                                }
+                                updatedAny = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (updatedAny)
+    {
+        getApp()->getWindows()->forceLayoutChannelViews();
     }
 }
 
@@ -2398,14 +2464,132 @@ std::optional<EmotePtr> TwitchChannel::twitchBadge(const QString &set,
 {
     auto badgeSets = this->badgeSets_.access();
     auto it = badgeSets->find(set);
-    if (it != badgeSets->end())
+    if (it == badgeSets->end() || it->second.empty())
     {
-        auto it2 = it->second.find(version);
-        if (it2 != it->second.end())
+        return std::nullopt;
+    }
+
+    auto it2 = it->second.find(version);
+    if (it2 != it->second.end())
+    {
+        return it2->second;
+    }
+
+    if (set == "subscriber")
+    {
+        if (version == "1")
         {
-            return it2->second;
+            auto it0 = it->second.find("0");
+            if (it0 != it->second.end())
+            {
+                return it0->second;
+            }
+        }
+        else if (version == "0")
+        {
+            auto it1 = it->second.find("1");
+            if (it1 != it->second.end())
+            {
+                return it1->second;
+            }
+        }
+
+        bool ok = false;
+        uint64_t v = version.toULongLong(&ok);
+        if (ok)
+        {
+            auto findBestMilestone = [&](uint64_t minM, uint64_t maxM) -> std::optional<EmotePtr> {
+                uint64_t bestM = 0;
+                std::optional<EmotePtr> bestEmote;
+                for (const auto &[k, emote] : it->second)
+                {
+                    bool kOk = false;
+                    uint64_t m = k.toULongLong(&kOk);
+                    if (kOk && m >= minM && m <= maxM)
+                    {
+                        if (!bestEmote || m >= bestM)
+                        {
+                            bestM = m;
+                            bestEmote = emote;
+                        }
+                    }
+                }
+                return bestEmote;
+            };
+
+            if (v >= 3000 && v < 4000)
+            {
+                if (auto emote = findBestMilestone(3000, v))
+                {
+                    return emote;
+                }
+                uint64_t months = v - 3000;
+                if (auto emote = findBestMilestone(2000, 2000 + months))
+                {
+                    return emote;
+                }
+                if (auto emote = findBestMilestone(0, months))
+                {
+                    return emote;
+                }
+            }
+            else if (v >= 2000 && v < 3000)
+            {
+                if (auto emote = findBestMilestone(2000, v))
+                {
+                    return emote;
+                }
+                uint64_t months = v - 2000;
+                if (auto emote = findBestMilestone(0, months))
+                {
+                    return emote;
+                }
+            }
+            else
+            {
+                if (auto emote = findBestMilestone(0, v))
+                {
+                    return emote;
+                }
+            }
+        }
+
+        auto it0 = it->second.find("0");
+        if (it0 != it->second.end())
+        {
+            return it0->second;
+        }
+        auto it1 = it->second.find("1");
+        if (it1 != it->second.end())
+        {
+            return it1->second;
         }
     }
+    else if (set == "bits")
+    {
+        bool ok = false;
+        uint64_t v = version.toULongLong(&ok);
+        if (ok)
+        {
+            uint64_t bestM = 0;
+            std::optional<EmotePtr> bestEmote;
+            for (const auto &[k, emote] : it->second)
+            {
+                bool kOk = false;
+                uint64_t m = k.toULongLong(&kOk);
+                if (kOk && m <= v && (!bestEmote || m >= bestM))
+                {
+                    bestM = m;
+                    bestEmote = emote;
+                }
+            }
+            if (bestEmote)
+            {
+                return bestEmote;
+            }
+        }
+    }
+
     return std::nullopt;
 }
 
@@ -2809,6 +2993,134 @@ void TwitchChannel::clearPinnedMessage()
     }
     this->pinnedMessage_.reset();
     this->pinnedMessageChanged.invoke();
+}
+
+void TwitchChannel::addMarqueeEvent(const MarqueeEvent &event)
+{
+    this->marqueeEvents_.push_back(event);
+    while (this->marqueeEvents_.size() > 15)
+    {
+        this->marqueeEvents_.pop_front();
+    }
+    runInGuiThread([this, event] {
+        this->marqueeEventAdded.invoke(event);
+    });
+}
+
+const std::deque<MarqueeEvent> &TwitchChannel::recentMarqueeEvents() const
+{
+    return this->marqueeEvents_;
+}
+
+void TwitchChannel::clearMarqueeEvents()
+{
+    this->marqueeEvents_.clear();
+    runInGuiThread([this] {
+        this->marqueeEventsCleared.invoke();
+    });
+}
+
+void TwitchChannel::refreshMarqueeSubscriptions()
+{
+    if (this->roomId().isEmpty())
+    {
+        return;
+    }
+
+    auto currentAccount = getApp()->getAccounts()->twitch.getCurrent();
+    if (!currentAccount || currentAccount->isAnon())
+    {
+        return;
+    }
+
+    // Historical subscription events from Helix require broadcaster or moderator OAuth tokens.
+    if (!this->isBroadcaster() && !this->isMod())
+    {
+        return;
+    }
+
+    if (!this->marqueeEvents_.empty())
+    {
+        return;
+    }
+
+    getHelix()->getSubscriptions(
+        this->roomId(), 15,
+        [weak = this->weakFromThis()](std::vector<HelixSubscription> subs) {
+            auto self = weak.lock();
+            if (!self)
+            {
+                return;
+            }
+
+            if (!self->marqueeEvents_.empty())
+            {
+                return;
+            }
+
+            for (const auto &sub : subs)
+            {
+                MarqueeEvent event;
+                event.type = MarqueeEvent::Type::Subscription;
+                event.username = sub.userLogin;
+                event.displayName =
+                    sub.userName.isEmpty() ? sub.userLogin : sub.userName;
+                event.userColor = QColor(150, 150, 150);
+                event.amountText = QStringLiteral("1 mo");
+                if (sub.isGift)
+                {
+                    QString gifter = sub.gifterName.isEmpty() ? sub.gifterLogin
+                                                             : sub.gifterName;
+                    if (gifter.isEmpty())
+                    {
+                        gifter = QStringLiteral("An anonymous gifter");
+                    }
+                    event.detailText = QStringLiteral("Gifted by %1").arg(gifter);
+                }
+                else
+                {
+                    event.detailText = QStringLiteral("Subscribed");
+                }
+                event.timestamp = QDateTime::currentDateTime();
+
+                for (const auto &ver : {QStringLiteral("0"), QStringLiteral("1")})
+                {
+                    if (auto chBadge = self->twitchBadge("subscriber", ver))
+                    {
+                        event.badgeImage = (*chBadge)->images.getImage1();
+                        break;
+                    }
+                    if (auto glBadge =
+                            getApp()->getTwitchBadges()->badge("subscriber", ver))
+                    {
+                        event.badgeImage = (*glBadge)->images.getImage1();
+                        break;
+                    }
+                }
+
+                self->marqueeEvents_.push_front(event);
+            }
+
+            if (!self->marqueeEvents_.empty())
+            {
+                runInGuiThread([weak] {
+                    if (auto self = weak.lock())
+                    {
+                        if (!self->marqueeEvents_.empty())
+                        {
+                            self->marqueeEventAdded.invoke(
+                                self->marqueeEvents_.back());
+                        }
+                    }
+                });
+            }
+        },
+        [] {
+            // Expected if user token lacks channel:read:subscriptions scope
+            qCDebug(chatterinoTwitch)
+                << "Helix getSubscriptions returned error or unauthorized "
+                   "(requires channel:read:subscriptions)";
+        });
 }
 
 void TwitchChannel::unpinCurrentMessage()

@@ -1947,8 +1947,15 @@
     }
   }
 
-  function sendPredictionMessage(channelName) {
-    sendVotingMessage("prediction", channelName);
+  // Predictions are voted on through the moved-elements replica beside the
+  // player (Twitch's native banner, parked off-screen and cloned into the
+  // toolbar, or a fallback entry that reopens the native bet prompt). We do
+  // NOT forward the engagement to the desktop: the desktop banner would just
+  // paste the prediction title over the Chatterino chat instead of opening a
+  // place to actually spend points. Polls still sync because the desktop
+  // banner opens a working prediction/poll dialog for them.
+  function sendPredictionMessage(_channelName) {
+    /* intentionally a no-op — see comment above */
   }
 
   function sendPollMessage(channelName) {
@@ -2128,6 +2135,57 @@
     }
   }
 
+  function handlePredictionFallback(channelName) {
+    activityStore.removeDom("prediction");
+    activityStore.applyGraphql(gqlState);
+    const prediction = activityStore.current("prediction");
+    if (
+      !prediction?.title ||
+      prediction.status === "ended" ||
+      prediction.status === "locked"
+    ) {
+      document.getElementById("chatterino-prediction-fallback")?.remove();
+      return;
+    }
+
+    let pill = document.getElementById("chatterino-prediction-fallback");
+    if (!pill) {
+      pill = document.createElement("button");
+      pill.id = "chatterino-prediction-fallback";
+      pill.type = "button";
+      pill.className = "chatterino-prediction-vote-pill";
+      pill.innerHTML =
+        '<span class="dot"></span><span class="label"></span>';
+      pill.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (
+          window.ChatterinoVotingUi?.activateVotingTrigger(
+            document,
+            "prediction",
+            pill
+          )
+        ) {
+          scheduleSync();
+          return;
+        }
+        // No native outcome control is reachable (companion mode hid the
+        // banner). Twitch answers the channel-points button with the bet
+        // prompt while a prediction is accepting entries, so the points
+        // replica opens the voting menu.
+        const pointsReplica = document.getElementById(
+          "chatterino-points-replica"
+        );
+        if (pointsReplica) {
+          pointsReplica.click();
+        }
+      });
+    }
+
+    pill.querySelector(".label").textContent = prediction.title;
+    mountInSlot(pill, 1);
+  }
+
   function cleanupPredictionUi() {
     stopPredictionDialogWatcher();
     document.getElementById("chatterino-prediction-min-icon")?.remove();
@@ -2286,7 +2344,14 @@
       } else {
         activityStore.removeDom("prediction");
         cleanupPredictionUi();
-        sendPredictionMessage(channelName);
+        if (
+          gqlState?.prediction?.title &&
+          (companionActive || isChatShellWiped() || channelName)
+        ) {
+          handlePredictionFallback(channelName);
+        } else {
+          document.getElementById("chatterino-prediction-fallback")?.remove();
+        }
       }
 
       positionToolbarPortal();

@@ -65,6 +65,9 @@ namespace eventsub {
 class IController;
 }  // namespace eventsub
 class SpellChecker;
+class StreamElementsManager;
+class KickManager;
+class CombinedManager;
 
 class IApplication
 {
@@ -120,6 +123,9 @@ public:
     virtual pronouns::Pronouns *getPronouns() = 0;
     virtual eventsub::IController *getEventSub() = 0;
     virtual SpellChecker *getSpellChecker() = 0;
+    virtual StreamElementsManager *getStreamElements() = 0;
+    virtual KickManager *getKick() = 0;
+    virtual CombinedManager *getCombined() = 0;
 };
 
 class Application : public IApplication
@@ -191,6 +197,9 @@ private:
     std::unique_ptr<ITwitchUsers> twitchUsers;
     std::unique_ptr<pronouns::Pronouns> pronouns;
     std::unique_ptr<SpellChecker> spellChecker;
+    std::unique_ptr<StreamElementsManager> streamElements;
+    std::unique_ptr<KickManager> kick;
+    std::unique_ptr<CombinedManager> combined;
 #ifdef CHATTERINO_HAVE_PLUGINS
     std::unique_ptr<PluginController> plugins;
 #endif
@@ -245,6 +254,9 @@ public:
     IStreamerMode *getStreamerMode() override;
     ITwitchUsers *getTwitchUsers() override;
     SpellChecker *getSpellChecker() override;
+    StreamElementsManager *getStreamElements() override;
+    KickManager *getKick() override;
+    CombinedManager *getCombined() override;
 
 private:
     void initNm(const Modes &modes, const Paths &paths);

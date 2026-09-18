@@ -175,8 +175,12 @@ public:
      * Return a list of available themes
      **/
     std::vector<std::pair<QString, QVariant>> availableThemes() const;
+    const std::vector<ThemeDescriptor> &availableThemeDescriptors() const;
+
+    void reloadAvailableThemes();
 
     pajlada::Signals::NoArgSignal updated;
+    pajlada::Signals::NoArgSignal availableThemesChanged;
 
     QStringSetting themeName{"/appearance/theme/name", "Dark"};
     QStringSetting lightSystemThemeName{"/appearance/theme/lightSystem",
@@ -187,6 +191,7 @@ private:
     bool isLight_ = false;
 
     std::vector<ThemeDescriptor> availableThemes_;
+    QString themesDirectory_;
 
     QString currentThemePath_;
     std::unique_ptr<QTimer> themeReloadTimer_;
@@ -197,10 +202,8 @@ private:
 
     /**
      * Figure out which themes are available in the Themes directory
-     *
-     * NOTE: This is currently not built to be reloadable
      **/
-    void loadAvailableThemes(const Paths &paths);
+    void loadAvailableThemes();
 
     std::optional<ThemeDescriptor> findThemeByKey(const QString &key);
 

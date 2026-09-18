@@ -300,6 +300,66 @@ const std::vector<ThemeDescriptor> Theme::builtInThemes{
         .path = ":/themes/Black.json",
         .name = "Black",
     },
+    {
+        .key = "Dracula",
+        .path = ":/themes/Dracula.json",
+        .name = "Dracula",
+    },
+    {
+        .key = "CatppuccinMocha",
+        .path = ":/themes/CatppuccinMocha.json",
+        .name = "Catppuccin Mocha",
+    },
+    {
+        .key = "CatppuccinMacchiato",
+        .path = ":/themes/CatppuccinMacchiato.json",
+        .name = "Catppuccin Macchiato",
+    },
+    {
+        .key = "CatppuccinFrappe",
+        .path = ":/themes/CatppuccinFrappe.json",
+        .name = "Catppuccin Frappé",
+    },
+    {
+        .key = "CatppuccinLatte",
+        .path = ":/themes/CatppuccinLatte.json",
+        .name = "Catppuccin Latte",
+    },
+    {
+        .key = "Nord",
+        .path = ":/themes/Nord.json",
+        .name = "Nord",
+    },
+    {
+        .key = "TokyoNight",
+        .path = ":/themes/TokyoNight.json",
+        .name = "Tokyo Night",
+    },
+    {
+        .key = "GruvboxDark",
+        .path = ":/themes/GruvboxDark.json",
+        .name = "Gruvbox Dark",
+    },
+    {
+        .key = "OneDark",
+        .path = ":/themes/OneDark.json",
+        .name = "One Dark",
+    },
+    {
+        .key = "SolarizedDark",
+        .path = ":/themes/SolarizedDark.json",
+        .name = "Solarized Dark",
+    },
+    {
+        .key = "SolarizedLight",
+        .path = ":/themes/SolarizedLight.json",
+        .name = "Solarized Light",
+    },
+    {
+        .key = "Synthwave84",
+        .path = ":/themes/Synthwave84.json",
+        .name = "Synthwave '84",
+    },
 };
 
 // Dark is our default & fallback theme
@@ -316,6 +376,7 @@ bool Theme::isSystemTheme() const
 }
 
 Theme::Theme(const Paths &paths)
+    : themesDirectory_(paths.themesDirectory)
 {
     this->themeName.connect(
         [this](auto themeName) {
@@ -332,7 +393,7 @@ Theme::Theme(const Paths &paths)
     this->darkSystemThemeName.connect(updateIfSystem, false);
     this->lightSystemThemeName.connect(updateIfSystem, false);
 
-    this->loadAvailableThemes(paths);
+    this->loadAvailableThemes();
 
     QObject::connect(QApplication::styleHints(),
                      &QStyleHints::colorSchemeChanged, &this->lifetime_,
@@ -462,11 +523,29 @@ std::vector<std::pair<QString, QVariant>> Theme::availableThemes() const
     return packagedThemes;
 }
 
-void Theme::loadAvailableThemes(const Paths &paths)
+const std::vector<ThemeDescriptor> &Theme::availableThemeDescriptors() const
+{
+    return this->availableThemes_;
+}
+
+void Theme::reloadAvailableThemes()
+{
+    static bool reloading = false;
+    if (reloading)
+    {
+        return;
+    }
+    reloading = true;
+    this->loadAvailableThemes();
+    this->availableThemesChanged.invoke();
+    reloading = false;
+}
+
+void Theme::loadAvailableThemes()
 {
     this->availableThemes_ = Theme::builtInThemes;
 
-    auto dir = QDir(paths.themesDirectory);
+    auto dir = QDir(this->themesDirectory_);
     for (const auto &info :
          dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Name))
     {

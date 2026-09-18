@@ -23,6 +23,9 @@
 #include "providers/links/LinkResolver.hpp"
 #include "providers/pronouns/Pronouns.hpp"
 #include "providers/seventv/SeventvAPI.hpp"
+#include "providers/kick/KickManager.hpp"
+#include "providers/combined/CombinedManager.hpp"
+#include "providers/streamelements/StreamElementsManager.hpp"
 #include "providers/seventv/SeventvEmotes.hpp"
 #include "providers/twitch/eventsub/Controller.hpp"
 #include "providers/twitch/TwitchBadges.hpp"
@@ -193,6 +196,9 @@ Application::Application(Settings &_settings, const Paths &paths,
     , twitchUsers(new TwitchUsers)
     , pronouns(new pronouns::Pronouns)
     , spellChecker(new SpellChecker)
+    , streamElements(std::make_unique<StreamElementsManager>())
+    , kick(std::make_unique<KickManager>())
+    , combined(std::make_unique<CombinedManager>())
 #ifdef CHATTERINO_HAVE_PLUGINS
     , plugins(new PluginController(paths))
 #endif
@@ -303,6 +309,7 @@ void Application::connect()
     assert(this->initialized);
 
     this->twitch->connect();
+    this->streamElements->start();
 }
 
 int Application::run()
@@ -603,6 +610,30 @@ SpellChecker *Application::getSpellChecker()
     return this->spellChecker.get();
 }
 
+StreamElementsManager *Application::getStreamElements()
+{
+    assertInGuiThread();
+    assert(this->streamElements);
+
+    return this->streamElements.get();
+}
+
+KickManager *Application::getKick()
+{
+    assertInGuiThread();
+    assert(this->kick);
+
+    return this->kick.get();
+}
+
+CombinedManager *Application::getCombined()
+{
+    assertInGuiThread();
+    assert(this->combined);
+
+    return this->combined.get();
+}
+
 void Application::aboutToQuit()
 {
     ABOUT_TO_QUIT.store(true);
@@ -656,6 +687,9 @@ void Application::stop()
     this->fonts.reset();
     this->themes.reset();
     this->spellChecker.reset();
+    this->streamElements.reset();
+    this->kick.reset();
+    this->combined.reset();
 
     STOPPED.store(true);
 }

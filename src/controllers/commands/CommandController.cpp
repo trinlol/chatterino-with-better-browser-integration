@@ -374,6 +374,9 @@ CommandController::CommandController(const Paths &paths)
 
     this->registerCommand("/usercard", &commands::openUsercard);
 
+    this->registerCommand("/dev", &commands::openChannelDevTools);
+    this->registerCommand("/channeldev", &commands::openChannelDevTools);
+
     this->registerCommand("/requests", &commands::requests);
 
     this->registerCommand("/lowtrust", &commands::lowtrust);

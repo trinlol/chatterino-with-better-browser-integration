@@ -103,6 +103,12 @@ public:
                  std::function<void(HelixStreamMarkerError)> failureCallback),
                 (override));
 
+    MOCK_METHOD(void, getSubscriptions,
+                (QString broadcasterId, int limit,
+                 ResultCallback<std::vector<HelixSubscription>> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
     MOCK_METHOD(void, loadBlocks,
                 (QString userId,
                  ResultCallback<std::vector<HelixBlock>> successCallback,

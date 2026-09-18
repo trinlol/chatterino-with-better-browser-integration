@@ -293,6 +293,22 @@ public:
         return nullptr;
     }
 
+    StreamElementsManager *getStreamElements() override
+    {
+        return nullptr;
+    }
+
+    KickManager *getKick() override
+    {
+        return nullptr;
+    }
+
+    CombinedManager *getCombined() override
+    {
+        return nullptr;
+    }
+
+
     QTemporaryDir settingsDir;
     Args args_;
     Modes modes_{args_};

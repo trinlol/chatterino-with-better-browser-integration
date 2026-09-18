@@ -29,12 +29,18 @@ const QString TEXT_TITLE("Reply Thread - @%1 in #%2");
 namespace chatterino {
 
 ReplyThreadPopup::ReplyThreadPopup(bool closeAutomatically, Split *split)
-    : DraggablePopup(closeAutomatically, split)
+    : DraggablePopup(closeAutomatically, nullptr)
     , split_(split)
 {
     assert(split != nullptr);
+    if (split != nullptr)
+    {
+        QObject::connect(split, &QObject::destroyed, this,
+                         &QWidget::deleteLater);
+    }
 
     this->setWindowTitle(QStringLiteral("Reply Thread"));
+
 
     HotkeyController::HotkeyMap actions{
         {"delete",

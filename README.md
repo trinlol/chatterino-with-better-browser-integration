@@ -99,7 +99,7 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 
 - [x] Fix text spacing on pinned announcements
 - [ ] Add in-chat channel point messages (for message-based redemptions)
-- [ ] Theme presets
+- [x] Theme presets (Dracula, Catppuccin Mocha, Catppuccin Macchiato, Catppuccin Frappé, Catppuccin Latte, Nord, Tokyo Night, Gruvbox Dark, One Dark, Solarized Dark, Solarized Light, Synthwave '84) and customizable Themes Studio
 - [x] Usercard — badges and paginated message history from channel logs
 
 ---

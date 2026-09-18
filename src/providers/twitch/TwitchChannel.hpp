@@ -14,11 +14,13 @@
 #include "providers/ffz/FfzEmotes.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/eventsub/SubscriptionHandle.hpp"
+#include "providers/twitch/MarqueeEvent.hpp"
 #include "providers/twitch/TwitchEmotes.hpp"
 #include "util/QStringHash.hpp"
 #include "util/ThreadGuard.hpp"
 
 #include <boost/circular_buffer/space_optimized.hpp>
+#include <deque>
 #include <IrcMessage>
 #include <pajlada/signals/signalholder.hpp>
 #include <QColor>
@@ -293,6 +295,7 @@ public:
     void setFfzCustomVipBadge(std::optional<EmotePtr> badge);
 
     void addTwitchBadgeSets(const HelixChannelBadges &channelBadges);
+    void updateBadgeElements();
 
     // Cheers
     std::optional<CheerEmote> cheerEmote(const QString &string) const;
@@ -447,6 +450,14 @@ public:
 
     /// Fires when the pinned message changes (set, cleared, or updated).
     pajlada::Signals::NoArgSignal pinnedMessageChanged;
+
+    void addMarqueeEvent(const MarqueeEvent &event);
+    const std::deque<MarqueeEvent> &recentMarqueeEvents() const;
+    void clearMarqueeEvents();
+    void refreshMarqueeSubscriptions();
+
+    pajlada::Signals::Signal<const MarqueeEvent &> marqueeEventAdded;
+    pajlada::Signals::NoArgSignal marqueeEventsCleared;
 
     // Predictions (ported from Moltorino, MIT, (c) MoltoBenne)
     struct PredictionOutcome {
@@ -744,6 +755,8 @@ private:
     /// Incremented before each getPinnedChatMessage request so that stale
     /// responses from earlier requests are discarded.
     uint64_t pinnedMessageRequestId_ = 0;
+
+    std::deque<MarqueeEvent> marqueeEvents_;
 
     friend class TwitchIrcServer;
     friend class MessageBuilder;

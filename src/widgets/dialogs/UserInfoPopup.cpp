@@ -7,6 +7,7 @@
 #include "Application.hpp"
 #include "common/Channel.hpp"
 #include "common/Literals.hpp"
+#include "common/network/NetworkResult.hpp"
 #include "common/QLogging.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/CommandController.hpp"
@@ -21,7 +22,10 @@
 #include "providers/chatterino/ChatterinoBadges.hpp"
 #include "providers/ffz/FfzBadges.hpp"
 #include "providers/IvrApi.hpp"
+#include "providers/kick/KickChannel.hpp"
+#include "providers/kick/KickManager.hpp"
 #include "providers/pronouns/Pronouns.hpp"
+
 #include "providers/seventv/SeventvBadges.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
@@ -120,10 +124,12 @@ bool checkMessageUserName(const QString &userName, MessagePtr message)
     bool isModAction =
         message->timeoutUser.compare(userName, Qt::CaseInsensitive) == 0;
     bool isSelectedUser =
-        message->loginName.compare(userName, Qt::CaseInsensitive) == 0;
+        message->loginName.compare(userName, Qt::CaseInsensitive) == 0 ||
+        message->displayName.compare(userName, Qt::CaseInsensitive) == 0;
 
     return (isSubscription || isModAction || isSelectedUser);
 }
+
 
 ChannelPtr filterMessages(const QString &userName, ChannelPtr channel)
 {
@@ -252,13 +258,19 @@ namespace chatterino {
 using namespace literals;
 
 UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
-    : DraggablePopup(closeAutomatically, split)
+    : DraggablePopup(closeAutomatically, nullptr)
     , split_(split)
     , closeAutomatically_(closeAutomatically)
 {
     assert(split != nullptr &&
            "split being nullptr causes lots of bugs down the road");
+    if (split != nullptr)
+    {
+        QObject::connect(split, &QObject::destroyed, this,
+                         &QWidget::deleteLater);
+    }
     this->setWindowTitle("Usercard");
+
 
     HotkeyController::HotkeyMap actions{
         {"delete",
@@ -639,8 +651,21 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                     bool hasModRights = twitchChannel->hasModRights();
                     visible = hasModRights && !isMyself;
                 }
+                else if (auto *kickChannel = dynamic_cast<KickChannel *>(
+                             this->underlyingChannel_.get()))
+                {
+                    auto *kickMgr = getApp()->getKick();
+                    bool isMyself =
+                        kickMgr &&
+                        !kickMgr->getCurrentUsername().isEmpty() &&
+                        kickMgr->getCurrentUsername().compare(
+                            this->userName_, Qt::CaseInsensitive) == 0;
+                    bool hasMod = kickChannel->hasModRights();
+                    visible = hasMod && !isMyself;
+                }
                 lineMod->setVisible(visible);
                 timeout->setVisible(visible);
+
             });
 
         // We can safely ignore this signal connection since we own the button, and
@@ -979,7 +1004,8 @@ void UserInfoPopup::setData(const QString &name,
 
     auto type = this->channel_->getType();
     if (type == Channel::Type::TwitchLive ||
-        type == Channel::Type::TwitchWhispers || type == Channel::Type::Misc)
+        type == Channel::Type::TwitchWhispers || type == Channel::Type::Misc ||
+        type == Channel::Type::Kick)
     {
         // not a normal twitch channel, the url opened by the button will be invalid, so hide the button
         this->ui_.usercardLabel->hide();
@@ -994,6 +1020,36 @@ void UserInfoPopup::updateLatestMessages()
     this->loadingUserLogs_ = false;
     this->userLogsExhausted_ = false;
     this->oldestLoadedLogDay_ = QDate();
+
+    if (this->underlyingChannel_->getType() == Channel::Type::Kick)
+    {
+        this->userMessagesChannel_.reset();
+        auto filteredChannel =
+            filterMessages(this->userName_, this->underlyingChannel_);
+        this->ui_.latestMessages->setChannel(filteredChannel);
+        this->ui_.latestMessages->setSourceChannel(this->underlyingChannel_);
+        const bool hasMessages = filteredChannel->hasMessages();
+        this->ui_.latestMessages->setVisible(hasMessages);
+        this->ui_.noMessagesLabel->setVisible(!hasMessages);
+        this->ui_.loadOlderMessagesButton->setVisible(false);
+
+        this->refreshConnection_ =
+            std::make_unique<pajlada::Signals::ScopedConnection>(
+                this->underlyingChannel_->messageAppended.connect(
+                    [this, filteredChannel](auto message, auto) {
+                        if (!checkMessageUserName(this->userName_, message))
+                        {
+                            return;
+                        }
+                        filteredChannel->addMessage(message,
+                                                    MessageContext::Repost);
+                        this->ui_.latestMessages->setVisible(true);
+                        this->ui_.noMessagesLabel->setVisible(false);
+                    }));
+
+        this->adjustSize();
+        return;
+    }
 
     if (this->underlyingChannel_->getType() != Channel::Type::Twitch ||
         this->userName_.isEmpty())
@@ -1010,6 +1066,7 @@ void UserInfoPopup::updateLatestMessages()
         this->adjustSize();
         return;
     }
+
 
     if (this->underlyingChannel_->isTwitchChannel())
     {
@@ -1267,8 +1324,100 @@ void UserInfoPopup::loadOlderUserMessages()
 
 void UserInfoPopup::updateUserData()
 {
+    if (this->underlyingChannel_ &&
+        this->underlyingChannel_->getType() == Channel::Type::Kick)
+    {
+        QString cleanName = this->userName_.trimmed();
+        this->ui_.nameLabel->setText(cleanName);
+        this->ui_.nameLabel->setProperty("copy-text", cleanName);
+        this->setWindowTitle(
+            TEXT_TITLE.arg(cleanName, this->underlyingChannel_->getName()));
+
+        std::weak_ptr<bool> hack = this->lifetimeHack_;
+        auto url =
+            QStringLiteral("https://kick.com/api/v2/channels/%1").arg(cleanName);
+
+        NetworkRequest(QUrl(url))
+            .header("Accept", "application/json")
+            .header("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .timeout(10000)
+            .onSuccess([this, hack, cleanName](NetworkResult result) {
+                if (!hack.lock())
+                {
+                    return;
+                }
+                auto root = result.parseJson();
+                auto userObj = root.value(QStringLiteral("user")).toObject();
+                int64_t uid =
+                    userObj.value(QStringLiteral("id")).toVariant().toLongLong();
+                QString avatar =
+                    userObj.value(QStringLiteral("profile_pic")).toString();
+                QString bio = userObj.value(QStringLiteral("bio")).toString();
+                QString actualName =
+                    userObj.value(QStringLiteral("username")).toString();
+                if (!actualName.isEmpty())
+                {
+                    this->userName_ = actualName;
+                    this->ui_.nameLabel->setText(actualName);
+                }
+
+                if (uid > 0)
+                {
+                    this->userId_ = QString::number(uid);
+                    this->ui_.userIDLabel->setText(TEXT_USER_ID % this->userId_);
+                    this->ui_.userIDLabel->setProperty("copy-text", this->userId_);
+                }
+
+                if (!avatar.isEmpty())
+                {
+                    this->avatarUrl_ = avatar;
+                    this->loadAvatar(QUrl(avatar));
+                }
+
+                int followers = root.value(QStringLiteral("followersCount")).toInt();
+                if (followers > 0)
+                {
+                    this->ui_.followerCountLabel->setText(
+                        TEXT_FOLLOWERS.arg(localizeNumbers(followers)));
+                }
+                else
+                {
+                    this->ui_.followerCountLabel->setText(
+                        TEXT_FOLLOWERS.arg(TEXT_UNAVAILABLE));
+                }
+
+                if (!bio.isEmpty())
+                {
+                    this->ui_.notesPreview->setText(bio);
+                    this->ui_.notesPreview->setVisible(true);
+                }
+
+                this->userStateChanged_.invoke();
+                this->updateBadges();
+            })
+            .onError([this, hack](NetworkResult /*res*/) {
+                if (!hack.lock())
+                {
+                    return;
+                }
+                this->ui_.followerCountLabel->setText(
+                    TEXT_FOLLOWERS.arg(TEXT_UNAVAILABLE));
+                this->ui_.createdDateLabel->setText(
+                    TEXT_CREATED.arg(TEXT_UNAVAILABLE));
+                this->userStateChanged_.invoke();
+            })
+            .execute();
+
+        this->ui_.block->setEnabled(false);
+        this->ui_.ignoreHighlights->setEnabled(false);
+        this->ui_.notesAdd->setEnabled(false);
+        return;
+    }
+
     std::weak_ptr<bool> hack = this->lifetimeHack_;
     auto currentUser = getApp()->getAccounts()->twitch.getCurrent();
+
 
     const auto onUserFetchFailed = [this, hack] {
         if (!hack.lock())
@@ -1572,6 +1721,67 @@ void UserInfoPopup::updateNotes()
     this->ui_.notesPreview->setVisible(true);
 }
 
+namespace {
+
+inline int getBadgePriorityRank(const QString &key)
+{
+    // Rank 1: Channel-specific badges (Priority 10 - 99)
+    if (key.startsWith(QStringLiteral("broadcaster"), Qt::CaseInsensitive))
+        return 10;
+    if (key.startsWith(QStringLiteral("moderator"), Qt::CaseInsensitive))
+        return 20;
+    if (key.startsWith(QStringLiteral("vip"), Qt::CaseInsensitive))
+        return 30;
+    if (key.startsWith(QStringLiteral("founder"), Qt::CaseInsensitive))
+        return 40;
+    if (key.startsWith(QStringLiteral("subscriber"), Qt::CaseInsensitive))
+        return 50;
+    if (key.startsWith(QStringLiteral("sub-gifter"), Qt::CaseInsensitive))
+        return 60;
+    if (key.startsWith(QStringLiteral("bits"), Qt::CaseInsensitive))
+        return 70;
+    if (key.startsWith(QStringLiteral("predictions"), Qt::CaseInsensitive))
+        return 80;
+    if (key.startsWith(QStringLiteral("ffz-channel"), Qt::CaseInsensitive))
+        return 90;
+    if (key.startsWith(QStringLiteral("kick:"), Qt::CaseInsensitive))
+        return 15;
+
+    // Rank 2: Global Twitch badges (Priority 100 - 199)
+    if (key.startsWith(QStringLiteral("staff"), Qt::CaseInsensitive))
+        return 110;
+    if (key.startsWith(QStringLiteral("admin"), Qt::CaseInsensitive))
+        return 120;
+    if (key.startsWith(QStringLiteral("global_mod"), Qt::CaseInsensitive))
+        return 130;
+    if (key.startsWith(QStringLiteral("partner"), Qt::CaseInsensitive) ||
+        key.startsWith(QStringLiteral("verified"), Qt::CaseInsensitive))
+        return 140;
+    if (key.startsWith(QStringLiteral("turbo"), Qt::CaseInsensitive))
+        return 150;
+    if (key.startsWith(QStringLiteral("prime"), Qt::CaseInsensitive) ||
+        key.startsWith(QStringLiteral("premium"), Qt::CaseInsensitive))
+        return 160;
+    if (key.startsWith(QStringLiteral("glhf"), Qt::CaseInsensitive))
+        return 170;
+    if (key.startsWith(QStringLiteral("twitch"), Qt::CaseInsensitive))
+        return 180;
+
+    // Rank 3: Third-party personal badges (Priority 200+)
+    if (key.startsWith(QStringLiteral("7tv"), Qt::CaseInsensitive))
+        return 210;
+    if (key.startsWith(QStringLiteral("ffz"), Qt::CaseInsensitive))
+        return 220;
+    if (key.startsWith(QStringLiteral("bttv"), Qt::CaseInsensitive))
+        return 230;
+    if (key.startsWith(QStringLiteral("chatterino"), Qt::CaseInsensitive))
+        return 240;
+
+    return 190;
+}
+
+}  // namespace
+
 void UserInfoPopup::updateBadges()
 {
     if (this->userName_.isEmpty())
@@ -1582,11 +1792,14 @@ void UserInfoPopup::updateBadges()
 
     this->ui_.badgeGrid->setBadges(this->buildUserBadges());
 
+    const auto *twitchChannel =
+        dynamic_cast<TwitchChannel *>(this->underlyingChannel_.get());
+
     std::weak_ptr<bool> hack = this->lifetimeHack_;
     getIvr()->getUserBadges(
         this->userName_,
-        [this, hack](const std::vector<IvrUserBadge> &ivrBadges) {
-            runInGuiThread([this, hack, ivrBadges]() {
+        [this, hack, twitchChannel](const std::vector<IvrUserBadge> &ivrBadges) {
+            runInGuiThread([this, hack, ivrBadges, twitchChannel]() {
                 if (!hack.lock())
                 {
                     return;
@@ -1597,8 +1810,23 @@ void UserInfoPopup::updateBadges()
 
                 for (const auto &badge : ivrBadges)
                 {
-                    const auto emote = getApp()->getTwitchBadges()->badge(
-                        badge.setID, badge.version);
+                    EmotePtr emote = nullptr;
+                    if (twitchChannel)
+                    {
+                        if (auto opt = twitchChannel->twitchBadge(
+                                badge.setID, badge.version))
+                        {
+                            emote = *opt;
+                        }
+                    }
+                    if (!emote)
+                    {
+                        if (auto opt = getApp()->getTwitchBadges()->badge(
+                                badge.setID, badge.version))
+                        {
+                            emote = *opt;
+                        }
+                    }
                     if (!emote)
                     {
                         continue;
@@ -1612,9 +1840,10 @@ void UserInfoPopup::updateBadges()
 
                     seen.insert(key);
                     const auto tooltip = badge.title.isEmpty()
-                                             ? (*emote)->tooltip.string
+                                             ? emote->tooltip.string
                                              : badge.title;
-                    badges.append({*emote, tooltip});
+                    int prio = getBadgePriorityRank(key);
+                    badges.append({emote, tooltip, prio});
                 }
 
                 this->ui_.badgeGrid->setBadges(badges);
@@ -1628,6 +1857,8 @@ QVector<UserBadgeDisplayEntry> UserInfoPopup::buildUserBadges(
 {
     const auto *twitchChannel =
         dynamic_cast<TwitchChannel *>(this->underlyingChannel_.get());
+    const auto *kickChannel =
+        dynamic_cast<KickChannel *>(this->underlyingChannel_.get());
 
     QVector<UserBadgeDisplayEntry> badges;
     std::unordered_set<QString> seen;
@@ -1640,13 +1871,71 @@ QVector<UserBadgeDisplayEntry> UserInfoPopup::buildUserBadges(
         }
 
         seen.insert(key);
-        badges.append({emote, tooltip});
+        int prio = getBadgePriorityRank(key);
+        badges.append({emote, tooltip, prio});
     };
 
     if (twitchChannel != nullptr)
     {
-        for (auto it = this->underlyingChannel_->getMessageSnapshot().rbegin();
-             it != this->underlyingChannel_->getMessageSnapshot().rend(); ++it)
+        // 1. Broadcaster badge check
+        if (this->userName_.compare(twitchChannel->getName(),
+                                    Qt::CaseInsensitive) == 0)
+        {
+            if (auto emote = twitchChannel->twitchBadge(
+                    QStringLiteral("broadcaster"), QStringLiteral("1")))
+            {
+                addBadge(QStringLiteral("broadcaster/1"), *emote,
+                         (*emote)->tooltip.string);
+            }
+            else if (auto emote = getApp()->getTwitchBadges()->badge(
+                         QStringLiteral("broadcaster"), QStringLiteral("1")))
+            {
+                addBadge(QStringLiteral("broadcaster/1"), *emote,
+                         (*emote)->tooltip.string);
+            }
+        }
+
+        // 2. Moderator badge check
+        bool isSelf = this->userName_.compare(
+            getApp()->getAccounts()->twitch.getCurrent()->getUserName(),
+            Qt::CaseInsensitive) == 0;
+        if (isSelf && twitchChannel->isMod())
+        {
+            if (auto emote = twitchChannel->twitchBadge(
+                    QStringLiteral("moderator"), QStringLiteral("1")))
+            {
+                addBadge(QStringLiteral("moderator/1"), *emote,
+                         (*emote)->tooltip.string);
+            }
+            else if (auto emote = getApp()->getTwitchBadges()->badge(
+                         QStringLiteral("moderator"), QStringLiteral("1")))
+            {
+                addBadge(QStringLiteral("moderator/1"), *emote,
+                         (*emote)->tooltip.string);
+            }
+        }
+
+        // 3. VIP badge check
+        if (isSelf && twitchChannel->isVip())
+        {
+            if (auto emote = twitchChannel->twitchBadge(QStringLiteral("vip"),
+                                                        QStringLiteral("1")))
+            {
+                addBadge(QStringLiteral("vip/1"), *emote,
+                         (*emote)->tooltip.string);
+            }
+            else if (auto emote = getApp()->getTwitchBadges()->badge(
+                         QStringLiteral("vip"), QStringLiteral("1")))
+            {
+                addBadge(QStringLiteral("vip/1"), *emote,
+                         (*emote)->tooltip.string);
+            }
+        }
+
+        // 4. Scan all messages in channel snapshot for badges worn by this user
+        auto twitchSnapshot = this->underlyingChannel_->getMessageSnapshot();
+        for (auto it = twitchSnapshot.rbegin(); it != twitchSnapshot.rend();
+             ++it)
         {
             if (!checkMessageUserName(this->userName_, *it))
             {
@@ -1661,7 +1950,62 @@ QVector<UserBadgeDisplayEntry> UserInfoPopup::buildUserBadges(
                              (*emote)->tooltip.string);
                 }
             }
-            break;
+        }
+    }
+    else if (kickChannel != nullptr)
+    {
+        // Kick Channel Badges
+        if (this->userName_.compare(kickChannel->channelSlug(),
+                                    Qt::CaseInsensitive) == 0)
+        {
+            static auto streamerEmote = []() {
+                auto img = Image::fromResourcePixmap(
+                    QPixmap(QStringLiteral(":/buttons/kick.svg")), 1);
+                return std::make_shared<Emote>(Emote{
+                    .name = EmoteName{QStringLiteral("[STREAMER]")},
+                    .images = ImageSet{img},
+                    .tooltip = Tooltip{QStringLiteral("Kick Broadcaster")},
+                    .homePage = Url{QStringLiteral("https://kick.com")},
+                    .zeroWidth = false,
+                    .id = EmoteId{QStringLiteral("kick_streamer_badge")},
+                    .author = EmoteAuthor{},
+                });
+            }();
+            addBadge(QStringLiteral("kick:broadcaster"), streamerEmote,
+                     QStringLiteral("Kick Broadcaster"));
+        }
+
+        auto kickSnapshot = this->underlyingChannel_->getMessageSnapshot();
+        for (auto it = kickSnapshot.rbegin(); it != kickSnapshot.rend(); ++it)
+        {
+            if (!checkMessageUserName(this->userName_, *it))
+            {
+                continue;
+            }
+
+            for (const auto &extBadge : (*it)->externalBadges)
+            {
+                if (extBadge.startsWith(QStringLiteral("kick:")))
+                {
+                    QString bType = extBadge.mid(5);
+                    QString title =
+                        QStringLiteral("Kick %1").arg(bType.toUpper());
+                    static auto kickEmote = []() {
+                        auto img = Image::fromResourcePixmap(
+                            QPixmap(QStringLiteral(":/buttons/kick.svg")), 1);
+                        return std::make_shared<Emote>(Emote{
+                            .name = EmoteName{QStringLiteral("[KICK]")},
+                            .images = ImageSet{img},
+                            .tooltip = Tooltip{QStringLiteral("Kick")},
+                            .homePage = Url{QStringLiteral("https://kick.com")},
+                            .zeroWidth = false,
+                            .id = EmoteId{QStringLiteral("kick_badge")},
+                            .author = EmoteAuthor{},
+                        });
+                    }();
+                    addBadge(extBadge, kickEmote, title);
+                }
+            }
         }
     }
 
@@ -1713,6 +2057,7 @@ QVector<UserBadgeDisplayEntry> UserInfoPopup::buildUserBadges(
 
     return badges;
 }
+
 
 //
 // TimeoutWidget

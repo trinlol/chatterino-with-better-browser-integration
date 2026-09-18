@@ -7,6 +7,8 @@
 #include "Application.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "providers/kick/KickManager.hpp"
+#include "providers/combined/CombinedManager.hpp"
 #include "singletons/Fonts.hpp"
 #include "singletons/Theme.hpp"
 
@@ -44,8 +46,10 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
     auto *layout = new QVBoxLayout(this->getLayoutContainer());
 
     auto &ui = this->ui_;
-    // Channel
-    ui.channel = new AutoCheckedRadioButton("Channel");
+    // Channel (Twitch)
+    ui.channel = new AutoCheckedRadioButton("Twitch Channel");
+    ui.channel->setStyleSheet(
+        "QRadioButton::indicator:checked { background-color: #9146FF; border: 2px solid #9146FF; border-radius: 6px; }");
     layout->addWidget(ui.channel);
 
     ui.channelLabel = new QLabel("Join a Twitch channel by its channel name");
@@ -71,6 +75,68 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
 
     ui.channel->installEventFilter(&this->tabFilter_);
     ui.channelName->installEventFilter(&this->tabFilter_);
+
+    // Kick Channel
+    ui.kick = new AutoCheckedRadioButton("Kick Channel");
+    ui.kick->setStyleSheet(
+        "QRadioButton::indicator:checked { background-color: #53FC18; border: 2px solid #53FC18; border-radius: 6px; }");
+    layout->addWidget(ui.kick);
+
+    ui.kickLabel = new QLabel("Join a Kick livestream chat by channel name or chatroom ID");
+    ui.kickLabel->setVisible(false);
+    layout->addWidget(ui.kickLabel);
+
+    ui.kickChannelName = new QLineEdit();
+    ui.kickChannelName->setPlaceholderText("e.g. xqc or chatroom ID");
+    ui.kickChannelName->setVisible(false);
+    layout->addWidget(ui.kickChannelName);
+
+    QObject::connect(ui.kick, &AutoCheckedRadioButton::toggled, this,
+                     [this](bool enabled) {
+                         auto &ui = this->ui_;
+                         ui.kickChannelName->setVisible(enabled);
+                         ui.kickLabel->setVisible(enabled);
+
+                         if (enabled)
+                         {
+                             ui.kickChannelName->setFocus();
+                             ui.kickChannelName->selectAll();
+                         }
+                     });
+
+    ui.kick->installEventFilter(&this->tabFilter_);
+    ui.kickChannelName->installEventFilter(&this->tabFilter_);
+
+    // Combined (Twitch + Kick)
+    ui.combined = new AutoCheckedRadioButton("Combined (Twitch + Kick)");
+    ui.combined->setStyleSheet(
+        "QRadioButton::indicator:checked { background-color: #00E701; border: 2px solid #00E701; border-radius: 6px; }");
+    layout->addWidget(ui.combined);
+
+    ui.combinedLabel = new QLabel("Join both Twitch & Kick chats in one split (e.g. shroud or twitch_name+kick_name)");
+    ui.combinedLabel->setVisible(false);
+    layout->addWidget(ui.combinedLabel);
+
+    ui.combinedChannelName = new QLineEdit();
+    ui.combinedChannelName->setPlaceholderText("e.g. shroud or twitch_name+kick_name");
+    ui.combinedChannelName->setVisible(false);
+    layout->addWidget(ui.combinedChannelName);
+
+    QObject::connect(ui.combined, &AutoCheckedRadioButton::toggled, this,
+                     [this](bool enabled) {
+                         auto &ui = this->ui_;
+                         ui.combinedChannelName->setVisible(enabled);
+                         ui.combinedLabel->setVisible(enabled);
+
+                         if (enabled)
+                         {
+                             ui.combinedChannelName->setFocus();
+                             ui.combinedChannelName->selectAll();
+                         }
+                     });
+
+    ui.combined->installEventFilter(&this->tabFilter_);
+    ui.combinedChannelName->installEventFilter(&this->tabFilter_);
 
     // Whispers
     ui.whispers = new AutoCheckedRadioButton("Whispers");
@@ -208,6 +274,16 @@ void SelectChannelDialog::setSelectedChannel(
             this->ui_.channel->setChecked(true);
         }
         break;
+        case Channel::Type::Kick: {
+            this->ui_.kickChannelName->setText(channel->getName());
+            this->ui_.kick->setChecked(true);
+        }
+        break;
+        case Channel::Type::Combined: {
+            this->ui_.combinedChannelName->setText(channel->getName());
+            this->ui_.combined->setChecked(true);
+        }
+        break;
         case Channel::Type::TwitchWatching: {
             this->ui_.watching->setFocus();
         }
@@ -245,8 +321,28 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
 
     if (this->ui_.channel->isChecked())
     {
-        return getApp()->getTwitch()->getOrAddChannel(
-            this->ui_.channelName->text().trimmed());
+        auto text = this->ui_.channelName->text().trimmed();
+        if (text.startsWith(QStringLiteral("kick:"), Qt::CaseInsensitive))
+        {
+            return getApp()->getKick()->getOrAddChannel(text);
+        }
+        if (text.startsWith(QStringLiteral("combined:"), Qt::CaseInsensitive))
+        {
+            return getApp()->getCombined()->getOrAddChannel(text);
+        }
+        return getApp()->getTwitch()->getOrAddChannel(text);
+    }
+
+    if (this->ui_.kick->isChecked())
+    {
+        return getApp()->getKick()->getOrAddChannel(
+            this->ui_.kickChannelName->text().trimmed());
+    }
+
+    if (this->ui_.combined->isChecked())
+    {
+        return getApp()->getCombined()->getOrAddChannel(
+            this->ui_.combinedChannelName->text().trimmed());
     }
 
     if (this->ui_.watching->isChecked())
@@ -394,6 +490,8 @@ void SelectChannelDialog::scaleChangedEvent(float newScale)
         getApp()->getFonts()->getFont(FontStyle::UiMedium, this->scale());
 
     ui.channelName->setFont(uiFont);
+    ui.kickChannelName->setFont(uiFont);
+    ui.combinedChannelName->setFont(uiFont);
 }
 
 void SelectChannelDialog::addShortcuts()

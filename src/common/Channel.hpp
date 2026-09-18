@@ -56,6 +56,10 @@ public:
         TwitchEnd,
         /// Misc
         Misc,
+        /// Kick
+        Kick,
+        /// Combined (Twitch + Kick)
+        Combined,
     };
 
     explicit Channel(const QString &name, Type type);
@@ -80,6 +84,8 @@ public:
     virtual const QString &getDisplayName() const;
     virtual const QString &getLocalizedName() const;
     bool isTwitchChannel() const;
+    bool isKickChannel() const;
+    bool isCombinedChannel() const;
     virtual bool isEmpty() const;
 
     std::vector<MessagePtr> getMessageSnapshot() const;
@@ -243,6 +249,10 @@ constexpr magic_enum::customize::customize_t
             return "live";
         case Type::Misc:
             return "misc";
+        case Type::Kick:
+            return "kick";
+        case Type::Combined:
+            return "combined";
 
         case Type::None:
         case Type::Direct:

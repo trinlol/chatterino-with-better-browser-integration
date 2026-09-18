@@ -21,6 +21,7 @@
 #include "util/StreamLink.hpp"
 #include "util/Twitch.hpp"
 #include "widgets/dialogs/UserInfoPopup.hpp"
+#include "widgets/dialogs/ChannelDevToolsDialog.hpp"
 #include "widgets/helper/ChannelView.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/splits/Split.hpp"
@@ -760,6 +761,38 @@ QString openUsercard(const CommandContext &ctx)
     userPopup->setData(userName, channel);
     userPopup->moveTo(QCursor::pos(), widgets::BoundsChecking::CursorPosition);
     userPopup->show();
+    return "";
+}
+
+QString openChannelDevTools(const CommandContext &ctx)
+{
+    if (ctx.channel == nullptr || ctx.channel->isEmpty())
+    {
+        return "";
+    }
+
+    Split *currentSplit = nullptr;
+    auto *currentPage = dynamic_cast<SplitContainer *>(getApp()
+                                                           ->getWindows()
+                                                           ->getMainWindow()
+                                                           .getNotebook()
+                                                           .getSelectedPage());
+    if (currentPage != nullptr)
+    {
+        currentSplit = currentPage->getSelectedSplit();
+    }
+
+    if (currentSplit != nullptr && currentSplit->getChannel() == ctx.channel)
+    {
+        currentSplit->openChannelDevToolsDialog();
+    }
+    else
+    {
+        auto *dialog = new ChannelDevToolsDialog(ctx.channel, currentSplit);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->show();
+    }
+
     return "";
 }
 

@@ -520,6 +520,7 @@ void NotebookTab::titleUpdated()
 {
     // Queue up save because: Tab title changed
     getApp()->getWindows()->queueSave();
+    this->setToolTip(this->getTitle());
     this->notebook_->refresh();
     this->updateSize();
     this->update();
@@ -830,6 +831,29 @@ bool NotebookTab::hasHighlightsEnabled() const
     return this->highlightEnabled_;
 }
 
+bool NotebookTab::isKickTab() const
+{
+    auto *container = dynamic_cast<SplitContainer *>(this->page);
+    if (!container)
+    {
+        return false;
+    }
+
+    for (const auto &split : container->getSplits())
+    {
+        if (split && split->getChannel())
+        {
+            if (split->getChannel()->isKickChannel() ||
+                split->getChannel()->isCombinedChannel())
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 QRect NotebookTab::getDesiredRect() const
 {
     return QRect(this->positionAnimationDesiredPoint_, this->size());
@@ -930,6 +954,13 @@ void NotebookTab::paintEvent(QPaintEvent *)
     auto lineColor = this->mouseOver_ ? colors.line.hover
                                       : (windowFocused ? colors.line.regular
                                                        : colors.line.unfocused);
+
+    if (this->isKickTab())
+    {
+        lineColor = this->mouseOver_ ? QColor(0x6E, 0xFF, 0x33)
+                                     : (this->selected_ ? QColor(0x53, 0xFC, 0x18)
+                                                        : QColor(0x2E, 0x94, 0x0C));
+    }
 
     QRect lineRect;
     switch (this->tabLocation_)

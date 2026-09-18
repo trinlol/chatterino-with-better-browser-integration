@@ -167,14 +167,27 @@ std::optional<EmotePtr> TwitchBadges::badge(const QString &set,
 {
     auto badgeSets = this->badgeSets_.access();
     auto it = badgeSets->find(set);
-    if (it != badgeSets->end())
+    if (it == badgeSets->end() || it->second.empty())
     {
-        auto it2 = it->second.find(version);
-        if (it2 != it->second.end())
-        {
-            return it2->second;
-        }
+        return std::nullopt;
     }
+
+    auto it2 = it->second.find(version);
+    if (it2 != it->second.end())
+    {
+        return it2->second;
+    }
+
+    if (set == "founder")
+    {
+        auto it0 = it->second.find("0");
+        if (it0 != it->second.end())
+        {
+            return it0->second;
+        }
+        return it->second.begin()->second;
+    }
+
     return std::nullopt;
 }
 

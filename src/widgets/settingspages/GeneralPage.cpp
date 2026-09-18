@@ -557,6 +557,26 @@ void GeneralPage::initLayout(GeneralPageView &layout)
     SettingWidget::checkbox("Show watch streak header", s.showWatchStreakHeader)
         ->addTo(layout);
 
+    SettingWidget::checkbox("Show recent events marquee", s.showMarquee)
+        ->setTooltip("Display recent Twitch subs, bits, and tips in a ticker banner above chat")
+        ->addTo(layout);
+
+    SettingWidget::intInput("Marquee text font size", s.marqueeFontSize, {
+        .min = 8,
+        .max = 24,
+        .singleStep = 1,
+        .suffix = " pt",
+    })->setTooltip("Customize the text size of the marquee ticker (default: 12 pt)")
+      ->addTo(layout);
+
+    SettingWidget::intInput("Marquee scroll speed", s.marqueeSpeed, {
+        .min = 5,
+        .max = 150,
+        .singleStep = 5,
+        .suffix = " px/s",
+    })->setTooltip("Adjust scroll speed for the continuous marquee ribbon")
+      ->addTo(layout);
+
     layout.addDropdown<int>(
         "Limit message height",
         {"Never", "2 lines", "3 lines", "4 lines", "5 lines"},
@@ -639,6 +659,27 @@ void GeneralPage::initLayout(GeneralPageView &layout)
         },
         [](auto args) {
             return fuzzyToFloat(args.value, 1.f);
+        });
+
+    SettingWidget::checkbox("Show Twitch chat GIFs inline",
+                            s.showTwitchGifsInline)
+        ->setTooltip("When enabled, GIFs sent in chat will appear "
+                     "inline as animated images instead of text links.")
+        ->addTo(layout);
+
+    layout.addDropdown<float>(
+        "Twitch GIF size",
+        {"1x", "1.25x", "1.5x (Default)", "1.75x", "2x", "2.5x"},
+        s.twitchGifScale,
+        [](auto val) {
+            if (val == 1.5f)
+            {
+                return QString("1.5x (Default)");
+            }
+            return QString::number(val) + "x";
+        },
+        [](auto args) {
+            return fuzzyToFloat(args.value, 1.5f);
         });
 
     SettingWidget::checkbox("Remove spaces between emotes",
