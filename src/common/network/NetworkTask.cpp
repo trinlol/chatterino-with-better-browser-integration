@@ -153,6 +153,11 @@ void NetworkTask::logReply()
 
 void NetworkTask::writeToCache(const QByteArray &bytes) const
 {
+    if (bytes.isEmpty())
+    {
+        return;
+    }
+
     std::ignore = QtConcurrent::run([data = this->data_, bytes] {
         if (isAppAboutToQuit())
         {

@@ -17,6 +17,7 @@
 #include "messages/MessageBuilder.hpp"
 #include "messages/MessageElement.hpp"
 #include "providers/bttv/BttvEmotes.hpp"
+#include "providers/combined/CombinedChannel.hpp"
 #include "providers/emoji/Emojis.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
 #include "providers/seventv/SeventvEmotes.hpp"
@@ -691,6 +692,13 @@ void EmotePopup::loadChannel(ChannelPtr channel)
 
     this->channel_ = std::move(channel);
     this->twitchChannel_ = dynamic_cast<TwitchChannel *>(this->channel_.get());
+    if (!this->twitchChannel_)
+    {
+        if (auto *combined = dynamic_cast<CombinedChannel *>(this->channel_.get()))
+        {
+            this->twitchChannel_ = dynamic_cast<TwitchChannel *>(combined->twitchChannel().get());
+        }
+    }
 
     this->setWindowTitle("Emotes in #" + this->channel_->getName());
 

@@ -127,6 +127,7 @@ private:
     std::atomic_bool empty_{false};
 
     bool shouldLoad_{false};
+    int loadAttempts_{0};
 
     mutable std::chrono::time_point<std::chrono::steady_clock> lastUsed_;
 

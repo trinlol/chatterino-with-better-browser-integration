@@ -61,14 +61,24 @@ public:
                            QString avatarUrl)>
             callback);
 
+    void refreshOAuthToken(
+        std::function<void(bool success, QString error)> callback = nullptr);
+
+    void resolveUserId(
+        const QString &usernameOrSlug,
+        std::function<void(int64_t userId, QString error)> callback);
+
     // Kick Moderation API
     void banUser(const QString &channelSlug, const QString &username,
+                 int64_t broadcasterUserId = 0,
                  std::function<void(bool ok, QString error)> callback = nullptr);
     void timeoutUser(
         const QString &channelSlug, const QString &username,
         int durationSeconds,
+        int64_t broadcasterUserId = 0,
         std::function<void(bool ok, QString error)> callback = nullptr);
     void unbanUser(const QString &channelSlug, const QString &username,
+                   int64_t broadcasterUserId = 0,
                    std::function<void(bool ok, QString error)> callback = nullptr);
 
 Q_SIGNALS:

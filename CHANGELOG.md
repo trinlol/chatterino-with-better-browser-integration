@@ -2,6 +2,18 @@
 
 ## Chatterino Better Browser
 
+### v2.7.1 (2026-10-03)
+
+#### Fixed
+
+- **Subscriber Emote Loading & Fallback**: Fixed an issue where subscriber emotes in the Emote Menu's "Subs" tab displayed as plain text instead of images or GIFs during large concurrent requests. Added automatic exponential backoff retry for transient network errors, alternative resolution fallbacks (2x, 3x), and proper state reset on emote refresh.
+- **Cache Resilience**: Discarded 0-byte corrupt disk cache entries and prevented saving empty network replies to disk.
+- **Chat Input Selection Styling**: Fixed selection highlight colors in chat input box to guarantee high contrast across light and dark themes.
+
+#### Added
+
+- **Combined Channel Support**: Enhanced autocomplete (emotes and users), variable replacements, commands, and emote popup support for combined channels.
+
 ### v2.7.0 (2026-09-18)
 
 #### Added

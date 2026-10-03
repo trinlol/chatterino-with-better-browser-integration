@@ -80,14 +80,44 @@ const std::shared_ptr<Image> &getImagePriv(const ImageSet &set, float scale)
         quality = 2;
     }
 
-    if (!set.getImage3()->isEmpty() && quality == 3)
+    if (quality == 3)
     {
-        return set.getImage3();
+        if (set.getImage3() && !set.getImage3()->isEmpty())
+        {
+            return set.getImage3();
+        }
+        if (set.getImage2() && !set.getImage2()->isEmpty())
+        {
+            return set.getImage2();
+        }
+        return set.getImage1();
     }
 
-    if (!set.getImage2()->isEmpty() && quality >= 2)
+    if (quality == 2)
+    {
+        if (set.getImage2() && !set.getImage2()->isEmpty())
+        {
+            return set.getImage2();
+        }
+        if (set.getImage3() && !set.getImage3()->isEmpty())
+        {
+            return set.getImage3();
+        }
+        return set.getImage1();
+    }
+
+    // quality == 1
+    if (set.getImage1() && !set.getImage1()->isEmpty())
+    {
+        return set.getImage1();
+    }
+    if (set.getImage2() && !set.getImage2()->isEmpty())
     {
         return set.getImage2();
+    }
+    if (set.getImage3() && !set.getImage3()->isEmpty())
+    {
+        return set.getImage3();
     }
 
     return set.getImage1();
@@ -115,7 +145,8 @@ const ImagePtr &ImageSet::getImageOrLoaded(float scale) const
     {
         return this->imageX2_;
     }
-    else if (this->imageX1_->loaded())
+    else if (this->imageX1_ && !this->imageX1_->isEmpty() &&
+             this->imageX1_->loaded())
     {
         return this->imageX1_;
     }

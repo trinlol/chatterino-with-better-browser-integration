@@ -326,7 +326,207 @@ void KickManager::verifyAccount(
         .execute();
 }
 
+void KickManager::refreshOAuthToken(
+    std::function<void(bool success, QString error)> callback)
+{
+    auto refreshToken =
+        getSettings()->kickAccountRefreshToken.getValue().trimmed();
+    if (refreshToken.isEmpty())
+    {
+        if (callback)
+        {
+            callback(false, QStringLiteral("No Kick refresh token available."));
+        }
+        return;
+    }
+
+    auto clientId = getSettings()->kickClientId.getValue().trimmed();
+    auto clientSecret = getSettings()->kickClientSecret.getValue().trimmed();
+
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("grant_type"),
+                       QStringLiteral("refresh_token"));
+    query.addQueryItem(QStringLiteral("client_id"), clientId);
+    if (!clientSecret.isEmpty())
+    {
+        query.addQueryItem(QStringLiteral("client_secret"), clientSecret);
+    }
+    query.addQueryItem(QStringLiteral("refresh_token"), refreshToken);
+
+    QByteArray postData = query.toString(QUrl::FullyEncoded).toUtf8();
+
+    NetworkRequest(QUrl(QStringLiteral("https://id.kick.com/oauth/token")),
+                   NetworkRequestType::Post)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Accept", "application/json")
+        .header("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .payload(postData)
+        .timeout(15000)
+        .onSuccess([this, callback](NetworkResult result) {
+            auto json = result.parseJson();
+            QString accessToken =
+                json.value(QStringLiteral("access_token")).toString();
+            QString newRefreshToken =
+                json.value(QStringLiteral("refresh_token")).toString();
+            if (accessToken.isEmpty())
+            {
+                if (callback)
+                {
+                    callback(
+                        false,
+                        QStringLiteral("Missing access_token in Kick refresh response."));
+                }
+                return;
+            }
+
+            getSettings()->kickAccountToken = accessToken.trimmed();
+            if (!newRefreshToken.trimmed().isEmpty())
+            {
+                getSettings()->kickAccountRefreshToken =
+                    newRefreshToken.trimmed();
+            }
+            Q_EMIT this->accountChanged();
+
+            if (callback)
+            {
+                callback(true, QString());
+            }
+        })
+        .onError([callback](NetworkResult result) {
+            QString errorMsg =
+                QStringLiteral("Kick token refresh failed (HTTP %1): %2")
+                    .arg(result.status().value_or(0))
+                    .arg(QString::fromUtf8(result.getData()));
+            if (callback)
+            {
+                callback(false, errorMsg);
+            }
+        })
+        .execute();
+}
+
+void KickManager::resolveUserId(
+    const QString &usernameOrSlug,
+    std::function<void(int64_t userId, QString error)> callback)
+{
+    QString target = usernameOrSlug.trimmed();
+    if (target.startsWith(u'@'))
+    {
+        target = target.mid(1).trimmed();
+    }
+    if (target.isEmpty())
+    {
+        if (callback)
+        {
+            callback(0, QStringLiteral("Username cannot be empty."));
+        }
+        return;
+    }
+
+    bool isNum = false;
+    int64_t parsed = target.toLongLong(&isNum);
+    if (isNum && parsed > 0)
+    {
+        if (callback)
+        {
+            callback(parsed, QString());
+        }
+        return;
+    }
+
+    auto fetchV2 = [callback, target]() {
+        auto v2Url = QStringLiteral("https://kick.com/api/v2/channels/%1")
+                         .arg(target.toLower());
+        NetworkRequest(QUrl(v2Url))
+            .header("Accept", "application/json")
+            .header("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .timeout(10000)
+            .onSuccess([callback, target](NetworkResult v2Res) {
+                auto v2Root = v2Res.parseJson();
+                int64_t uid = v2Root.value(QStringLiteral("user_id"))
+                                  .toVariant()
+                                  .toLongLong();
+                if (uid <= 0)
+                {
+                    uid = v2Root.value(QStringLiteral("user"))
+                              .toObject()
+                              .value(QStringLiteral("id"))
+                              .toVariant()
+                              .toLongLong();
+                }
+                if (uid > 0)
+                {
+                    if (callback)
+                    {
+                        callback(uid, QString());
+                    }
+                }
+                else
+                {
+                    if (callback)
+                    {
+                        callback(0, QStringLiteral("User '%1' not found on Kick.").arg(target));
+                    }
+                }
+            })
+            .onError([callback, target](NetworkResult res) {
+                if (callback)
+                {
+                    callback(0, QStringLiteral("Could not resolve user '%1' on Kick (HTTP %2).")
+                                    .arg(target)
+                                    .arg(res.status().value_or(0)));
+                }
+            })
+            .execute();
+    };
+
+    if (this->hasAccount())
+    {
+        auto url = QStringLiteral("https://api.kick.com/public/v1/channels?slug=%1")
+                       .arg(target.toLower());
+        NetworkRequest(QUrl(url))
+            .header("Accept", "application/json")
+            .header("Authorization",
+                    QStringLiteral("Bearer %1").arg(this->getAuthToken()))
+            .header("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .timeout(10000)
+            .onSuccess([callback, fetchV2](NetworkResult result) {
+                auto root = result.parseJson();
+                auto dataArr = root.value(QStringLiteral("data")).toArray();
+                if (!dataArr.isEmpty())
+                {
+                    int64_t uid = dataArr.first()
+                                      .toObject()
+                                      .value(QStringLiteral("broadcaster_user_id"))
+                                      .toVariant()
+                                      .toLongLong();
+                    if (uid > 0)
+                    {
+                        if (callback)
+                        {
+                            callback(uid, QString());
+                        }
+                        return;
+                    }
+                }
+                fetchV2();
+            })
+            .onError([fetchV2](NetworkResult /*res*/) {
+                fetchV2();
+            })
+            .execute();
+    }
+    else
+    {
+        fetchV2();
+    }
+}
+
 void KickManager::banUser(const QString &channelSlug, const QString &username,
+                          int64_t broadcasterUserId,
                           std::function<void(bool ok, QString error)> callback)
 {
     if (!this->hasAccount())
@@ -338,41 +538,81 @@ void KickManager::banUser(const QString &channelSlug, const QString &username,
         return;
     }
 
-    auto url = QStringLiteral("https://kick.com/api/v2/channels/%1/bans").arg(channelSlug);
-    QJsonObject json;
-    json[QStringLiteral("banned_username")] = username.trimmed();
-    json[QStringLiteral("permanent")] = true;
+    auto executeBan = [this, callback](int64_t bId, int64_t uId) {
+        QJsonObject json;
+        json[QStringLiteral("broadcaster_user_id")] = static_cast<qint64>(bId);
+        json[QStringLiteral("user_id")] = static_cast<qint64>(uId);
 
-    NetworkRequest(QUrl(url), NetworkRequestType::Post)
-        .header("Accept", "application/json")
-        .header("Content-Type", "application/json")
-        .header("Authorization",
-                QStringLiteral("Bearer %1").arg(this->getAuthToken()))
-        .header("User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-        .json(json)
-        .timeout(10000)
-        .onSuccess([callback](NetworkResult /*res*/) {
-            if (callback)
-            {
-                callback(true, QString());
-            }
-        })
-        .onError([callback](NetworkResult res) {
-            if (callback)
-            {
-                callback(false, QStringLiteral("Ban failed (HTTP %1): %2")
-                                    .arg(res.status().value_or(0))
-                                    .arg(QString::fromUtf8(res.getData())));
-            }
-        })
+        NetworkRequest(
+            QUrl(QStringLiteral("https://api.kick.com/public/v1/moderation/bans")),
+            NetworkRequestType::Post)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .header("Authorization",
+                    QStringLiteral("Bearer %1").arg(this->getAuthToken()))
+            .header("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .json(json)
+            .timeout(10000)
+            .onSuccess([callback](NetworkResult /*res*/) {
+                if (callback)
+                {
+                    callback(true, QString());
+                }
+            })
+            .onError([callback](NetworkResult res) {
+                if (callback)
+                {
+                    callback(false, QStringLiteral("Ban failed (HTTP %1): %2")
+                                        .arg(res.status().value_or(0))
+                                        .arg(QString::fromUtf8(res.getData())));
+                }
+            })
+            .execute();
+    };
 
-        .execute();
+    auto resolveTarget = [this, callback, executeBan](int64_t bId, const QString &uName) {
+        this->resolveUserId(uName, [callback, executeBan, bId, uName](int64_t uId, QString err) {
+            if (uId <= 0)
+            {
+                if (callback)
+                {
+                    callback(false, err.isEmpty()
+                                        ? QStringLiteral("Could not find user '%1' on Kick.").arg(uName)
+                                        : err);
+                }
+                return;
+            }
+            executeBan(bId, uId);
+        });
+    };
+
+    if (broadcasterUserId > 0)
+    {
+        resolveTarget(broadcasterUserId, username);
+    }
+    else
+    {
+        this->resolveUserId(channelSlug, [callback, resolveTarget, username](int64_t bId, QString err) {
+            if (bId <= 0)
+            {
+                if (callback)
+                {
+                    callback(false, err.isEmpty()
+                                        ? QStringLiteral("Could not find channel broadcaster ID.")
+                                        : err);
+                }
+                return;
+            }
+            resolveTarget(bId, username);
+        });
+    }
 }
 
 void KickManager::timeoutUser(const QString &channelSlug, const QString &username,
-                             int durationSeconds,
-                             std::function<void(bool ok, QString error)> callback)
+                              int durationSeconds,
+                              int64_t broadcasterUserId,
+                              std::function<void(bool ok, QString error)> callback)
 {
     if (!this->hasAccount())
     {
@@ -383,41 +623,82 @@ void KickManager::timeoutUser(const QString &channelSlug, const QString &usernam
         return;
     }
 
-    auto url = QStringLiteral("https://kick.com/api/v2/channels/%1/bans").arg(channelSlug);
-    QJsonObject json;
-    json[QStringLiteral("banned_username")] = username.trimmed();
-    json[QStringLiteral("permanent")] = false;
-    // Kick API duration is typically in minutes (minimum 1 minute)
-    int durationMinutes = std::max(1, durationSeconds / 60);
-    json[QStringLiteral("duration")] = durationMinutes;
+    int durationMinutes = std::clamp(durationSeconds / 60, 1, 10080);
 
-    NetworkRequest(QUrl(url), NetworkRequestType::Post)
-        .header("Accept", "application/json")
-        .header("Content-Type", "application/json")
-        .header("Authorization",
-                QStringLiteral("Bearer %1").arg(this->getAuthToken()))
-        .header("User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-        .json(json)
-        .timeout(10000)
-        .onSuccess([callback](NetworkResult /*res*/) {
-            if (callback)
+    auto executeTimeout = [this, callback, durationMinutes](int64_t bId, int64_t uId) {
+        QJsonObject json;
+        json[QStringLiteral("broadcaster_user_id")] = static_cast<qint64>(bId);
+        json[QStringLiteral("user_id")] = static_cast<qint64>(uId);
+        json[QStringLiteral("duration")] = durationMinutes;
+
+        NetworkRequest(
+            QUrl(QStringLiteral("https://api.kick.com/public/v1/moderation/bans")),
+            NetworkRequestType::Post)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .header("Authorization",
+                    QStringLiteral("Bearer %1").arg(this->getAuthToken()))
+            .header("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .json(json)
+            .timeout(10000)
+            .onSuccess([callback](NetworkResult /*res*/) {
+                if (callback)
+                {
+                    callback(true, QString());
+                }
+            })
+            .onError([callback](NetworkResult res) {
+                if (callback)
+                {
+                    callback(false, QStringLiteral("Timeout failed (HTTP %1): %2")
+                                        .arg(res.status().value_or(0))
+                                        .arg(QString::fromUtf8(res.getData())));
+                }
+            })
+            .execute();
+    };
+
+    auto resolveTarget = [this, callback, executeTimeout](int64_t bId, const QString &uName) {
+        this->resolveUserId(uName, [callback, executeTimeout, bId, uName](int64_t uId, QString err) {
+            if (uId <= 0)
             {
-                callback(true, QString());
+                if (callback)
+                {
+                    callback(false, err.isEmpty()
+                                        ? QStringLiteral("Could not find user '%1' on Kick.").arg(uName)
+                                        : err);
+                }
+                return;
             }
-        })
-        .onError([callback](NetworkResult res) {
-            if (callback)
+            executeTimeout(bId, uId);
+        });
+    };
+
+    if (broadcasterUserId > 0)
+    {
+        resolveTarget(broadcasterUserId, username);
+    }
+    else
+    {
+        this->resolveUserId(channelSlug, [callback, resolveTarget, username](int64_t bId, QString err) {
+            if (bId <= 0)
             {
-                callback(false, QStringLiteral("Timeout failed (HTTP %1): %2")
-                                    .arg(res.status().value_or(0))
-                                    .arg(QString::fromUtf8(res.getData())));
+                if (callback)
+                {
+                    callback(false, err.isEmpty()
+                                        ? QStringLiteral("Could not find channel broadcaster ID.")
+                                        : err);
+                }
+                return;
             }
-        })
-        .execute();
+            resolveTarget(bId, username);
+        });
+    }
 }
 
 void KickManager::unbanUser(const QString &channelSlug, const QString &username,
+                            int64_t broadcasterUserId,
                             std::function<void(bool ok, QString error)> callback)
 {
     if (!this->hasAccount())
@@ -429,32 +710,75 @@ void KickManager::unbanUser(const QString &channelSlug, const QString &username,
         return;
     }
 
-    auto url = QStringLiteral("https://kick.com/api/v2/channels/%1/bans/%2")
-                   .arg(channelSlug, username.trimmed());
+    auto executeUnban = [this, callback](int64_t bId, int64_t uId) {
+        QJsonObject json;
+        json[QStringLiteral("broadcaster_user_id")] = static_cast<qint64>(bId);
+        json[QStringLiteral("user_id")] = static_cast<qint64>(uId);
 
-    NetworkRequest(QUrl(url), NetworkRequestType::Delete)
-        .header("Accept", "application/json")
-        .header("Authorization",
-                QStringLiteral("Bearer %1").arg(this->getAuthToken()))
-        .header("User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-        .timeout(10000)
-        .onSuccess([callback](NetworkResult /*res*/) {
-            if (callback)
-            {
-                callback(true, QString());
-            }
-        })
-        .onError([callback](NetworkResult res) {
-            if (callback)
-            {
-                callback(false, QStringLiteral("Unban failed (HTTP %1): %2")
-                                    .arg(res.status().value_or(0))
-                                    .arg(QString::fromUtf8(res.getData())));
-            }
-        })
+        NetworkRequest(
+            QUrl(QStringLiteral("https://api.kick.com/public/v1/moderation/bans")),
+            NetworkRequestType::Delete)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .header("Authorization",
+                    QStringLiteral("Bearer %1").arg(this->getAuthToken()))
+            .header("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .json(json)
+            .timeout(10000)
+            .onSuccess([callback](NetworkResult /*res*/) {
+                if (callback)
+                {
+                    callback(true, QString());
+                }
+            })
+            .onError([callback](NetworkResult res) {
+                if (callback)
+                {
+                    callback(false, QStringLiteral("Unban failed (HTTP %1): %2")
+                                        .arg(res.status().value_or(0))
+                                        .arg(QString::fromUtf8(res.getData())));
+                }
+            })
+            .execute();
+    };
 
-        .execute();
+    auto resolveTarget = [this, callback, executeUnban](int64_t bId, const QString &uName) {
+        this->resolveUserId(uName, [callback, executeUnban, bId, uName](int64_t uId, QString err) {
+            if (uId <= 0)
+            {
+                if (callback)
+                {
+                    callback(false, err.isEmpty()
+                                        ? QStringLiteral("Could not find user '%1' on Kick.").arg(uName)
+                                        : err);
+                }
+                return;
+            }
+            executeUnban(bId, uId);
+        });
+    };
+
+    if (broadcasterUserId > 0)
+    {
+        resolveTarget(broadcasterUserId, username);
+    }
+    else
+    {
+        this->resolveUserId(channelSlug, [callback, resolveTarget, username](int64_t bId, QString err) {
+            if (bId <= 0)
+            {
+                if (callback)
+                {
+                    callback(false, err.isEmpty()
+                                        ? QStringLiteral("Could not find channel broadcaster ID.")
+                                        : err);
+                }
+                return;
+            }
+            resolveTarget(bId, username);
+        });
+    }
 }
 
 }  // namespace chatterino

@@ -24,6 +24,16 @@ public:
 
     const QString &getLocalizedName() const override;
 
+    bool canSendMessage() const override;
+    bool isWritable() const override;
+    void sendMessage(const QString &message) override;
+
+    bool isMod() const override;
+    bool isBroadcaster() const override;
+    bool hasModRights() const override;
+    bool isLive() const override;
+    void reconnect() override;
+
 private:
     QString displayName_;
     struct RecentMessage {

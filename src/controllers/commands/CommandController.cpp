@@ -49,6 +49,7 @@
 #include "controllers/plugins/PluginController.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
+#include "providers/combined/CombinedChannel.hpp"
 #include "providers/emoji/Emojis.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
@@ -112,6 +113,15 @@ const std::unordered_map<QString, VariableReplacer> COMMAND_VARS{
             auto *tc = dynamic_cast<TwitchChannel *>(channel.get());
             if (tc == nullptr)
             {
+                if (auto *combined =
+                        dynamic_cast<CombinedChannel *>(channel.get()))
+                {
+                    tc = dynamic_cast<TwitchChannel *>(
+                        combined->twitchChannel().get());
+                }
+            }
+            if (tc == nullptr)
+            {
                 return altText;
             }
             const auto &status = tc->accessStreamStatus();
@@ -123,6 +133,15 @@ const std::unordered_map<QString, VariableReplacer> COMMAND_VARS{
         [](const auto &altText, const auto &channel, const auto *message) {
             (void)(message);  //unused
             auto *tc = dynamic_cast<TwitchChannel *>(channel.get());
+            if (tc == nullptr)
+            {
+                if (auto *combined =
+                        dynamic_cast<CombinedChannel *>(channel.get()))
+                {
+                    tc = dynamic_cast<TwitchChannel *>(
+                        combined->twitchChannel().get());
+                }
+            }
             if (tc == nullptr)
             {
                 return altText;
@@ -622,10 +641,20 @@ QString CommandController::execCommand(const QString &textNoEmoji,
             if (auto *command =
                     std::get_if<CommandFunctionWithContext>(&it->second))
             {
+                auto *tc = dynamic_cast<TwitchChannel *>(channel.get());
+                if (!tc)
+                {
+                    if (auto *combined =
+                            dynamic_cast<CombinedChannel *>(channel.get()))
+                    {
+                        tc = dynamic_cast<TwitchChannel *>(
+                            combined->twitchChannel().get());
+                    }
+                }
                 CommandContext ctx{
                     words,
                     channel,
-                    dynamic_cast<TwitchChannel *>(channel.get()),
+                    tc,
                 };
                 return (*command)(ctx);
             }

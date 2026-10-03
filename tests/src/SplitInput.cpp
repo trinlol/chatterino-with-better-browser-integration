@@ -18,10 +18,12 @@
 #include "singletons/WindowManager.hpp"
 #include "Test.hpp"
 #include "widgets/Notebook.hpp"
+#include "common/WindowDescriptors.hpp"
 #include "widgets/splits/Split.hpp"
 
 #include <QDebug>
 #include <QString>
+#include <QTextEdit>
 
 using namespace chatterino;
 using ::testing::Exactly;
@@ -162,3 +164,76 @@ INSTANTIATE_TEST_SUITE_P(
             "",
             // Expected text after replying to forsen
             "@forsen ")));
+
+TEST(SplitInput, SelectionHighlightColor)
+{
+    MockApplication mockApp;
+    Split split(nullptr);
+    SplitInput input(&split);
+
+    auto *textEdit = input.findChild<QTextEdit *>();
+    ASSERT_NE(textEdit, nullptr);
+
+    auto palette = textEdit->palette();
+    // Verify highlight is blue and does NOT match the base/background color
+    EXPECT_NE(palette.color(QPalette::Active, QPalette::Highlight),
+              palette.color(QPalette::Active, QPalette::Base));
+    EXPECT_EQ(palette.color(QPalette::Active, QPalette::Highlight),
+              QColor(42, 130, 218));
+    EXPECT_EQ(palette.color(QPalette::Inactive, QPalette::Highlight),
+              QColor(42, 130, 218));
+    EXPECT_EQ(palette.color(QPalette::Active, QPalette::HighlightedText),
+              Qt::white);
+    EXPECT_EQ(palette.color(QPalette::Inactive, QPalette::HighlightedText),
+              Qt::white);
+}
+
+TEST(SplitDescriptor, BuildDescriptorKickAndCombined)
+{
+    MockApplication mockApp;
+
+    // Test Kick channel serialization and round-trip
+    {
+        Split split(nullptr);
+        auto kickChan =
+            std::make_shared<Channel>("testkickuser", Channel::Type::Kick);
+        split.setChannel(kickChan);
+
+        auto desc = split.buildDescriptor();
+        EXPECT_EQ(desc.type_, "kick");
+        EXPECT_EQ(desc.channelName_, "testkickuser");
+
+        auto json = desc.toJson();
+        EXPECT_EQ(json["type"].toString(), "split");
+        auto data = json["data"].toObject();
+        EXPECT_EQ(data["type"].toString(), "kick");
+        EXPECT_EQ(data["name"].toString(), "testkickuser");
+
+        auto loadedDesc = SplitDescriptor::loadFromJSON(json);
+        EXPECT_EQ(loadedDesc.type_, "kick");
+        EXPECT_EQ(loadedDesc.channelName_, "testkickuser");
+    }
+
+    // Test Combined channel serialization and round-trip
+    {
+        Split split(nullptr);
+        auto combinedChan = std::make_shared<Channel>(
+            "twitch_user+kick_user", Channel::Type::Combined);
+        split.setChannel(combinedChan);
+
+        auto desc = split.buildDescriptor();
+        EXPECT_EQ(desc.type_, "combined");
+        EXPECT_EQ(desc.channelName_, "twitch_user+kick_user");
+
+        auto json = desc.toJson();
+        EXPECT_EQ(json["type"].toString(), "split");
+        auto data = json["data"].toObject();
+        EXPECT_EQ(data["type"].toString(), "combined");
+        EXPECT_EQ(data["name"].toString(), "twitch_user+kick_user");
+
+        auto loadedDesc = SplitDescriptor::loadFromJSON(json);
+        EXPECT_EQ(loadedDesc.type_, "combined");
+        EXPECT_EQ(loadedDesc.channelName_, "twitch_user+kick_user");
+    }
+}
+

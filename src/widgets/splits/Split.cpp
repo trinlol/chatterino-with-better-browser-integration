@@ -12,6 +12,8 @@
 #include "controllers/commands/CommandController.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/notifications/NotificationController.hpp"
+#include "providers/combined/CombinedChannel.hpp"
+#include "providers/kick/KickManager.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
@@ -128,6 +130,12 @@ Split::Split(QWidget *parent)
         getApp()->getAccounts()->twitch.currentUserChanged, [this] {
             this->updateInputPlaceholder();
         });
+    if (auto *kickMgr = getApp()->getKick())
+    {
+        QObject::connect(kickMgr, &KickManager::accountChanged, this, [this] {
+            this->updateInputPlaceholder();
+        });
+    }
     this->signalHolder_.managedConnect(this->channelChanged, [this] {
         this->updateInputPlaceholder();
     });
@@ -748,28 +756,57 @@ MarqueeWidget *Split::getMarqueeWidget() const
 
 void Split::updateInputPlaceholder()
 {
-    if (!this->getChannel()->isTwitchChannel())
+    auto channel = this->getChannel();
+    if (!channel)
     {
         return;
     }
 
-    auto user = getApp()->getAccounts()->twitch.getCurrent();
-    QString placeholderText;
-
-    if (user->isAnon())
+    if (channel->isTwitchChannel() || channel->isCombinedChannel())
     {
-        placeholderText = "Log in to send messages...";
-    }
-    else
-    {
-        placeholderText = QString("Send message as %1...")
-                              .arg(getApp()
-                                       ->getAccounts()
-                                       ->twitch.getCurrent()
-                                       ->getUserName());
+        auto user = getApp()->getAccounts()->twitch.getCurrent();
+        QString placeholderText;
+
+        if (user->isAnon())
+        {
+            placeholderText = "Log in to send messages...";
+        }
+        else
+        {
+            if (channel->isCombinedChannel())
+            {
+                placeholderText = QString("Send message to Twitch as %1...")
+                                      .arg(user->getUserName());
+            }
+            else
+            {
+                placeholderText = QString("Send message as %1...")
+                                      .arg(user->getUserName());
+            }
+        }
+
+        this->input_->ui_.textEdit->setPlaceholderText(placeholderText);
+        return;
     }
 
-    this->input_->ui_.textEdit->setPlaceholderText(placeholderText);
+    if (channel->isKickChannel())
+    {
+        auto *kickMgr = getApp()->getKick();
+        QString placeholderText;
+
+        if (!kickMgr || !kickMgr->hasAccount())
+        {
+            placeholderText = "Log in to Kick to send messages...";
+        }
+        else
+        {
+            placeholderText = QString("Send message as %1...")
+                                  .arg(kickMgr->getCurrentUsername());
+        }
+
+        this->input_->ui_.textEdit->setPlaceholderText(placeholderText);
+        return;
+    }
 }
 
 void Split::joinChannelInNewTab(const ChannelPtr &channel)
@@ -1417,6 +1454,8 @@ SplitDescriptor Split::buildDescriptor() const
     {
         case Channel::Type::Twitch:
         case Channel::Type::Misc:
+        case Channel::Type::Kick:
+        case Channel::Type::Combined:
             descriptor.channelName_ = chan.get()->getName();
             break;
 

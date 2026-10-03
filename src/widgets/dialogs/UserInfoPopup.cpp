@@ -22,6 +22,7 @@
 #include "providers/chatterino/ChatterinoBadges.hpp"
 #include "providers/ffz/FfzBadges.hpp"
 #include "providers/IvrApi.hpp"
+#include "providers/combined/CombinedChannel.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/kick/KickManager.hpp"
 #include "providers/pronouns/Pronouns.hpp"
@@ -1021,7 +1022,8 @@ void UserInfoPopup::updateLatestMessages()
     this->userLogsExhausted_ = false;
     this->oldestLoadedLogDay_ = QDate();
 
-    if (this->underlyingChannel_->getType() == Channel::Type::Kick)
+    if (this->underlyingChannel_->getType() == Channel::Type::Kick ||
+        this->underlyingChannel_->getType() == Channel::Type::Combined)
     {
         this->userMessagesChannel_.reset();
         auto filteredChannel =
@@ -1859,6 +1861,17 @@ QVector<UserBadgeDisplayEntry> UserInfoPopup::buildUserBadges(
         dynamic_cast<TwitchChannel *>(this->underlyingChannel_.get());
     const auto *kickChannel =
         dynamic_cast<KickChannel *>(this->underlyingChannel_.get());
+    if (!twitchChannel && !kickChannel)
+    {
+        if (const auto *comb =
+                dynamic_cast<CombinedChannel *>(this->underlyingChannel_.get()))
+        {
+            twitchChannel =
+                dynamic_cast<TwitchChannel *>(comb->twitchChannel().get());
+            kickChannel =
+                dynamic_cast<KickChannel *>(comb->kickChannel().get());
+        }
+    }
 
     QVector<UserBadgeDisplayEntry> badges;
     std::unordered_set<QString> seen;

@@ -88,8 +88,14 @@ void loadCached(std::shared_ptr<NetworkData> &&data)
         return;
     }
 
-    // XXX: check if bytes is empty?
     QByteArray bytes = cachedFile.readAll();
+    if (bytes.isEmpty())
+    {
+        cachedFile.close();
+        cachedFile.remove();
+        loadUncached(std::move(data));
+        return;
+    }
 
     qCDebug(chatterinoHTTP).noquote() << data->typeString() << "[CACHED] 200"
                                       << data->request.url().toString();

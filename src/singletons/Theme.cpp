@@ -617,13 +617,13 @@ void Theme::parseFrom(const QJsonObject &root, bool isCustomTheme)
         border: %2;
         color: %3;
         selection-background-color: %4;
+        selection-color: %5;
     )"_s.arg(
         this->splits.input.background.name(QColor::HexArgb),
         this->tabs.selected.backgrounds.regular.name(QColor::HexArgb),
         this->messages.textColors.regular.name(QColor::HexArgb),
-        this->isLightTheme()
-            ? u"#68B1FF"_s
-            : this->tabs.selected.backgrounds.regular.name(QColor::HexArgb));
+        this->isLightTheme() ? u"#68B1FF"_s : u"#2a82da"_s,
+        this->isLightTheme() ? u"#000000"_s : u"#ffffff"_s);
 
     // Usercard buttons
     if (this->isLightTheme())

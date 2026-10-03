@@ -17,6 +17,7 @@
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
+#include "providers/combined/CombinedChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
@@ -958,7 +959,16 @@ void SplitHeader::updateChannelText()
         title = "watching: " + (title.isEmpty() ? "none" : title);
     }
 
-    if (auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get()))
+    auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
+    if (!twitchChannel)
+    {
+        if (auto *combined = dynamic_cast<CombinedChannel *>(channel.get()))
+        {
+            twitchChannel = dynamic_cast<TwitchChannel *>(combined->twitchChannel().get());
+        }
+    }
+
+    if (twitchChannel != nullptr)
     {
         const auto streamStatus = twitchChannel->accessStreamStatus();
 
@@ -1031,6 +1041,13 @@ void SplitHeader::updateIcons()
 {
     auto channel = this->split_->getChannel();
     auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
+    if (!twitchChannel)
+    {
+        if (auto *combined = dynamic_cast<CombinedChannel *>(channel.get()))
+        {
+            twitchChannel = dynamic_cast<TwitchChannel *>(combined->twitchChannel().get());
+        }
+    }
 
     if (twitchChannel != nullptr)
     {

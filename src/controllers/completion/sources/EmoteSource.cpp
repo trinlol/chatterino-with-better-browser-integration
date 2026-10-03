@@ -12,6 +12,7 @@
 #include "providers/emoji/Emojis.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
 #include "providers/seventv/SeventvEmotes.hpp"
+#include "providers/combined/CombinedChannel.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
@@ -105,9 +106,16 @@ void EmoteSource::initializeFromChannel(const Channel *channel,
 
     std::vector<EmoteItem> emotes;
     const auto *tc = dynamic_cast<const TwitchChannel *>(channel);
+    if (!tc)
+    {
+        if (const auto *combined = dynamic_cast<const CombinedChannel *>(channel))
+        {
+            tc = dynamic_cast<const TwitchChannel *>(combined->twitchChannel().get());
+        }
+    }
     // Returns true also for special Twitch channels (/live, /mentions,
     // /whispers, etc.).
-    if (channel->isTwitchChannel())
+    if (channel->isTwitchChannel() || tc != nullptr)
     {
         if (providerMode == ProviderMode::SeventvOnly)
         {

@@ -13,6 +13,7 @@
 #include "controllers/spellcheck/SpellChecker.hpp"
 #include "messages/Link.hpp"
 #include "messages/Message.hpp"
+#include "providers/combined/CombinedChannel.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchCommon.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
@@ -307,6 +308,7 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
         });
     });
     this->scaleChangedEvent(this->scale());
+    this->themeChangedEvent();
     this->signalHolder_.managedConnect(getApp()->getHotkeys()->onItemsUpdated,
                                        [this]() {
                                            this->clearShortcuts();
@@ -686,7 +688,16 @@ QString SplitInput::handleSendMessage(const std::vector<QString> &arguments)
         return "";
     }
 
-    if (!c->isTwitchChannel() || this->replyTarget_ == nullptr)
+    auto *tc = dynamic_cast<TwitchChannel *>(c.get());
+    if (!tc)
+    {
+        if (auto *combined = dynamic_cast<CombinedChannel *>(c.get()))
+        {
+            tc = dynamic_cast<TwitchChannel *>(combined->twitchChannel().get());
+        }
+    }
+
+    if (!tc || this->replyTarget_ == nullptr)
     {
         // standard message send behavior
         QString message = this->ui_.textEdit->toPlainText();
@@ -695,8 +706,7 @@ QString SplitInput::handleSendMessage(const std::vector<QString> &arguments)
         QString sendMessage =
             getApp()->getCommands()->execCommand(message, c, false);
 
-        if (auto *tc = dynamic_cast<TwitchChannel *>(c.get());
-            tc && trySendPendingRewardViaBrowser(tc, sendMessage))
+        if (tc && trySendPendingRewardViaBrowser(tc, sendMessage))
         {
             // Browser dispatch is not Twitch acceptance. Preserve the draft
             // until a definitive result is visible; importantly, do not retry
@@ -712,7 +722,6 @@ QString SplitInput::handleSendMessage(const std::vector<QString> &arguments)
     }
 
     // Reply to message
-    auto *tc = dynamic_cast<TwitchChannel *>(c.get());
     if (!tc)
     {
         // this should not fail
@@ -1365,6 +1374,13 @@ void SplitInput::updateCompletionPopup()
 {
     auto *channel = this->split_->getChannel().get();
     auto *tc = dynamic_cast<TwitchChannel *>(channel);
+    if (!tc)
+    {
+        if (auto *combined = dynamic_cast<CombinedChannel *>(channel))
+        {
+            tc = dynamic_cast<TwitchChannel *>(combined->twitchChannel().get());
+        }
+    }
     bool showEmoteCompletion = getSettings()->emoteCompletionWithColon;
     bool showUsernameCompletion =
         tc != nullptr && getSettings()->showUsernameCompletionMenu;
@@ -1884,7 +1900,7 @@ bool SplitInput::shouldPreventInput(const QString &text) const
         return false;
     }
 
-    if (!channel->isTwitchChannel())
+    if (!channel->isTwitchChannel() && !channel->isCombinedChannel())
     {
         // Don't respect this setting for IRC channels as the limits might be server-specific
         return false;
@@ -1928,10 +1944,19 @@ void SplitInput::updateTextEditPalette()
     p.setColor(QPalette::Text, this->theme->messages.textColors.regular);
 
     // Selection background color
-    p.setBrush(QPalette::Highlight,
-               this->theme->isLightTheme()
-                   ? QColor(u"#68B1FF"_s)
-                   : this->theme->tabs.selected.backgrounds.regular);
+    const auto highlightColor = this->theme->isLightTheme()
+                                    ? QColor(u"#68B1FF"_s)
+                                    : QColor(42, 130, 218);
+    p.setColor(QPalette::Active, QPalette::Highlight, highlightColor);
+    p.setColor(QPalette::Inactive, QPalette::Highlight, highlightColor);
+
+    // Selection text color
+    const auto highlightedTextColor =
+        this->theme->isLightTheme() ? Qt::black : Qt::white;
+    p.setColor(QPalette::Active, QPalette::HighlightedText,
+               highlightedTextColor);
+    p.setColor(QPalette::Inactive, QPalette::HighlightedText,
+               highlightedTextColor);
 
     // Background color
     p.setBrush(QPalette::Base, this->backgroundColor());

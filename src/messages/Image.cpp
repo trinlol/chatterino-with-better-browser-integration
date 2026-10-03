@@ -244,6 +244,7 @@ void assignFrames(std::weak_ptr<Image> weak, QList<Frame> parsed)
         {
             return;
         }
+        shared->loadAttempts_ = 0;
         shared->frames_ = std::make_unique<detail::Frames>(std::move(parsed));
 
         // Avoid too many layouts in one event-loop iteration
@@ -592,18 +593,72 @@ void Image::actuallyLoad()
             }
 
             auto parsed = detail::readFrames(reader, shared->url());
+            if (parsed.isEmpty())
+            {
+                qCDebug(chatterinoImage)
+                    << "Error: parsed frames empty " << shared->url().string;
+                shared->empty_ = true;
+                return;
+            }
 
             assignFrames(shared, parsed);
         })
-        .onError([weak](auto /*result*/) {
+        .onError([weak](const NetworkResult &result) {
             auto shared = weak.lock();
             if (!shared)
             {
                 return false;
             }
 
-            // fourtf: is this the right thing to do?
-            shared->empty_ = true;
+            // Only mark permanently empty if the server explicitly indicated it does not exist
+            if (result.status() == 404 || result.status() == 410 ||
+                result.error() == QNetworkReply::ContentNotFoundError)
+            {
+                qCDebug(chatterinoImage)
+                    << "Image permanently not found (404/410):"
+                    << shared->url().string;
+                shared->empty_ = true;
+                return true;
+            }
+
+            qCDebug(chatterinoImage)
+                << "Transient failure loading image" << shared->url().string
+                << "error:" << result.formatError()
+                << "- scheduling retry";
+
+            postToGuiThread([weak]() {
+                auto shared = weak.lock();
+                if (!shared)
+                {
+                    return;
+                }
+
+                if (shared->loadAttempts_ < 5)
+                {
+                    shared->loadAttempts_++;
+                    // Exponential backoff: 500ms, 1s, 2s, 4s, 8s
+                    int delayMs = (1 << std::min(shared->loadAttempts_, 4)) * 250;
+                    QTimer::singleShot(delayMs, [weak]() {
+                        if (auto shared = weak.lock())
+                        {
+                            shared->shouldLoad_ = true;
+                            shared->load();
+                        }
+                    });
+                }
+                else
+                {
+                    qCDebug(chatterinoImage)
+                        << "Image load attempts exhausted for"
+                        << shared->url().string;
+                    shared->empty_ = true;
+                    auto *app = tryGetApp();
+                    if (app != nullptr)
+                    {
+                        app->getWindows()->forceLayoutChannelViews();
+                    }
+                }
+            });
 
             return true;
         })
@@ -613,12 +668,17 @@ void Image::actuallyLoad()
 void Image::expireFrames()
 {
     assertInGuiThread();
-    if (!this->frames_)
+    if (this->empty_ && this->url_.string.isEmpty())
     {
         return;
     }
 
-    this->frames_->clear();
+    if (this->frames_)
+    {
+        this->frames_->clear();
+    }
+    this->empty_ = false;
+    this->loadAttempts_ = 0;
     this->shouldLoad_ = true;  // Mark as needing load again
 }
 

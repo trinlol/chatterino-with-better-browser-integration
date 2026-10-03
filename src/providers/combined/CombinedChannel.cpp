@@ -86,6 +86,104 @@ const QString &CombinedChannel::getLocalizedName() const
     return this->getName();
 }
 
+bool CombinedChannel::canSendMessage() const
+{
+    if (this->twitchChannel_ && this->twitchChannel_->canSendMessage())
+    {
+        return true;
+    }
+    if (this->kickChannel_ && this->kickChannel_->canSendMessage())
+    {
+        return true;
+    }
+    return false;
+}
+
+bool CombinedChannel::isWritable() const
+{
+    return true;
+}
+
+void CombinedChannel::sendMessage(const QString &message)
+{
+    QString text = message.trimmed();
+    if (text.isEmpty())
+    {
+        return;
+    }
+
+    // Explicit Kick routing: /kick <message> or /k <message>
+    if (text.startsWith(QStringLiteral("/kick "), Qt::CaseInsensitive))
+    {
+        if (this->kickChannel_)
+        {
+            this->kickChannel_->sendMessage(text.mid(6).trimmed());
+        }
+        return;
+    }
+    if (text.startsWith(QStringLiteral("/k "), Qt::CaseInsensitive))
+    {
+        if (this->kickChannel_)
+        {
+            this->kickChannel_->sendMessage(text.mid(3).trimmed());
+        }
+        return;
+    }
+
+    // Explicit Twitch routing: /twitch <message>
+    if (text.startsWith(QStringLiteral("/twitch "), Qt::CaseInsensitive))
+    {
+        if (this->twitchChannel_)
+        {
+            this->twitchChannel_->sendMessage(text.mid(8).trimmed());
+        }
+        return;
+    }
+
+    // Send as Twitch by default
+    if (this->twitchChannel_)
+    {
+        this->twitchChannel_->sendMessage(text);
+    }
+    else if (this->kickChannel_)
+    {
+        this->kickChannel_->sendMessage(text);
+    }
+}
+
+bool CombinedChannel::isMod() const
+{
+    return this->twitchChannel_ && this->twitchChannel_->isMod();
+}
+
+bool CombinedChannel::isBroadcaster() const
+{
+    return this->twitchChannel_ && this->twitchChannel_->isBroadcaster();
+}
+
+bool CombinedChannel::hasModRights() const
+{
+    return this->twitchChannel_ && this->twitchChannel_->hasModRights();
+}
+
+bool CombinedChannel::isLive() const
+{
+    return (this->twitchChannel_ && this->twitchChannel_->isLive()) ||
+           (this->kickChannel_ && this->kickChannel_->isLive());
+}
+
+void CombinedChannel::reconnect()
+{
+    if (this->twitchChannel_)
+    {
+        this->twitchChannel_->reconnect();
+    }
+    if (this->kickChannel_)
+    {
+        this->kickChannel_->reconnect();
+    }
+}
+
 bool CombinedChannel::isRepeatSpam(const QString &author, const QString &text,
                                    const QString &platform)
 {

@@ -23,6 +23,8 @@ public:
 
     int64_t chatroomId() const;
     void setChatroomId(int64_t id);
+    int64_t broadcasterUserId() const;
+    void setBroadcasterUserId(int64_t id);
     QString channelSlug() const;
 
     void refreshChatroom();
@@ -35,6 +37,8 @@ public:
 
 private:
     void resolveChatroomId();
+    void resolveBroadcasterUserId(std::function<void(bool success)> callback);
+    void sendChatMessageInternal(const QString &text);
 
     void subscribe();
     void handleKickMessage(const KickMessage &msg);
@@ -43,6 +47,7 @@ private:
     KickEmotes &emotes_;
 
     int64_t chatroomId_{0};
+    int64_t broadcasterUserId_{0};
     bool isSubscribed_{false};
     pajlada::Signals::SignalHolder connections_;
 };

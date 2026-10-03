@@ -66,6 +66,16 @@ void KickChannel::setChatroomId(int64_t id)
     this->subscribe();
 }
 
+int64_t KickChannel::broadcasterUserId() const
+{
+    return this->broadcasterUserId_;
+}
+
+void KickChannel::setBroadcasterUserId(int64_t id)
+{
+    this->broadcasterUserId_ = id;
+}
+
 void KickChannel::refreshChatroom()
 {
     QString rawName = this->getName().trimmed();
@@ -101,10 +111,22 @@ void KickChannel::refreshChatroom()
 
 void KickChannel::resolveChatroomId()
 {
-    QString slug = this->getName().trimmed();
-    if (slug.startsWith(QStringLiteral("kick:"), Qt::CaseInsensitive))
+    QString slug = this->channelSlug();
+    if (slug.isEmpty())
     {
-        slug = slug.mid(5).trimmed();
+        return;
+    }
+
+    auto *kickMgr = getApp()->getKick();
+    if (kickMgr && kickMgr->hasAccount() &&
+        kickMgr->getCurrentUsername().compare(slug, Qt::CaseInsensitive) == 0)
+    {
+        bool ok = false;
+        int64_t myUid = kickMgr->getUserId().toLongLong(&ok);
+        if (ok && myUid > 0)
+        {
+            this->broadcasterUserId_ = myUid;
+        }
     }
 
     auto url = QStringLiteral("https://kick.com/api/v2/channels/%1").arg(slug);
@@ -124,6 +146,22 @@ void KickChannel::resolveChatroomId()
             {
                 id = root.value(QStringLiteral("id")).toVariant().toLongLong();
             }
+
+            int64_t broadcasterId =
+                root.value(QStringLiteral("user_id")).toVariant().toLongLong();
+            if (broadcasterId <= 0)
+            {
+                broadcasterId = root.value(QStringLiteral("user"))
+                                    .toObject()
+                                    .value(QStringLiteral("id"))
+                                    .toVariant()
+                                    .toLongLong();
+            }
+            if (broadcasterId > 0)
+            {
+                this->broadcasterUserId_ = broadcasterId;
+            }
+
             if (id > 0)
             {
                 this->setChatroomId(id);
@@ -259,7 +297,7 @@ void KickChannel::sendMessage(const QString &message)
     if (text.startsWith(QStringLiteral("/ban "), Qt::CaseInsensitive))
     {
         auto target = text.mid(5).trimmed().split(u' ').first();
-        kickMgr->banUser(this->channelSlug(), target,
+        kickMgr->banUser(this->channelSlug(), target, this->broadcasterUserId_,
                          [this, target](bool ok, QString error) {
                              if (ok)
                              {
@@ -278,6 +316,7 @@ void KickChannel::sendMessage(const QString &message)
                                      MessageContext::Original);
                              }
                          });
+        return;
     }
     else if (text.startsWith(QStringLiteral("/timeout "), Qt::CaseInsensitive))
     {
@@ -297,6 +336,7 @@ void KickChannel::sendMessage(const QString &message)
             }
 
             kickMgr->timeoutUser(this->channelSlug(), target, duration,
+                                 this->broadcasterUserId_,
                                  [this, target, duration](bool ok, QString error) {
                                      if (ok)
                                      {
@@ -318,11 +358,12 @@ void KickChannel::sendMessage(const QString &message)
                                      }
                                  });
         }
+        return;
     }
     else if (text.startsWith(QStringLiteral("/unban "), Qt::CaseInsensitive))
     {
         auto target = text.mid(7).trimmed().split(u' ').first();
-        kickMgr->unbanUser(this->channelSlug(), target,
+        kickMgr->unbanUser(this->channelSlug(), target, this->broadcasterUserId_,
                            [this, target](bool ok, QString error) {
                                if (ok)
                                {
@@ -341,14 +382,95 @@ void KickChannel::sendMessage(const QString &message)
                                        MessageContext::Original);
                                }
                            });
+        return;
     }
 
-    // Always send chat message (or chat command) via Kick messages endpoint
-    auto url = QStringLiteral("https://kick.com/api/v2/messages/send/%1")
-                   .arg(this->chatroomId_);
+    if (this->broadcasterUserId_ <= 0)
+    {
+        this->resolveBroadcasterUserId([this, text](bool ok) {
+            if (ok && this->broadcasterUserId_ > 0)
+            {
+                this->sendChatMessageInternal(text);
+            }
+            else
+            {
+                this->addMessage(
+                    makeSystemMessage(
+                        QStringLiteral("Could not resolve broadcaster user ID for Kick channel. Please reload the channel.")),
+                    MessageContext::Original);
+            }
+        });
+        return;
+    }
+
+    this->sendChatMessageInternal(text);
+}
+
+void KickChannel::resolveBroadcasterUserId(
+    std::function<void(bool success)> callback)
+{
+    if (this->broadcasterUserId_ > 0)
+    {
+        if (callback)
+        {
+            callback(true);
+        }
+        return;
+    }
+
+    auto *kickMgr = getApp()->getKick();
+    if (!kickMgr)
+    {
+        if (callback)
+        {
+            callback(false);
+        }
+        return;
+    }
+
+    QString slug = this->channelSlug();
+    if (slug.isEmpty())
+    {
+        if (callback)
+        {
+            callback(false);
+        }
+        return;
+    }
+
+    kickMgr->resolveUserId(slug, [this, callback](int64_t uid, QString /*err*/) {
+        if (uid > 0)
+        {
+            this->broadcasterUserId_ = uid;
+            if (callback)
+            {
+                callback(true);
+            }
+        }
+        else
+        {
+            if (callback)
+            {
+                callback(false);
+            }
+        }
+    });
+}
+
+void KickChannel::sendChatMessageInternal(const QString &text)
+{
+    auto *kickMgr = getApp()->getKick();
+    if (!kickMgr || !kickMgr->hasAccount())
+    {
+        return;
+    }
+
+    auto url = QStringLiteral("https://api.kick.com/public/v1/chat");
     QJsonObject json;
+    json[QStringLiteral("broadcaster_user_id")] =
+        static_cast<qint64>(this->broadcasterUserId_);
     json[QStringLiteral("content")] = text;
-    json[QStringLiteral("type")] = QStringLiteral("message");
+    json[QStringLiteral("type")] = QStringLiteral("user");
 
     NetworkRequest(QUrl(url), NetworkRequestType::Post)
         .header("Accept", "application/json")
@@ -362,10 +484,34 @@ void KickChannel::sendMessage(const QString &message)
         .onSuccess([](NetworkResult /*res*/) {
             // Message sent successfully; Pusher WebSocket delivers the broadcasted message.
         })
-        .onError([this](NetworkResult res) {
+        .onError([this, text, kickMgr](NetworkResult res) {
+            int status = res.status().value_or(0);
+            if (status == 401 ||
+                (status == 403 &&
+                 (res.getData().contains("authenticated") ||
+                  res.getData().contains("Unauthorized"))))
+            {
+                // Access token expired, attempt automatic OAuth refresh
+                kickMgr->refreshOAuthToken([this, text](bool ok, QString /*err*/) {
+                    if (ok)
+                    {
+                        // Retry sending once
+                        this->sendChatMessageInternal(text);
+                    }
+                    else
+                    {
+                        this->addMessage(
+                            makeSystemMessage(
+                                QStringLiteral("Kick session expired. Please re-authenticate your Kick account in Settings -> Accounts.")),
+                            MessageContext::Original);
+                    }
+                });
+                return;
+            }
+
             QString errMsg =
                 QStringLiteral("Failed to send Kick message (HTTP %1): %2")
-                    .arg(res.status().value_or(0))
+                    .arg(status)
                     .arg(QString::fromUtf8(res.getData()));
 
             this->addMessage(makeSystemMessage(errMsg),

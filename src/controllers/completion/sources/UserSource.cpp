@@ -5,6 +5,7 @@
 #include "controllers/completion/sources/UserSource.hpp"
 
 #include "controllers/completion/sources/Helpers.hpp"
+#include "providers/combined/CombinedChannel.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "singletons/Settings.hpp"
 #include "util/Helpers.hpp"
@@ -58,6 +59,13 @@ void UserSource::addToStringList(QStringList &list, size_t maxCount,
 void UserSource::initializeFromChannel(const Channel *channel)
 {
     const auto *tc = dynamic_cast<const TwitchChannel *>(channel);
+    if (!tc)
+    {
+        if (const auto *combined = dynamic_cast<const CombinedChannel *>(channel))
+        {
+            tc = dynamic_cast<const TwitchChannel *>(combined->twitchChannel().get());
+        }
+    }
     if (!tc)
     {
         return;
