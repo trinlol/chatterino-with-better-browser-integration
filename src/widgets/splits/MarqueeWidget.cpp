@@ -140,6 +140,30 @@ MarqueeWidget::MarqueeWidget(Split *split)
                          }
                      });
 
+    getSettings()->showMarquee.connect(
+        [this](bool show) {
+            if (this->userToggledVisible_ != show)
+            {
+                this->userToggledVisible_ = show;
+                if (show)
+                {
+                    if (!this->events_.empty())
+                    {
+                        this->animateCollapse(false);
+                    }
+                }
+                else
+                {
+                    if (this->height() > 0 || this->isVisible())
+                    {
+                        this->animateCollapse(true);
+                    }
+                }
+                this->visibilityChanged.invoke();
+            }
+        },
+        this->managedConnections_);
+
     getSettings()->marqueeStyle.connect(
         [this](int) {
             this->pixelOffset_ = 0.0f;

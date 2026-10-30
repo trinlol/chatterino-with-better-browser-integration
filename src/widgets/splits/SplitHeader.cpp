@@ -14,6 +14,7 @@
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/notifications/NotificationController.hpp"
+#include "controllers/twitch/WatchStreakController.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
@@ -433,6 +434,16 @@ void SplitHeader::initializeLayout()
         },
         this->managedConnections_);
 
+    this->managedConnections_.managedConnect(
+        getApp()->getWatchStreakController()->minutesUpdated,
+        [this](const QString &channelName, int) {
+            if (this->split_->getChannel()->getName().compare(
+                    channelName, Qt::CaseInsensitive) == 0)
+            {
+                this->updateChannelText();
+            }
+        });
+
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     this->setLayout(layout);
@@ -703,6 +714,45 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
                 });
             QObject::connect(action, &QAction::triggered, this, [this]() {
                 getSettings()->toggleMutedChannel(
+                    this->split_->getChannel()->getName());
+            });
+
+            moreMenu->addAction(action);
+        }
+
+        {
+            auto *action = new QAction(this);
+            action->setText("Automate watch streak");
+            action->setCheckable(true);
+
+            QObject::connect(
+                moreMenu, &QMenu::aboutToShow, this, [action, this]() {
+                    const auto chanName =
+                        this->split_->getChannel()->getName();
+                    const bool isAutomated =
+                        getSettings()->isWatchStreakChannel(chanName);
+                    action->setChecked(isAutomated);
+                    if (getApp()->getWatchStreakController()->isChannelActive(
+                            chanName))
+                    {
+                        const int mins =
+                            getApp()
+                                ->getWatchStreakController()
+                                ->getMinutesWatched(chanName);
+                        action->setText(QString("Automate watch streak (%1m active)")
+                                            .arg(mins));
+                    }
+                    else if (isAutomated)
+                    {
+                        action->setText("Automate watch streak (offline)");
+                    }
+                    else
+                    {
+                        action->setText("Automate watch streak");
+                    }
+                });
+            QObject::connect(action, &QAction::triggered, this, [this]() {
+                getSettings()->toggleWatchStreakChannel(
                     this->split_->getChannel()->getName());
             });
 
@@ -1026,6 +1076,25 @@ void SplitHeader::updateChannelText()
         else
         {
             this->tooltipText_ = formatOfflineTooltip(*streamStatus);
+        }
+    }
+
+    if (getSettings()->enableWatchStreakAutomation.getValue() &&
+        getSettings()->isWatchStreakChannel(channel->getName()))
+    {
+        if (getApp()->getWatchStreakController()->isChannelActive(
+                channel->getName()))
+        {
+            const int mins = getApp()
+                                 ->getWatchStreakController()
+                                 ->getMinutesWatched(channel->getName());
+            this->tooltipText_ +=
+                QString("\nWatch Streak: %1m tracked (active)").arg(mins);
+        }
+        else
+        {
+            this->tooltipText_ +=
+                QString("\nWatch Streak: automated (channel offline)");
         }
     }
 

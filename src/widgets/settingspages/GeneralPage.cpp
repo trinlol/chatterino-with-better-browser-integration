@@ -20,7 +20,10 @@
 #include "util/FuzzyConvert.hpp"
 #include "util/Helpers.hpp"
 #include "util/IncognitoBrowser.hpp"
+#include "controllers/twitch/WatchStreakController.hpp"
+#include "util/Twitch.hpp"
 #include "widgets/BaseWindow.hpp"
+#include "widgets/helper/EditableModelView.hpp"
 #include "widgets/helper/FontSettingWidget.hpp"
 #include "widgets/settingspages/GeneralPageView.hpp"
 #include "widgets/settingspages/SettingWidget.hpp"
@@ -29,10 +32,12 @@
 #include <QFileDialog>
 #include <QFontDialog>
 #include <QFormLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPalette>
 #include <QSignalBlocker>
+#include <QTableView>
 
 namespace {
 
@@ -1711,6 +1716,47 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             "If turned off, only messages from other participants have a "
             "shared chat badge")
         ->addTo(layout);
+
+    {
+        layout.addTitle("Watch Streaks");
+        layout.addDescription(
+            "Automatically lurk and initiate/progress Twitch watch streaks "
+            "in the background for selected channels whenever they go live. "
+            "This operates completely silently without sharing streak celebration "
+            "announcements in chat.");
+
+        SettingWidget::checkbox("Automate watch streaks for selected channels",
+                                s.enableWatchStreakAutomation)
+            ->setTooltip(
+                "When enabled, Chatterino will periodically send watch telemetry "
+                "in the background for the designated channels while they are live.")
+            ->addTo(layout);
+
+        auto *view = new EditableModelView(
+            getApp()->getWatchStreakController()->createModel(this));
+        view->setTitles({"Twitch channels"});
+        view->setValidationRegexp(twitchUserNameRegexp());
+
+        view->getTableView()->horizontalHeader()->setSectionResizeMode(
+            QHeaderView::Fixed);
+        view->getTableView()->horizontalHeader()->setSectionResizeMode(
+            0, QHeaderView::Stretch);
+
+        QTimer::singleShot(1, [view] {
+            view->getTableView()->resizeColumnsToContents();
+            view->getTableView()->setColumnWidth(0, 200);
+        });
+
+        std::ignore = view->addButtonPressed.connect([] {
+            getSettings()->addWatchStreakChannel("channel");
+        });
+
+        s.enableWatchStreakAutomation.connect([view](bool enabled) {
+            view->setEnabled(enabled);
+        });
+
+        layout.addWidget(view);
+    }
 
     layout.addStretch();
 

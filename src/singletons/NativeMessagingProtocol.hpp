@@ -31,6 +31,7 @@ enum class NativeAction {
     LeaseRenew,
     Reconcile,
     NativeChatResult,
+    MinuteWatchedResult,
     Unknown,
 };
 

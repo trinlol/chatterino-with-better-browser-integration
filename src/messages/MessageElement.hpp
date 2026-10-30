@@ -19,12 +19,14 @@
 
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 class QJsonObject;
 
 namespace chatterino {
 class Channel;
+class TwitchChannel;
 struct MessageLayoutContainer;
 class MessageLayoutElement;
 struct MessageLayoutContext;
@@ -338,6 +340,8 @@ protected:
     FontStyle style_;
 };
 
+class EmoteElement;
+
 // contains a text that will be truncated to one line
 class SingleLineTextElement : public MessageElement
 {
@@ -345,15 +349,30 @@ class SingleLineTextElement : public MessageElement
     };
 
 public:
+    struct Piece {
+        enum class Type {
+            Text,
+            Emote,
+        };
+        Type type{Type::Text};
+        QString text;
+        EmotePtr emote;
+        std::shared_ptr<EmoteElement> emoteElement;
+        bool spaceBefore{false};
+    };
+
     static constexpr std::string_view TYPE = "single-line-text";
 
     SingleLineTextElement(const QString &text, MessageElementFlags flags,
                           const MessageColor &color = MessageColor::Text,
-                          FontStyle style = FontStyle::ChatMedium);
+                          FontStyle style = FontStyle::ChatMedium,
+                          TwitchChannel *twitchChannel = nullptr,
+                          std::unordered_map<QString, EmotePtr> emotes = {});
 
     /// This is intended only for cloning the element.
     SingleLineTextElement(SingleLineTextElement::CloneConstructorTag,
-                          QStringList words, MessageElementFlags flags,
+                          std::vector<Piece> pieces, QStringList words,
+                          MessageElementFlags flags,
                           const MessageColor &color = MessageColor::Text,
                           FontStyle style = FontStyle::ChatMedium);
 
@@ -384,6 +403,7 @@ private:
     FontStyle style_;
 
     QStringList words_;
+    std::vector<Piece> pieces_;
 };
 
 class LinkElement : public TextElement

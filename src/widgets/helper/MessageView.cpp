@@ -5,6 +5,7 @@
 #include "widgets/helper/MessageView.hpp"
 
 #include "Application.hpp"
+#include "messages/Emote.hpp"
 #include "messages/layouts/MessageLayout.hpp"
 #include "messages/layouts/MessageLayoutElement.hpp"
 #include "messages/MessageElement.hpp"
@@ -46,18 +47,44 @@ void MessageView::createMessageLayout()
     this->messageLayout_ = std::make_unique<MessageLayout>(this->message_);
 }
 
-void MessageView::setMessage(const MessagePtr &message)
+void MessageView::setMessage(const MessagePtr &message,
+                            TwitchChannel *twitchChannel)
 {
     if (!message)
     {
         return;
     }
 
+    std::unordered_map<QString, EmotePtr> emotes;
+    for (const auto &element : message->elements)
+    {
+        if (const auto *emoteElement =
+                dynamic_cast<const EmoteElement *>(element.get()))
+        {
+            auto emote = emoteElement->getEmote();
+            if (emote)
+            {
+                emotes.emplace(emote->name.string, emote);
+            }
+        }
+        else if (const auto *layered =
+                     dynamic_cast<const LayeredEmoteElement *>(element.get()))
+        {
+            for (const auto &item : layered->getUniqueEmotes())
+            {
+                if (item.ptr)
+                {
+                    emotes.emplace(item.ptr->name.string, item.ptr);
+                }
+            }
+        }
+    }
+
     auto singleLineMessage = std::make_shared<Message>();
     singleLineMessage->elements.emplace_back(
         std::make_unique<SingleLineTextElement>(
             message->messageText, MESSAGE_FLAGS, MessageColor::Type::System,
-            FontStyle::ChatMediumSmall));
+            FontStyle::ChatMediumSmall, twitchChannel, std::move(emotes)));
     this->message_ = std::move(singleLineMessage);
     this->createMessageLayout();
     this->layoutMessage();

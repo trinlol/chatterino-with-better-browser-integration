@@ -66,6 +66,12 @@
     '[data-a-target="community-points-summary"]',
     '[class*="community-points-summary"]',
     'button[aria-label*="Channel Points" i]',
+    'button[aria-label*="Bits and Points" i]',
+    'button[aria-label*="Points Balance" i]',
+    'button[aria-label*="Power-ups" i]',
+    'button[aria-label*="Rewards" i]',
+    '[data-a-target="chat-rewards-button"]',
+    '[data-test-selector="chat-rewards-button"]',
   ];
 
   const BADGE_SELECTORS = [
@@ -292,6 +298,55 @@
     });
   }
 
+  const REWARD_INPUT_BANNER_SELECTORS = [
+    '[data-test-selector="chat-input-reward-banner"]',
+    '[data-a-target="chat-input-reward-banner"]',
+    '[class*="chat-input__reward-banner"]',
+    '[class*="chat-input-reward-banner"]',
+    '[class*="chat-input__reward"]',
+    '[class*="reward-banner"]',
+    '[data-test-selector*="chat-input-reward"]',
+    '[data-a-target*="chat-input-reward"]',
+    'button[aria-label*="Cancel Reward" i]',
+    'button[aria-label*="Cancel redemption" i]',
+    '[data-a-target="cancel-reward-button"]',
+    '[data-test-selector="cancel-reward-button"]',
+  ];
+
+  function checkNativeRewardPending() {
+    let activeBannerEl = null;
+    for (const sel of REWARD_INPUT_BANNER_SELECTORS) {
+      const el = document.querySelector(sel);
+      if (el && !el.closest("#chatterino-toolbar-portal")) {
+        activeBannerEl = el;
+        break;
+      }
+    }
+
+    if (activeBannerEl) {
+      if (!rewardPendingActive) {
+        const title =
+          activeBannerEl.querySelector('[data-a-target*="title" i]')?.textContent ||
+          activeBannerEl.querySelector('strong, b, [class*="title" i]')?.textContent ||
+          activeBannerEl.textContent ||
+          "Reward";
+        const prompt =
+          findNativeChatInput()?.getAttribute("placeholder") || "";
+        forwardRewardPending({
+          rewardId: activeBannerEl.getAttribute("data-reward-id") || "",
+          title: title.trim().slice(0, 80),
+          prompt: prompt.trim().slice(0, 160),
+        });
+      }
+    } else if (rewardPendingActive) {
+      const hasPendingRewardIndicator =
+        document.querySelector('[class*="reward-banner"]') !== null;
+      if (!hasPendingRewardIndicator) {
+        forwardRewardClear("banner-removed");
+      }
+    }
+  }
+
   function scheduleSync() {
     syncPending = true;
     if (syncTimer !== null) {
@@ -370,11 +425,20 @@
         return btn;
       }
     }
-    for (const btn of document.querySelectorAll(
-      'button[aria-label*="Channel Points" i]'
-    )) {
-      if (!btn.closest("#chatterino-toolbar-portal")) {
-        return btn;
+    const fallbackSelectors = [
+      'button[aria-label*="Channel Points" i]',
+      'button[aria-label*="Bits and Points" i]',
+      'button[aria-label*="Points Balance" i]',
+      'button[aria-label*="Power-ups" i]',
+      'button[aria-label*="Rewards" i]',
+      '[data-a-target="chat-rewards-button"]',
+      '[data-test-selector="chat-rewards-button"]',
+    ];
+    for (const selector of fallbackSelectors) {
+      for (const btn of document.querySelectorAll(selector)) {
+        if (!btn.closest("#chatterino-toolbar-portal")) {
+          return btn;
+        }
       }
     }
     return null;
@@ -411,7 +475,7 @@
         requestAnimationFrame(() => attemptPosition(triesLeft - 1));
       }
     };
-    requestAnimationFrame(() => attemptPosition(20));
+    requestAnimationFrame(() => attemptPosition(120));
   }
 
   function ensurePointsReplica() {
@@ -771,24 +835,157 @@
   const AUTO_CLAIM_MIN_INTERVAL_MS = 30000;
   const CLAIM_BOOTSTRAP_DELAYS_MS = [0, 300, 750, 1500, 3000, 6000, 12000];
 
-  function findNativeRewardDialog() {
-    return (
-      document.querySelector(
-        'div[role="dialog"]:has(.reward-center__content)'
+  function isOverlayOrBackdrop(el) {
+    if (!el) {
+      return false;
+    }
+    const className = String(el.className?.baseVal ?? el.className ?? "");
+    if (
+      /\b(?:ReactModal__Overlay|tw-backdrop|modal-backdrop|overlay|backdrop|scrim|mask)\b/i.test(
+        className
       ) ||
-      document.querySelector(
-        'div[role="dialog"][aria-labelledby="channel-points-reward-center-header"]'
-      ) ||
-      document.querySelector(
-        'div[role="dialog"]:has([data-test-selector="reward-center"])'
-      ) ||
-      document.querySelector(
-        '.ReactModal__Content:has([data-test-selector="reward-center"])'
-      ) ||
-      document.querySelector(
-        "div.ReactModal__Content:has(.reward-center__content)"
+      className.includes("Overlay") ||
+      className.includes("backdrop")
+    ) {
+      return true;
+    }
+    if (typeof el.getAttribute === "function") {
+      const target = String(el.getAttribute("data-a-target") || "");
+      if (target.includes("backdrop") || target.includes("overlay")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function unmarkRewardDialog(el) {
+    if (!el) {
+      return;
+    }
+    el.classList.remove("chatterino-native-reward-dialog");
+    el.style.removeProperty("z-index");
+    if (el.__ccTranslate) {
+      el.style.removeProperty("transform");
+      delete el.__ccTranslate;
+    }
+  }
+
+  function unmarkPredictionDialog(el) {
+    if (!el) {
+      return;
+    }
+    el.classList.remove("chatterino-native-prediction-dialog");
+    el.style.removeProperty("z-index");
+    if (el.__ccTranslate) {
+      el.style.removeProperty("transform");
+      delete el.__ccTranslate;
+    }
+  }
+
+  function isNativeRewardDialogCandidate(dialog) {
+    if (!dialog || !dialog.isConnected) {
+      return false;
+    }
+    if (dialog.closest("#chatterino-toolbar-portal")) {
+      return false;
+    }
+    if (isOverlayOrBackdrop(dialog)) {
+      return false;
+    }
+    if (window.ChatterinoVotingUi?.isVideoPlayerUi?.(dialog)) {
+      return false;
+    }
+    if (
+      dialog.tagName === "BUTTON" ||
+      dialog.matches?.(
+        'button, [role="button"], [data-a-target="chat-rewards-button"], [data-test-selector="chat-rewards-button"]'
       )
+    ) {
+      return false;
+    }
+    const rect = dialog.getBoundingClientRect?.();
+    if (rect) {
+      if (rect.width === 0 && rect.height === 0) {
+        return false;
+      }
+      if (
+        rect.width >= (window.innerWidth || 1920) * 0.85 &&
+        rect.height >= (window.innerHeight || 1080) * 0.85
+      ) {
+        return false;
+      }
+    }
+    const hasRewardContent = Boolean(
+      dialog.classList?.contains("reward-center__content") ||
+        dialog.querySelector?.(
+          '.reward-center__content, [data-test-selector="reward-center"], .rewards-popover-header, [data-a-target="rewards-list"], [data-test-selector="chat-rewards-list"], [aria-labelledby="channel-points-reward-center-header"], [data-test-selector="community-points-reward-center"]'
+        )
     );
+    return hasRewardContent;
+  }
+
+  function findNativeRewardDialog() {
+    const marked = document.querySelector(".chatterino-native-reward-dialog");
+    if (marked?.isConnected) {
+      if (isNativeRewardDialogCandidate(marked)) {
+        return marked;
+      }
+      unmarkRewardDialog(marked);
+    }
+
+    const contentSelectors = [
+      ".reward-center__content",
+      '[data-test-selector="reward-center"]',
+      ".rewards-popover-header",
+      '[class*="rewards-popover"]',
+      '[class*="reward-center"]',
+      '[aria-labelledby="channel-points-reward-center-header"]',
+      '[data-test-selector="community-points-reward-center"]',
+      '[data-a-target="chat-rewards-popover"]',
+      '[data-a-target="rewards-list"]',
+      '[data-test-selector="chat-rewards-list"]',
+      '[class*="reward-details"]',
+      '[data-test-selector*="reward-detail"]',
+    ];
+
+    for (const selector of contentSelectors) {
+      for (const el of document.querySelectorAll(selector)) {
+        if (el.closest("#chatterino-toolbar-portal")) {
+          continue;
+        }
+        let dialog = el.closest(
+          '[role="dialog"], [role="alertdialog"], .ReactModal__Content, [class*="Attached"], [class*="popover" i], [class*="balloon" i], [data-a-target="tw-balloon"], .tw-balloon'
+        );
+        if (
+          !dialog &&
+          !el.matches?.('button, [role="button"]') &&
+          el.classList?.contains("reward-center__content")
+        ) {
+          dialog = el;
+        }
+        if (dialog && isNativeRewardDialogCandidate(dialog)) {
+          return dialog;
+        }
+      }
+    }
+
+    const ariaSelectors = [
+      '[role="dialog"][aria-labelledby*="reward" i]',
+      '[role="dialog"][aria-label*="reward" i]',
+      '[role="dialog"][aria-label*="channel points" i]',
+      '[role="dialog"][aria-label*="bits and points" i]',
+      '[role="dialog"][aria-label*="power-up" i]',
+      '[class*="tw-balloon"]:has([class*="reward" i])',
+      '[data-a-target="tw-balloon"]:has([class*="reward" i])',
+    ];
+    for (const selector of ariaSelectors) {
+      const dialog = document.querySelector(selector);
+      if (dialog && isNativeRewardDialogCandidate(dialog)) {
+        return dialog;
+      }
+    }
+
+    return null;
   }
 
   function ensureRewardDialogScrollable(popover) {
@@ -811,14 +1008,31 @@
         }
       });
     }
+    popover
+      .querySelectorAll("textarea, input, button, [contenteditable='true']")
+      .forEach((el) => {
+        el.style.setProperty("pointer-events", "auto", "important");
+        el.style.setProperty("visibility", "visible", "important");
+      });
   }
 
   function positionNativeRewardDialog(anchorEl) {
     const popover = findNativeRewardDialog();
-    if (!popover || !anchorEl) {
+    if (!popover) {
+      return false;
+    }
+    const anchor =
+      anchorEl ||
+      document.getElementById("chatterino-points-replica") ||
+      document.getElementById("chatterino-toolbar-portal");
+    if (!anchor) {
       return false;
     }
 
+    popover.classList.remove("chatterino-native-voting-source");
+    popover
+      .closest(".chatterino-native-voting-source")
+      ?.classList.remove("chatterino-native-voting-source");
     popover.classList.add("chatterino-native-reward-dialog");
     popover.style.setProperty("z-index", "2147483647", "important");
     ensureRewardDialogScrollable(popover);
@@ -828,9 +1042,15 @@
     // Instead, measure where the dialog currently is on screen and shift it
     // to the anchor with a translate() delta. It is never reparented either —
     // it must stay inside the React root so the buttons inside keep working.
-    const anchorRect = anchorEl.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
     const popRect = popover.getBoundingClientRect();
     if (popRect.width === 0 || popRect.height === 0) {
+      return false;
+    }
+    if (
+      popRect.width >= (window.innerWidth || 1920) * 0.85 &&
+      popRect.height >= (window.innerHeight || 1080) * 0.85
+    ) {
       return false;
     }
 
@@ -874,12 +1094,14 @@
   }
 
   function dismissNativeRewardDialog() {
-    const dialog = findNativeRewardDialog();
+    const dialog =
+      document.querySelector(".chatterino-native-reward-dialog") ||
+      findNativeRewardDialog();
     if (!dialog) {
       return false;
     }
     stopRewardDialogWatcher();
-    dialog.classList.remove("chatterino-native-reward-dialog");
+    unmarkRewardDialog(dialog);
     const closeBtn =
       dialog.querySelector('button[aria-label="Close"]') ||
       dialog.querySelector('button[aria-label="Back"]') ||
@@ -944,15 +1166,19 @@
     stopUnintendedDismissWatcher();
     stopChatIdentityDialogWatcher();
     stopPredictionDialogWatcher();
-    findNativePredictionDialog()?.classList.remove(
-      "chatterino-native-prediction-dialog"
-    );
+    document
+      .querySelectorAll(".chatterino-native-prediction-dialog")
+      .forEach((el) => {
+        unmarkPredictionDialog(el);
+      });
     removeBadgeReplica();
     removePointsReplica();
     document.getElementById("chatterino-points-fallback")?.remove();
-    findNativeRewardDialog()?.classList.remove(
-      "chatterino-native-reward-dialog"
-    );
+    document
+      .querySelectorAll(".chatterino-native-reward-dialog")
+      .forEach((el) => {
+        unmarkRewardDialog(el);
+      });
     unmarkChatIdentityDialog(findNativeChatIdentityDialog());
     if (rewardPendingActive) {
       forwardRewardClear("channel-reset");
@@ -981,36 +1207,117 @@
   // Twitch anchors the prompt to that hidden control and it opens outside the
   // viewport. Reveal it and shift it beside the toolbar, exactly like the
   // reward centre, so a viewer can actually spend their points.
+  function isNativePredictionDialogCandidate(dialog) {
+    if (!dialog || !dialog.isConnected) {
+      return false;
+    }
+    if (dialog.closest("#chatterino-toolbar-portal")) {
+      return false;
+    }
+    if (isOverlayOrBackdrop(dialog)) {
+      return false;
+    }
+    if (window.ChatterinoVotingUi?.isVideoPlayerUi?.(dialog)) {
+      return false;
+    }
+    if (
+      dialog.tagName === "BUTTON" ||
+      dialog.matches?.('button, [role="button"]')
+    ) {
+      return false;
+    }
+    if (
+      dialog.matches?.(
+        '[data-test-selector*="prediction-banner"], .prediction-banner'
+      ) ||
+      dialog.classList?.contains("chatterino-moved-banner-inline") ||
+      dialog.classList?.contains("chatterino-voting-replica")
+    ) {
+      return false;
+    }
+    if (
+      dialog.querySelector?.(".reward-center__content") ||
+      dialog.querySelector?.('[class*="rewards-popover"]')
+    ) {
+      return false;
+    }
+    const rect = dialog.getBoundingClientRect?.();
+    if (rect) {
+      if (rect.width === 0 && rect.height === 0) {
+        return false;
+      }
+      if (
+        rect.width >= (window.innerWidth || 1920) * 0.85 &&
+        rect.height >= (window.innerHeight || 1080) * 0.85
+      ) {
+        return false;
+      }
+    }
+    return Boolean(
+      window.ChatterinoVotingUi?.isPredictionBetPrompt(dialog) ||
+        window.ChatterinoVotingUi?.isPredictionDialog(dialog) ||
+        dialog.querySelector?.(
+          '[data-test-selector*="prediction-bet"], [data-a-target*="prediction-bet"], [class*="prediction-bet"]'
+        )
+    );
+  }
+
   function findNativePredictionDialog() {
     const marked = document.querySelector(
       ".chatterino-native-prediction-dialog"
     );
     if (marked?.isConnected) {
-      return marked;
+      if (isNativePredictionDialogCandidate(marked)) {
+        return marked;
+      }
+      unmarkPredictionDialog(marked);
     }
 
     const dedicated = [
       'div[role="dialog"]:has([data-test-selector*="prediction-bet"])',
       'div[role="dialog"]:has([data-a-target*="prediction-bet"])',
       'div[role="dialog"]:has([class*="prediction-bet"])',
+      '[role="dialog"]:has([data-test-selector*="prediction" i])',
+      '[role="dialog"]:has([data-a-target*="prediction" i])',
+      '[role="dialog"]:has([class*="prediction" i])',
+      '[role="dialog"][aria-label*="prediction" i]',
+      '[role="dialog"][aria-label*="predict" i]',
+      '.ReactModal__Content:has([data-test-selector*="prediction" i])',
+      '.ReactModal__Content:has([data-a-target*="prediction" i])',
+      '.ReactModal__Content:has([class*="prediction" i])',
+      '.ReactModal__Content[aria-label*="prediction" i]',
+      '[data-test-selector="community-prediction-modal"]',
+      '[data-a-target="community-prediction-modal"]',
+      '[class*="prediction-modal" i]',
+      '[class*="prediction-dialog" i]',
+      '[class*="prediction-prompt" i]',
+      '[class*="tw-balloon"]:has([class*="prediction" i])',
+      '[data-a-target="tw-balloon"]:has([class*="prediction" i])',
     ];
     for (const selector of dedicated) {
-      const dialog = document.querySelector(selector);
-      if (dialog && !dialog.closest("#chatterino-toolbar-portal")) {
-        return dialog;
+      for (let dialog of document.querySelectorAll(selector)) {
+        if (isOverlayOrBackdrop(dialog)) {
+          dialog =
+            dialog.querySelector?.(
+              '.ReactModal__Content, [role="dialog"], [role="alertdialog"]'
+            ) || null;
+        }
+        if (dialog && isNativePredictionDialogCandidate(dialog)) {
+          return dialog;
+        }
       }
     }
 
-    for (const dialog of document.querySelectorAll(
-      'div[role="dialog"], div.ReactModal__Content'
+    for (let dialog of document.querySelectorAll(
+      'div[role="dialog"], [role="dialog"], div.ReactModal__Content, .ReactModal__Content, [class*="balloon" i]'
     )) {
-      if (
-        dialog.closest("#chatterino-toolbar-portal") ||
-        dialog.querySelector(".reward-center__content")
-      ) {
-        continue;
+      if (isOverlayOrBackdrop(dialog)) {
+        dialog =
+          dialog.querySelector?.(
+            '.ReactModal__Content, [role="dialog"], [role="alertdialog"]'
+          ) || null;
       }
-      if (window.ChatterinoVotingUi?.isPredictionBetPrompt(dialog)) {
+      if (dialog && isNativePredictionDialogCandidate(dialog)) {
         return dialog;
       }
     }
@@ -1036,17 +1343,42 @@
         }
       });
     }
+    popover
+      .querySelectorAll("textarea, input, button, [contenteditable='true']")
+      .forEach((el) => {
+        el.style.setProperty("pointer-events", "auto", "important");
+        el.style.setProperty("visibility", "visible", "important");
+      });
   }
 
   function positionNativePredictionDialog(anchorEl) {
     const popover = findNativePredictionDialog();
-    if (!popover || !anchorEl) {
+    if (!popover) {
+      return false;
+    }
+    const anchor =
+      anchorEl ||
+      document.getElementById("chatterino-prediction-replica") ||
+      document.getElementById("chatterino-points-replica") ||
+      document.getElementById("chatterino-toolbar-portal");
+    if (!anchor) {
       return false;
     }
 
     // The prompt is never the banner source. If an earlier sync adopted it,
     // hand it back before measuring so it is not stuck at left:-10000px.
     popover.classList.remove("chatterino-native-voting-source");
+    popover
+      .closest(".chatterino-native-voting-source")
+      ?.classList.remove("chatterino-native-voting-source");
+    if (
+      activePredictionSource === popover ||
+      activePredictionSource ===
+        popover.closest(".chatterino-native-voting-source")
+    ) {
+      releaseVotingSource(activePredictionSource);
+      activePredictionSource = null;
+    }
     popover.classList.add("chatterino-native-prediction-dialog");
     popover.style.setProperty("z-index", "2147483647", "important");
     ensurePredictionDialogScrollable(popover);
@@ -1054,9 +1386,15 @@
     // Measured-delta placement for the same reason as the reward dialog: the
     // prompt stays inside the React root (never reparented) and its ancestors
     // carry transforms, so `position: fixed` would not resolve to the viewport.
-    const anchorRect = anchorEl.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
     const popRect = popover.getBoundingClientRect();
     if (popRect.width === 0 || popRect.height === 0) {
+      return false;
+    }
+    if (
+      popRect.width >= (window.innerWidth || 1920) * 0.85 &&
+      popRect.height >= (window.innerHeight || 1080) * 0.85
+    ) {
       return false;
     }
 
@@ -1087,6 +1425,34 @@
         "important"
       );
     }
+    return true;
+  }
+
+  function dismissNativePredictionDialog() {
+    const dialog =
+      document.querySelector(".chatterino-native-prediction-dialog") ||
+      findNativePredictionDialog();
+    if (!dialog) {
+      return false;
+    }
+    stopPredictionDialogWatcher();
+    unmarkPredictionDialog(dialog);
+    const closeBtn =
+      dialog.querySelector('button[aria-label="Close"]') ||
+      dialog.querySelector('button[aria-label="Back"]') ||
+      dialog.querySelector('[data-a-target="close-button"]') ||
+      dialog.querySelector('[data-a-target="cancel-button"]');
+    if (closeBtn) {
+      closeBtn.click();
+      return true;
+    }
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Escape",
+        code: "Escape",
+        bubbles: true,
+      })
+    );
     return true;
   }
 
@@ -1122,7 +1488,7 @@
         requestAnimationFrame(() => attempt(triesLeft - 1));
       }
     };
-    requestAnimationFrame(() => attempt(40));
+    requestAnimationFrame(() => attempt(120));
   }
 
   function isChatShellWiped() {
@@ -1263,6 +1629,36 @@
       return slot;
     }
 
+    // Do not show the portal if the target button is scrolled out of the viewport
+    if (
+      rect.bottom < 0 ||
+      rect.top > (window.innerHeight || 0) ||
+      rect.right < 0 ||
+      rect.left > (window.innerWidth || 0)
+    ) {
+      portal.style.setProperty("display", "none", "important");
+      return slot;
+    }
+
+    // Do not show the portal if it would overlap active video player controls
+    const playerControls = document.querySelector(
+      '.player-controls, [data-a-target="player-controls"], .video-player__default-player'
+    );
+    if (playerControls) {
+      const controlsRect = playerControls.getBoundingClientRect();
+      if (
+        controlsRect.width > 0 &&
+        controlsRect.height > 0 &&
+        rect.top >= controlsRect.top &&
+        rect.top <= controlsRect.bottom &&
+        rect.left >= controlsRect.left &&
+        rect.left <= controlsRect.right
+      ) {
+        portal.style.setProperty("display", "none", "important");
+        return slot;
+      }
+    }
+
     portal.style.setProperty("display", "inline-flex", "important");
     slot.style.setProperty("display", "inline-flex", "important");
 
@@ -1356,6 +1752,16 @@
     const candidates = new Map();
     for (const selector of selectors) {
       for (const surface of document.querySelectorAll(selector)) {
+        if (
+          window.ChatterinoVotingUi?.isPredictionBetPrompt(surface) ||
+          window.ChatterinoVotingUi?.isPredictionDialog(surface) ||
+          surface.classList?.contains("chatterino-native-prediction-dialog") ||
+          surface.classList?.contains("chatterino-native-reward-dialog") ||
+          surface.closest?.(".chatterino-native-prediction-dialog") ||
+          surface.closest?.(".chatterino-native-reward-dialog")
+        ) {
+          continue;
+        }
         candidates.set(surface, 20);
       }
     }
@@ -1997,16 +2403,28 @@
           }
           const cloneRoot = replica.firstElementChild;
           const sourceRoot = replica.__ccSource;
-          if (
-            window.ChatterinoVotingUi?.forwardActivation(
-              event,
-              cloneRoot,
-              sourceRoot
-            )
-          ) {
+          const activated = window.ChatterinoVotingUi?.forwardActivation(
+            event,
+            cloneRoot,
+            sourceRoot
+          );
+          if (activated) {
             if (kind === "prediction") {
               schedulePredictionDialogPositioning(replica);
             }
+            requestAnimationFrame(() => scheduleSync());
+            setTimeout(scheduleSync, 100);
+          } else if (kind === "prediction") {
+            if (sourceRoot && typeof sourceRoot.click === "function") {
+              sourceRoot.click();
+            } else {
+              window.ChatterinoVotingUi?.activateVotingTrigger(
+                document,
+                "prediction",
+                replica
+              );
+            }
+            schedulePredictionDialogPositioning(replica);
             requestAnimationFrame(() => scheduleSync());
             setTimeout(scheduleSync, 100);
           }
@@ -2159,6 +2577,7 @@
       pill.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        schedulePredictionDialogPositioning(pill);
         if (
           window.ChatterinoVotingUi?.activateVotingTrigger(
             document,
@@ -2179,6 +2598,7 @@
         if (pointsReplica) {
           pointsReplica.click();
         }
+        schedulePredictionDialogPositioning(pill);
       });
     }
 
@@ -2354,6 +2774,34 @@
         }
       }
 
+      const openRewardDialog = findNativeRewardDialog();
+      if (openRewardDialog && openRewardDialog.isConnected) {
+        positionNativeRewardDialog();
+      } else {
+        document
+          .querySelectorAll(".chatterino-native-reward-dialog")
+          .forEach((el) => {
+            unmarkRewardDialog(el);
+          });
+      }
+      const openPredictionDialog = findNativePredictionDialog();
+      if (openPredictionDialog && openPredictionDialog.isConnected) {
+        positionNativePredictionDialog();
+      } else {
+        document
+          .querySelectorAll(".chatterino-native-prediction-dialog")
+          .forEach((el) => {
+            unmarkPredictionDialog(el);
+          });
+      }
+      const openIdentityDialog = findNativeChatIdentityDialog();
+      if (!openIdentityDialog || !openIdentityDialog.isConnected) {
+        document.querySelectorAll(".chatterino-native-chat-identity-dialog").forEach((el) => {
+          el.classList.remove("chatterino-native-chat-identity-dialog");
+        });
+      }
+      checkNativeRewardPending();
+
       positionToolbarPortal();
     } finally {
       recordObserverCallback(syncStartedAt);
@@ -2419,6 +2867,16 @@
     forwardRewardClear(event.detail?.reason || "cancelled");
   });
 
+  window.addEventListener(
+    "chatterino-companion-minute-watched-result",
+    (event) => {
+      chrome.runtime.sendMessage({
+        action: "minuteWatchedResult",
+        ...event.detail,
+      });
+    }
+  );
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.action === "nativeAttachState") {
       sendResponse({ ok: true });
@@ -2445,6 +2903,15 @@
         forwardRewardClear("sent");
       }
       sendResponse(result);
+      return true;
+    }
+    if (message?.action === "sendMinuteWatched") {
+      window.dispatchEvent(
+        new CustomEvent("chatterino-companion-minute-watched", {
+          detail: message,
+        })
+      );
+      sendResponse({ ok: true });
       return true;
     }
     if (message?.action === "nativeChatResult") {
@@ -2515,11 +2982,18 @@
     subtree: true,
   });
 
+  let claimBonusDebounceTimer = null;
   const claimBonusObserver = new MutationObserver(() => {
     const startedAt = window.performance?.now?.() ?? Date.now();
-    if (findClaimBonusButton()) {
-      scheduleAutoClaimAttempt();
+    if (claimBonusDebounceTimer !== null) {
+      return;
     }
+    claimBonusDebounceTimer = setTimeout(() => {
+      claimBonusDebounceTimer = null;
+      if (findClaimBonusButton()) {
+        scheduleAutoClaimAttempt();
+      }
+    }, 250);
     recordObserverCallback(startedAt);
   });
   claimBonusObserver.observe(document.documentElement, {

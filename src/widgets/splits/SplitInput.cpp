@@ -1783,8 +1783,9 @@ void SplitInput::setReply(MessagePtr target)
 
         if (this->enableInlineReplying_)
         {
-            this->ui_.replyMessage->setWidth(this->replyMessageWidth());
-            this->ui_.replyMessage->setMessage(this->replyTarget_);
+            auto *tc = dynamic_cast<TwitchChannel *>(
+                this->split_ ? this->split_->getChannel().get() : nullptr);
+            this->ui_.replyMessage->setMessage(this->replyTarget_, tc);
 
             // add spacing between reply box and input box
             this->ui_.vbox->setSpacing(this->marginForTheme());

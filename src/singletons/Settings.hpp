@@ -175,6 +175,10 @@ public:
         "/appearance/messages/watchstreaks/showHeader",
         true,
     };
+    BoolSetting enableWatchStreakAutomation = {
+        "/watchstreaks/automationEnabled",
+        false,
+    };
     BoolSetting animationsWhenFocused = {
         "/appearance/enableAnimationsWhenFocused", false};
     BoolSetting hideMessageTimestampsWhenLive = {
@@ -272,7 +276,7 @@ public:
     // BoolSetting useCustomWindowFrame = {"/appearance/useCustomWindowFrame",
     // false};
 
-    BoolSetting showMarquee = {"/appearance/marquee/show", true};
+    BoolSetting showMarquee = {"/appearance/marquee/show", false};
     IntSetting marqueeStyle = {"/appearance/marquee/style", 0};
     IntSetting marqueeSpeed = {"/appearance/marquee/speed", 45};
     IntSetting marqueeFontSize = {"/appearance/marquee/fontSize", 12};
@@ -956,6 +960,8 @@ private:
         {"/moderation/actions"};
     ChatterinoSetting<std::vector<ChannelLog>> loggedChannelsSetting = {
         "/logging/channels"};
+    ChatterinoSetting<std::vector<QString>> watchStreakChannelsSetting = {
+        "/watchstreaks/channels"};
     SignalVector<QString> mutedChannels;
 
     IntSetting settingsVersion = {
@@ -975,11 +981,16 @@ public:
     SignalVector<Nickname> nicknames;
     SignalVector<ModerationAction> moderationActions;
     SignalVector<ChannelLog> loggedChannels;
+    SignalVector<QString> watchStreakChannels;
 
     bool isHighlightedUser(const QString &username);
     bool isBlacklistedUser(const QString &username);
     bool isMutedChannel(const QString &channelName);
     bool toggleMutedChannel(const QString &channelName);
+    bool isWatchStreakChannel(const QString &channelName);
+    bool toggleWatchStreakChannel(const QString &channelName);
+    void addWatchStreakChannel(const QString &channelName);
+    void removeWatchStreakChannel(const QString &channelName);
     std::optional<QString> matchNickname(const QString &username);
     void mute(const QString &channelName);
     void unmute(const QString &channelName);

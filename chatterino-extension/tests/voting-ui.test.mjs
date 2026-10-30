@@ -238,3 +238,69 @@ test("a real prediction banner is still treated as voting UI", async () => {
   assert.equal(votingUi.isPredictionBetPrompt(banner), false);
   assert.equal(votingUi.isGenericVotingSurface(banner, "prediction"), true);
 });
+
+test("a prediction dialog or modal is recognized and never adopted as the voting banner", async () => {
+  const votingUi = await loadVotingUi();
+  const predictionModal = {
+    textContent: "Prediction Will the streamer win? Believe 1.25x Doubt 3.40x",
+    matches(selector) {
+      return selector.includes('[role="dialog"]') || selector.includes("prediction");
+    },
+    closest(selector) {
+      return selector.includes('[role="dialog"]') ? this : null;
+    },
+    querySelectorAll() {
+      return [{}, {}];
+    },
+  };
+
+  assert.equal(votingUi.isPredictionDialog(predictionModal), true);
+  assert.equal(
+    votingUi.isGenericVotingSurface(predictionModal, "prediction"),
+    false
+  );
+});
+
+test("an overlay or backdrop is never treated as a prediction dialog", async () => {
+  const votingUi = await loadVotingUi();
+  const overlay = {
+    className: "ReactModal__Overlay ReactModal__Overlay--after-open",
+    textContent: "Prediction Will the streamer win? Channel Points",
+    matches(selector) {
+      return selector.includes("modal");
+    },
+    closest() {
+      return null;
+    },
+  };
+
+  assert.equal(votingUi.isOverlayOrBackdrop(overlay), true);
+  assert.equal(votingUi.isPredictionDialog(overlay), false);
+  assert.equal(votingUi.isGenericVotingSurface(overlay, "prediction"), false);
+});
+
+test("the Twitch player settings menu is never treated as a prediction dialog", async () => {
+  const votingUi = await loadVotingUi();
+  // Twitch's player settings menu is a role="menu" ReactModal that contains
+  // an "Always Show Events" tooltip whose aria-label mentions predictions.
+  const settingsMenu = {
+    className: "ReactModal__Content ReactModal__Content--after-open",
+    textContent:
+      "Video Player SettingsQualityAutoAdvancedPopout PlayerAlways Show Events",
+    matches(selector) {
+      return selector.includes('[role="menu"]') || selector.includes(".ReactModal__Content");
+    },
+    closest(selector) {
+      return selector.includes('[role="menu"]') ? this : null;
+    },
+    querySelector(selector) {
+      return selector.includes('data-a-target="player-settings-menu"') ? {} : null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+  };
+
+  assert.equal(votingUi.isVideoPlayerUi(settingsMenu), true);
+  assert.equal(votingUi.isPredictionDialog(settingsMenu), false);
+});

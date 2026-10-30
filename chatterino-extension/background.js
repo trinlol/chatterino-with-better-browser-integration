@@ -204,6 +204,15 @@ let workerRecoveryPending = true;
 // readiness-triggered geometry reply to cross that focus transition.
 const pendingStartupReplayTabs = new Map();
 const pendingAttachRequests = new Map();
+const recentlyAttachedRequestIds = new Set();
+function recordAttachedRequestId(requestId) {
+  if (!requestId) return;
+  recentlyAttachedRequestIds.add(String(requestId));
+  if (recentlyAttachedRequestIds.size > 100) {
+    const oldest = recentlyAttachedRequestIds.values().next().value;
+    recentlyAttachedRequestIds.delete(oldest);
+  }
+}
 // Invalidate asynchronous measurements as soon as the visible tab changes.
 const windowRevisions = new Map();
 function windowRevision(windowId) {
@@ -513,38 +522,110 @@ function acknowledgeAttachedWindow(message) {
   console.log('[ATTACH-DEBUG] acknowledgeAttachedWindow called');
   const key = String(message.winId ?? message.browserWindowId ?? "");
   console.log('[ATTACH-DEBUG] Window key:', key);
-  const pending = pendingAttachRequests.get(key);
-  console.log('[ATTACH-DEBUG] Pending request:', pending);
-  console.log('[ATTACH-DEBUG] All pending keys:', Array.from(pendingAttachRequests.keys()));
-
   const responseRequestId = message.attachRequestId ?? message.requestId;
   console.log('[ATTACH-DEBUG] Response request ID:', responseRequestId);
+
+  // 1. If this request was already acknowledged (e.g. duplicate or retry ack from native host), ignore cleanly
+  if (responseRequestId && recentlyAttachedRequestIds.has(String(responseRequestId))) {
+    console.log('[ATTACH-DEBUG] Ignoring duplicate acknowledgement for completed request:', responseRequestId);
+    return;
+  }
+
+  // 2. Find pending request. First look up by window key.
+  let pending = key ? pendingAttachRequests.get(key) : undefined;
+  let matchedKey = key;
+
+  // If not found by key, search across pendingAttachRequests by correlation requestId or (sessionId, generation)
+  if (!pending) {
+    for (const [k, candidate] of pendingAttachRequests.entries()) {
+      if (
+        (responseRequestId && candidate.requestId === responseRequestId) ||
+        (message.sessionId &&
+          candidate.sessionId === message.sessionId &&
+          Number(message.generation) === Number(candidate.generation))
+      ) {
+        pending = candidate;
+        matchedKey = k;
+        break;
+      }
+    }
+  }
+
+  console.log('[ATTACH-DEBUG] Pending request:', pending);
+  console.log('[ATTACH-DEBUG] All pending keys:', Array.from(pendingAttachRequests.keys()));
   console.log('[ATTACH-DEBUG] Expected request ID:', pending?.requestId);
 
-  if (!pending || pending.requestId !== responseRequestId) {
-    console.error('[ATTACH-DEBUG] ACKNOWLEDGEMENT REJECTED!', {
-      reason: !pending ? 'no pending request' : 'request ID mismatch',
-      expected: pending?.requestId,
-      received: responseRequestId
-    });
+  if (!pending) {
+    void (async () => {
+      const session = message.sessionId
+        ? await sessionStore.get(message.sessionId)
+        : null;
+      const isWindowAttached = key ? await AttachedWindows.isAttached(key) : false;
+
+      if (session?.attached || isWindowAttached) {
+        console.log('[ATTACH-DEBUG] Acknowledgement received for already attached session/window:', {
+          key,
+          sessionId: message.sessionId,
+          requestId: responseRequestId,
+        });
+        if (session && nativeSupportsV2 && Number(message.leaseExpiresAt) > (session.leaseExpiresAt || 0)) {
+          session.leaseExpiresAt = Number(message.leaseExpiresAt);
+          await sessionStore.put(session);
+        }
+        return;
+      }
+
+      console.log(
+        '[ATTACH-DEBUG] Stale or cancelled acknowledgement ignored: ' +
+          JSON.stringify({
+            reason: 'no pending request',
+            received: responseRequestId,
+            key,
+          })
+      );
+    })();
+    return;
+  }
+
+  // Correlation check: if responseRequestId is present, it must match the pending request
+  const isMatchingRequest =
+    (responseRequestId && pending.requestId === responseRequestId) ||
+    (!responseRequestId &&
+      message.sessionId &&
+      pending.sessionId === message.sessionId &&
+      Number(message.generation) === Number(pending.generation)) ||
+    (!responseRequestId && !message.sessionId);
+
+  if (!isMatchingRequest) {
+    console.log(
+      '[ATTACH-DEBUG] Superseded or mismatched acknowledgement ignored: ' +
+        JSON.stringify({
+          reason: 'request ID mismatch',
+          expected: pending.requestId,
+          received: responseRequestId,
+        })
+    );
     return;
   }
 
   console.log('[ATTACH-DEBUG] Acknowledgement accepted, proceeding...');
+  if (responseRequestId) {
+    recordAttachedRequestId(responseRequestId);
+  }
 
   void (async () => {
-    if (!(await isCurrentChannelTab(pending.tabId, key, pending.message.name)) ||
-        pendingAttachRequests.get(key) !== pending ||
-        pending.revision !== windowRevision(key)) return;
-    clearPendingAttach(key);
-    await AttachedWindows.markAttached(key);
+    if (!(await isCurrentChannelTab(pending.tabId, matchedKey, pending.message.name)) ||
+        pendingAttachRequests.get(matchedKey) !== pending ||
+        pending.revision !== windowRevision(matchedKey)) return;
+    clearPendingAttach(matchedKey);
+    await AttachedWindows.markAttached(matchedKey);
     const session = message.sessionId
       ? await sessionStore.get(message.sessionId)
       : pending.sessionId
         ? await sessionStore.get(pending.sessionId)
         : null;
     if (session) {
-      if (!session.desired || pending.revision !== windowRevision(key)) return;
+      if (!session.desired || pending.revision !== windowRevision(matchedKey)) return;
       if (
         message.generation !== undefined &&
         message.generation !== session.generation
@@ -556,7 +637,7 @@ function acknowledgeAttachedWindow(message) {
         ? Number(message.leaseExpiresAt) || Date.now() + NATIVE_LEASE_MS
         : 0;
       await sessionStore.put(session);
-      if (pending.revision !== windowRevision(key)) return;
+      if (pending.revision !== windowRevision(matchedKey)) return;
       console.log('[ATTACH-DEBUG] About to send overlay state "attached" to tab:', session.tabId, 'session:', session);
       await sendOverlayState(session, "attached");
       console.log('[ATTACH-DEBUG] Sent overlay state "attached"');
@@ -600,7 +681,7 @@ function connectPort(fromRetry = false) {
   } catch (error) {
     port = null;
     lastNativeError = error?.message || String(error);
-    console.error("[ATTACH-DEBUG] Native messaging connect failed:", error);
+    console.warn("[ATTACH-DEBUG] Native messaging connect failed:", error);
     console.warn("[Chatterino] Native messaging connect failed:", error);
     scheduleNativeReconnect(
       /forbidden|not found|specified native messaging host/i.test(
@@ -699,13 +780,19 @@ function connectPort(fromRetry = false) {
 
     if (msg?.action === "sendNativeChat") {
       void routeSendNativeChat(msg);
+      return;
+    }
+
+    if (msg?.action === "sendMinuteWatched") {
+      void routeSendMinuteWatched(msg);
+      return;
     }
   });
   port.onDisconnect.addListener(() => {
     const lastError = chrome.runtime.lastError?.message ?? "";
     lastNativeError = lastError;
 
-    console.error(
+    console.warn(
       "[ATTACH-DEBUG] Native port DISCONNECTED. lastError:",
       lastError || "(none)",
       "| connected for",
@@ -744,14 +831,9 @@ async function reconcileDesiredSessions() {
       await sessionStore.remove(session.sessionId);
       continue;
     }
-    // A service-worker restart invalidates the in-memory port and any pending
-    // acknowledgement. Reveal first; a fresh matching ack may hide it again.
-    if (workerRecoveryPending && session.attached) {
-      session.attached = false;
-      await sessionStore.put(session);
-      await sendOverlayState(session, "revealed", "worker-recovery");
-    }
-    if (session.leaseExpiresAt && session.leaseExpiresAt <= Date.now()) {
+    // A service-worker restart should reconnect port and verify geometry
+    // rather than tearing down a healthy, already-attached overlay.
+    if (session.leaseExpiresAt && session.leaseExpiresAt <= Date.now() && !liveTabIds.has(session.tabId)) {
       session.attached = false;
       session.leaseExpiresAt = 0;
       await sessionStore.put(session);
@@ -762,6 +844,8 @@ async function reconcileDesiredSessions() {
       session.leaseExpiresAt &&
       session.leaseExpiresAt - Date.now() < NATIVE_LEASE_MS / 2
     ) {
+      session.leaseExpiresAt = Date.now() + NATIVE_LEASE_MS;
+      await sessionStore.put(session);
       forwardNativeMessage({
         action: "leaseRenew",
         protocolVersion: 2,
@@ -770,8 +854,9 @@ async function reconcileDesiredSessions() {
         tabId: session.tabId,
         generation: session.generation,
         name: session.channel,
-        leaseExpiresAt: Date.now() + NATIVE_LEASE_MS,
+        leaseExpiresAt: session.leaseExpiresAt,
       });
+      await sendOverlayState(session, "attached");
     }
     try {
       await chrome.tabs.sendMessage(session.tabId, {
@@ -899,13 +984,13 @@ async function onTabSelected(url, tab, { startupReplay = false } = {}) {
     try {
       const request = { action: "requestChatRect" };
       if (nativeSupportsV2) {
-        request.sessionId = (
-          await ensureDesiredSession(
-            tab.windowId,
-            tab.id,
-            matchChannelName(tab.url || "")
-          )
-        ).sessionId;
+        const session = await ensureDesiredSession(
+          tab.windowId,
+          tab.id,
+          matchChannelName(tab.url || "")
+        );
+        request.sessionId = session.sessionId;
+        request.generation = session.generation;
       }
       await chrome.tabs.sendMessage(tab.id, request);
     } catch (error) {
@@ -1136,6 +1221,75 @@ async function routeSendNativeChat(message) {
   // instead of allowing a local queue writer to choose a Twitch target.
 }
 
+async function routeSendMinuteWatched(message) {
+  const isV2 = Number(message?.protocolVersion) >= 2;
+  const postResult = (status, reason, statusCode) => {
+    forwardNativeMessage({
+      action: "minuteWatchedResult",
+      protocolVersion: isV2 ? 2 : 1,
+      sessionId: message?.sessionId || "",
+      browserWindowId: message?.browserWindowId || "",
+      tabId: message?.tabId || 0,
+      generation: message?.generation || 0,
+      requestId: message?.requestId || "",
+      channel: message?.channel || "",
+      streamId: message?.streamId || "",
+      status,
+      statusCode: statusCode || 0,
+      reason: String(reason || ""),
+    });
+  };
+
+  if (!message || typeof message !== "object") {
+    return;
+  }
+
+  let session = null;
+  if (isV2 && message.sessionId) {
+    session = await sessionStore.get(message.sessionId);
+  }
+
+  // If session ID was not provided or not in session store, look for active session for this channel
+  if (!session && message.channel) {
+    const normalized = String(message.channel).toLowerCase();
+    const sessions = await sessionStore.all();
+    session = Object.values(sessions).find(
+      (s) => s.attached && String(s.channel).toLowerCase() === normalized
+    );
+  }
+
+  if (!session?.tabId) {
+    postResult("rejected", "no-active-session");
+    return;
+  }
+
+  const targetTab = await chrome.tabs.get(session.tabId).catch(() => null);
+  if (!targetTab) {
+    postResult("rejected", "tab-not-found");
+    return;
+  }
+
+  try {
+    const response = await chrome.tabs.sendMessage(session.tabId, {
+      action: "sendMinuteWatched",
+      channel: message.channel,
+      channelId: message.channelId,
+      streamId: message.streamId,
+      userId: message.userId,
+      requestId: message.requestId,
+      sessionId: session.sessionId,
+      browserWindowId: session.windowId,
+      tabId: session.tabId,
+      generation: session.generation,
+    });
+    if (!response?.ok) {
+      postResult("rejected", response?.reason || "tab-dispatch-failed");
+    }
+  } catch (err) {
+    postResult("rejected", err?.message || "tab-send-error");
+  }
+}
+
 // receiving messages from content scripts and the popup
 chrome.runtime.onMessage.addListener((message, sender, callback) => {
   if (!message || typeof message !== "object") return;
@@ -1144,7 +1298,8 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
     message.action === "prediction" ||
     message.action === "pin" ||
     message.action === "rewardPending" ||
-    message.action === "rewardClear"
+    message.action === "rewardClear" ||
+    message.action === "minuteWatchedResult"
   ) {
     if (
       !sender.tab?.id ||

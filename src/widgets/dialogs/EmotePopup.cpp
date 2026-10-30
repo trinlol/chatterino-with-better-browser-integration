@@ -590,6 +590,20 @@ EmotePopup::EmotePopup(QWidget *parent)
             this->reloadEmotes();
         });
 
+    // Don't auto-invoke: the views have no underlying channel until
+    // loadChannel() runs, which performs the initial favourites load itself.
+    getSettings()->favouriteEmotes.connect(
+        [this] {
+            this->reloadFavourites();
+        },
+        this->signalHolder_, false);
+
+    getSettings()->favouriteEmojis.connect(
+        [this] {
+            this->reloadFavourites();
+        },
+        this->signalHolder_, false);
+
     this->themeChangedEvent();
 }
 
@@ -799,6 +813,10 @@ void EmotePopup::removeFavouriteEmote(const EmoteName &name)
 void EmotePopup::updateFavouriteEmotesAndEmojis()
 {
     auto chan = this->favouritesView_->underlyingChannel();
+    if (!chan)
+    {
+        return;
+    }
     chan->clearMessages();
 
     if (this->favouriteEmotes_.empty() && this->favouriteEmojis_.empty())
@@ -828,6 +846,39 @@ void EmotePopup::updateFavouriteEmotesAndEmojis()
                                    return v.second;
                                });
         chan->addMessage(makeEmojiMessage(emojis), MessageContext::Original);
+    }
+}
+
+void EmotePopup::reloadFavourites()
+{
+    this->favouriteEmotes_.clear();
+    const auto &emoteNames = getSettings()->favouriteEmotes;
+    for (const auto &emoteName : emoteNames.getValue())
+    {
+        auto emote = this->findEmote(EmoteName{emoteName});
+        if (emote)
+        {
+            this->favouriteEmotes_.push_back(*emote);
+        }
+    }
+    this->favouriteEmojis_.clear();
+    const auto &emojiShortCodes = getSettings()->favouriteEmojis;
+    for (const auto &shortCode : emojiShortCodes.getValue())
+    {
+        for (const auto &emoji :
+             getApp()->getEmotes()->getEmojis()->getEmojis())
+        {
+            if (emojiHasShortCode(emoji, shortCode))
+            {
+                this->favouriteEmojis_.emplace(shortCode, emoji);
+                break;
+            }
+        }
+    }
+    this->updateFavouriteEmotesAndEmojis();
+    if (this->notebook_)
+    {
+        this->notebook_->update();
     }
 }
 
@@ -884,31 +935,7 @@ void EmotePopup::reloadEmotes()
                   "7TV");
     }
 
-    this->favouriteEmotes_.clear();
-    const auto &emoteNames = getSettings()->favouriteEmotes;
-    for (const auto &emoteName : emoteNames.getValue())
-    {
-        auto emote = this->findEmote(EmoteName{emoteName});
-        if (emote)
-        {
-            this->favouriteEmotes_.push_back(*emote);
-        }
-    }
-    this->favouriteEmojis_.clear();
-    const auto &emojiShortCodes = getSettings()->favouriteEmojis;
-    for (const auto &shortCode : emojiShortCodes.getValue())
-    {
-        for (const auto &emoji :
-             getApp()->getEmotes()->getEmojis()->getEmojis())
-        {
-            if (emojiHasShortCode(emoji, shortCode))
-            {
-                this->favouriteEmojis_.emplace(shortCode, emoji);
-                break;
-            }
-        }
-    }
-    this->updateFavouriteEmotesAndEmojis();
+    this->reloadFavourites();
 
     if (!subChannel->hasMessages())
     {

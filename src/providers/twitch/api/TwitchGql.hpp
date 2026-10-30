@@ -150,6 +150,14 @@ public:
         const QString &textInput, const QString &oauthToken,
         std::function<void(qint64)> successCallback,
         std::function<void(const QString &)> failureCallback);
+
+    // Watch streak & minutes watched tracking
+    static void sendMinuteWatched(
+        const QString &channelId, const QString &channelLogin,
+        const QString &streamId, const QString &userId,
+        const QString &oauthToken,
+        std::function<void(int statusCode)> successCallback = {},
+        std::function<void(const QString &)> failureCallback = {});
 };
 
 }  // namespace chatterino

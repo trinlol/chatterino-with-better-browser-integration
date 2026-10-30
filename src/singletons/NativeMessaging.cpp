@@ -713,6 +713,39 @@ ipc::DeliveryStatus NativeMessagingServer::sendNativeChat(
         QJsonDocument(payload).toJson(QJsonDocument::Compact));
 }
 
+ipc::DeliveryStatus NativeMessagingServer::sendMinuteWatchedViaBrowser(
+    const QString &channel, const QString &channelId, const QString &streamId,
+    const QString &userId, const QString &requestId)
+{
+    if (!instance_ || channel.trimmed().isEmpty() || channelId.trimmed().isEmpty() ||
+        streamId.trimmed().isEmpty() || requestId.trimmed().isEmpty())
+    {
+        return ipc::DeliveryStatus::InvalidMessage;
+    }
+
+    const auto session = instance_->sessions_.uniqueReadyForChannel(channel);
+    if (!session)
+    {
+        // No uniquely attached browser session for this channel
+        return ipc::DeliveryStatus::QueueUnavailable;
+    }
+
+    QJsonObject payload{{u"action"_s, u"sendMinuteWatched"_s},
+                        {u"protocolVersion"_s, 2},
+                        {u"channel"_s, channel},
+                        {u"channelId"_s, channelId},
+                        {u"streamId"_s, streamId},
+                        {u"userId"_s, userId},
+                        {u"requestId"_s, requestId},
+                        {u"sessionId"_s, session->sessionId},
+                        {u"browserWindowId"_s, session->browserWindowId},
+                        {u"tabId"_s, session->tabId},
+                        {u"generation"_s, session->generation}};
+    return ipc::sendMessage(
+        BROWSER_IPC_QUEUE_NAME,
+        QJsonDocument(payload).toJson(QJsonDocument::Compact));
+}
+
 NativeMessagingServer::~NativeMessagingServer()
 {
     instance_ = nullptr;
@@ -853,6 +886,9 @@ void NativeMessagingServer::ReceiverThread::handleMessage(
             return;
         case nm::NativeAction::NativeChatResult:
             this->handleNativeChatResult(root);
+            return;
+        case nm::NativeAction::MinuteWatchedResult:
+            this->handleMinuteWatchedResult(root);
             return;
         case nm::NativeAction::Unknown:
             break;
@@ -1258,6 +1294,20 @@ void NativeMessagingServer::ReceiverThread::handleNativeChatResult(
         {u"generation"_s, identity.generation},
         {u"reason"_s, root["reason"_L1].toString()},
     });
+}
+
+void NativeMessagingServer::ReceiverThread::handleMinuteWatchedResult(
+    const QJsonObject &root)
+{
+    const auto channel = root["channel"_L1].toString();
+    const auto status = root["status"_L1].toString();
+    const auto reason = root["reason"_L1].toString(root["error"_L1].toString());
+    const auto statusCode = root["statusCode"_L1].toInt();
+    const auto streamId = root["streamId"_L1].toString();
+
+    qCDebug(chatterinoNativeMessage)
+        << "Minute watched result via browser:" << channel << status
+        << "statusCode:" << statusCode << "reason:" << reason;
 }
 
 void NativeMessagingServer::ReceiverThread::expireSessions()

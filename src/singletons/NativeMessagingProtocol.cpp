@@ -66,6 +66,8 @@ ParsedNativeMessage parseNativeMessage(const QJsonObject &root)
         parsed.action = NativeAction::Reconcile;
     else if (action == u"nativeChatResult")
         parsed.action = NativeAction::NativeChatResult;
+    else if (action == u"minuteWatchedResult")
+        parsed.action = NativeAction::MinuteWatchedResult;
     else
     {
         parsed.error = action.isEmpty() ? u"missing action"_s

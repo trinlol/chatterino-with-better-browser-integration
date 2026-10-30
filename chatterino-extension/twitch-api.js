@@ -1167,6 +1167,85 @@
     return originalSend.apply(this, args);
   };
 
+  async function sendMinuteWatched(detail) {
+    if (!detail || typeof detail !== "object") {
+      return { ok: false, error: "invalid-payload" };
+    }
+    const channelId = String(detail.channelId || "");
+    const channelLogin = String(detail.channel || detail.channelLogin || "").toLowerCase();
+    const streamId = String(detail.streamId || "");
+    const userId = String(detail.userId || "");
+
+    if (!channelId || !streamId) {
+      return { ok: false, error: "missing-parameters" };
+    }
+
+    const spadeEvent = {
+      event: "minute-watched",
+      properties: {
+        channel_id: channelId,
+        broadcast_id: streamId,
+        channel: channelLogin,
+        user_id: userId,
+        live: true,
+        is_live: true,
+        player: "site",
+        client_time: new Date().toISOString(),
+        logged_in: Boolean(userId),
+        minutes_logged: 1,
+        hidden: false,
+        muted: false,
+      },
+    };
+
+    const base64Data = btoa(JSON.stringify([spadeEvent]));
+    const mutationQuery = `mutation SendEvents($input: SendSpadeEventsInput!) {
+      sendSpadeEvents(input: $input) {
+        statusCode
+      }
+    }`;
+
+    try {
+      const response = await fetchWithTimeout("https://gql.twitch.tv/gql", {
+        method: "POST",
+        credentials: "include",
+        headers: buildGqlHeaders(),
+        body: JSON.stringify({
+          query: mutationQuery,
+          variables: {
+            input: {
+              data: base64Data,
+            },
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        return { ok: false, statusCode: response.status, error: `http-${response.status}` };
+      }
+
+      let json;
+      try {
+        json = await response.json();
+      } catch (_) {
+        return { ok: false, error: "parse-error" };
+      }
+
+      const statusCode = json?.data?.sendSpadeEvents?.statusCode;
+      if (statusCode === 200 || statusCode === 204 || (!json?.errors && !statusCode)) {
+        return { ok: true, statusCode: statusCode || response.status };
+      }
+
+      if (json?.errors?.length) {
+        return { ok: false, statusCode, error: json.errors[0]?.message || "gql-error" };
+      }
+
+      return { ok: true, statusCode: statusCode || response.status };
+    } catch (err) {
+      return { ok: false, error: err?.message || "network-error" };
+    }
+  }
+
   window.__chatterinoCompanionGql = {
     __version: 2,
     getState() {
@@ -1181,6 +1260,9 @@
     async claimChannelPoints() {
       return claimChannelPoints();
     },
+    async sendMinuteWatched(detail) {
+      return sendMinuteWatched(detail);
+    },
     redeemReward(rewardId, channelId) {
       window.dispatchEvent(
         new CustomEvent("chatterino-companion-redeem", {
@@ -1189,6 +1271,21 @@
       );
     },
   };
+
+  window.addEventListener("chatterino-companion-minute-watched", async (event) => {
+    const result = await sendMinuteWatched(event.detail);
+    window.dispatchEvent(
+      new CustomEvent("chatterino-companion-minute-watched-result", {
+        detail: {
+          ...result,
+          requestId: event.detail?.requestId,
+          channel: event.detail?.channel,
+          streamId: event.detail?.streamId,
+          sessionId: event.detail?.sessionId,
+        },
+      })
+    );
+  });
 
   window.addEventListener("chatterino-companion-claim-request", () => {
     void window.__chatterinoCompanionGql.claimChannelPoints();

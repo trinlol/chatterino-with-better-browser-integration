@@ -700,3 +700,191 @@ test('real overlay and background do not feed detach acknowledgements back forev
   windowEvents.resize(); await drain();
   assert.equal(h.nativeMessages.filter(m => m.action === 'select').length, 2);
 });
+
+test("duplicate native acknowledgement for completed request is ignored cleanly without errors", async () => {
+  const harness = createBackgroundHarness();
+  const context = {
+    chrome: harness.chrome,
+    console,
+    Date,
+    Object,
+    Promise,
+    Set,
+    clearTimeout: harness.clearTimeout,
+    setTimeout: harness.setTimeout,
+    ChatterinoProtocol: {
+      CURRENT_VERSION: 2,
+      normalizeOutbound: (message) => message,
+    },
+    crypto: globalThis.crypto,
+    browser: undefined,
+  };
+  vm.runInNewContext(
+    await readFile(new URL("../extension-lifecycle.js", import.meta.url), "utf8"),
+    context
+  );
+  vm.runInNewContext(
+    await readFile(new URL("../background.js", import.meta.url), "utf8"),
+    context
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  harness.listeners["native.onMessage"]({
+    type: "status",
+    status: "native-host-ready",
+    protocolVersion: 2,
+    capabilities: ["sessions"],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  harness.nativeMessages.length = 0;
+  harness.listeners["runtime.onMessage"](
+    {
+      type: "chat-resized",
+      rect: { x: 100, y: 50, width: 340, height: 720 },
+      dpr: 1,
+    },
+    {
+      tab: {
+        id: 7,
+        windowId: 42,
+        url: "https://www.twitch.tv/example",
+        highlighted: true,
+        active: true,
+      },
+    },
+    () => {}
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const select = harness.nativeMessages.find((m) => m.action === "select");
+  assert.ok(select);
+
+  // Send first acknowledgement
+  harness.listeners["native.onMessage"]({
+    type: "status",
+    status: "chat-attached",
+    protocolVersion: 2,
+    requestId: select.requestId,
+    attachRequestId: select.requestId,
+    sessionId: select.sessionId,
+    browserWindowId: select.browserWindowId,
+    tabId: select.tabId,
+    generation: select.generation,
+    winId: select.winId,
+    leaseExpiresAt: select.leaseExpiresAt,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const attachedCount = harness.sentMessages.filter(
+    ([, message]) =>
+      message.action === "nativeAttachState" && message.state === "attached"
+  ).length;
+  assert.equal(attachedCount, 1);
+
+  // Send duplicate acknowledgement for the exact same request
+  harness.listeners["native.onMessage"]({
+    type: "status",
+    status: "chat-attached",
+    protocolVersion: 2,
+    requestId: select.requestId,
+    attachRequestId: select.requestId,
+    sessionId: select.sessionId,
+    browserWindowId: select.browserWindowId,
+    tabId: select.tabId,
+    generation: select.generation,
+    winId: select.winId,
+    leaseExpiresAt: select.leaseExpiresAt,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // Should not send duplicate attached events or crash
+  assert.equal(
+    harness.sentMessages.filter(
+      ([, message]) =>
+        message.action === "nativeAttachState" && message.state === "attached"
+    ).length,
+    1
+  );
+});
+
+test("native acknowledgement correlates by requestId when window key differs", async () => {
+  const harness = createBackgroundHarness();
+  const context = {
+    chrome: harness.chrome,
+    console,
+    Date,
+    Object,
+    Promise,
+    Set,
+    clearTimeout: harness.clearTimeout,
+    setTimeout: harness.setTimeout,
+    ChatterinoProtocol: {
+      CURRENT_VERSION: 2,
+      normalizeOutbound: (message) => message,
+    },
+    crypto: globalThis.crypto,
+    browser: undefined,
+  };
+  vm.runInNewContext(
+    await readFile(new URL("../extension-lifecycle.js", import.meta.url), "utf8"),
+    context
+  );
+  vm.runInNewContext(
+    await readFile(new URL("../background.js", import.meta.url), "utf8"),
+    context
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  harness.listeners["native.onMessage"]({
+    type: "status",
+    status: "native-host-ready",
+    protocolVersion: 2,
+    capabilities: ["sessions"],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  harness.nativeMessages.length = 0;
+  harness.listeners["runtime.onMessage"](
+    {
+      type: "chat-resized",
+      rect: { x: 100, y: 50, width: 340, height: 720 },
+      dpr: 1,
+    },
+    {
+      tab: {
+        id: 7,
+        windowId: 42,
+        url: "https://www.twitch.tv/example",
+        highlighted: true,
+        active: true,
+      },
+    },
+    () => {}
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const select = harness.nativeMessages.find((m) => m.action === "select");
+  assert.ok(select);
+
+  // Send acknowledgement with missing winId/browserWindowId, but matching correlation requestId
+  harness.listeners["native.onMessage"]({
+    type: "status",
+    status: "chat-attached",
+    protocolVersion: 2,
+    requestId: select.requestId,
+    attachRequestId: select.requestId,
+    sessionId: select.sessionId,
+    tabId: select.tabId,
+    generation: select.generation,
+    leaseExpiresAt: select.leaseExpiresAt,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const attachedState = harness.sentMessages.find(
+    ([, message]) =>
+      message.action === "nativeAttachState" && message.state === "attached"
+  )?.[1];
+  assert.ok(attachedState);
+  assert.equal(attachedState.sessionId, select.sessionId);
+});

@@ -2,6 +2,17 @@
 
 ## Chatterino Better Browser
 
+### v2.7.2 (2026-10-30)
+
+#### Fixed
+
+- **Browser Video Player Settings Menu**: Fixed Twitch video player settings menu ([data-a-target="player-settings-menu"]) failing to open or being shifted off-screen when the extension misclassified the menu's "Always Show Events" tooltip as a native prediction prompt.
+- **Emote Menu Crash**: Fixed crash when opening the Chatterino Emote Menu popup caused by eager auto-invocation of the favourite emotes/emojis settings listeners before channel initialization.
+
+#### Added
+
+- **Watch Streaks Automation**: Added automated background Twitch watch streak progress telemetry for configured channels in Settings -> General with customizable channel list.
+- **SingleLineTextElement Emote Support**: Added emote layout rendering in single-line message views (MarqueeWidget, SplitHeader).
 ### v2.7.1 (2026-10-03)
 
 #### Fixed

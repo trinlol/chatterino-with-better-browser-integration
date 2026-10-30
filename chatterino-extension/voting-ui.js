@@ -192,21 +192,115 @@
   const BET_PROMPT_PATTERN =
     /how many .{0,24}points|points do you want|points to (?:use|bet|spend)|use .{0,24}points/i;
 
+  // Our own marker class contains "prediction", so exclude it or a surface
+  // that was once adopted would keep matching itself forever. Tooltips are
+  // excluded because unrelated Twitch UI (e.g. the player settings menu's
+  // "Always Show Events" hint) mentions predictions in its aria-label.
+  const PREDICTION_DIALOG_SELECTORS = [
+    '[data-test-selector*="prediction" i]',
+    '[data-a-target*="prediction" i]',
+    '[class*="prediction" i]:not(.chatterino-native-prediction-dialog)',
+    '[aria-label*="prediction" i]:not([role="tooltip"])',
+    '[aria-label*="predict" i]:not([role="tooltip"])',
+  ].join(",");
+
+  // Twitch video player menus (settings, quality, ...) are portaled into the
+  // same dialog layer as prediction prompts. They must never be adopted.
+  const VIDEO_PLAYER_UI_SELECTOR =
+    '[data-a-target^="player-"], [data-a-target="video-player"], .video-player';
+
+  function isVideoPlayerUi(surface) {
+    if (!surface) {
+      return false;
+    }
+    return Boolean(
+      (typeof surface.matches === "function" &&
+        surface.matches(VIDEO_PLAYER_UI_SELECTOR)) ||
+        surface.closest?.(VIDEO_PLAYER_UI_SELECTOR) ||
+        surface.querySelector?.(
+          '[data-a-target="player-settings-menu"], [data-a-target^="player-settings-"]'
+        )
+    );
+  }
+
+  function isOverlayOrBackdrop(surface) {
+    if (!surface) {
+      return false;
+    }
+    const className = String(
+      surface.className?.baseVal ?? surface.className ?? ""
+    );
+    if (
+      /\b(?:ReactModal__Overlay|tw-backdrop|modal-backdrop|overlay|backdrop|scrim|mask)\b/i.test(
+        className
+      ) ||
+      className.includes("Overlay") ||
+      className.includes("backdrop")
+    ) {
+      return true;
+    }
+    if (typeof surface.getAttribute === "function") {
+      const target = String(surface.getAttribute("data-a-target") || "");
+      if (target.includes("backdrop") || target.includes("overlay")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function isPredictionBetPrompt(surface) {
+    if (isOverlayOrBackdrop(surface)) {
+      return false;
+    }
     const text = String(surface?.textContent || "")
       .replace(/\s+/g, " ")
       .trim();
     return BET_PROMPT_PATTERN.test(text);
   }
 
+  function isPredictionDialog(surface) {
+    if (!surface || isOverlayOrBackdrop(surface) || isVideoPlayerUi(surface)) {
+      return false;
+    }
+    if (isPredictionBetPrompt(surface)) {
+      return true;
+    }
+    const isDialogLike = Boolean(
+      (typeof surface.matches === "function" &&
+        surface.matches(
+          '[role="dialog"], [role="alertdialog"], [role="menu"], .ReactModal__Content, [class*="popover" i], [class*="balloon" i]'
+        )) ||
+        surface.closest?.(
+          '[role="dialog"], [role="alertdialog"], [role="menu"], .ReactModal__Content, [class*="popover" i], [class*="balloon" i]'
+        )
+    );
+    if (!isDialogLike) {
+      return false;
+    }
+
+    const hasPredictionMarker = Boolean(
+      (typeof surface.matches === "function" &&
+        surface.matches(PREDICTION_DIALOG_SELECTORS)) ||
+        surface.querySelector?.(PREDICTION_DIALOG_SELECTORS)
+    );
+
+    const text = String(surface.textContent || "").toLowerCase();
+    const hasPredictionText =
+      text.includes("prediction") ||
+      text.includes("predict");
+
+    return hasPredictionMarker || hasPredictionText;
+  }
+
   function isGenericVotingSurface(surface, kind) {
     if (
       !surface ||
       surface.closest?.(
-        '.onsite-notifications, [data-test-selector="onsite-notifications"], [data-test-selector="onsite-notifications-toast-manager"]'
+        '.onsite-notifications, [data-test-selector="onsite-notifications"], [data-test-selector="onsite-notifications-toast-manager"], .chatterino-native-reward-dialog, .chatterino-native-prediction-dialog, [class*="reward-center"], [class*="rewards-popover"]'
       ) ||
       global.ChatterinoNotificationUi?.isNotificationsSurface(surface) ||
-      isPredictionBetPrompt(surface)
+      isPredictionBetPrompt(surface) ||
+      isPredictionDialog(surface)
     ) {
       return false;
     }
@@ -265,7 +359,10 @@
     getElementPath,
     isGenericVotingSurface,
     isFullscreenActive,
+    isOverlayOrBackdrop,
     isPredictionBetPrompt,
+    isPredictionDialog,
+    isVideoPlayerUi,
     resolveActivationTarget,
     resolveElementPath,
   };

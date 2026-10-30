@@ -161,6 +161,57 @@ bool Settings::toggleMutedChannel(const QString &channelName)
     }
 }
 
+bool Settings::isWatchStreakChannel(const QString &channelName)
+{
+    auto items = this->watchStreakChannels.readOnly();
+
+    for (const auto &channel : *items)
+    {
+        if (channelName.compare(channel, Qt::CaseInsensitive) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Settings::addWatchStreakChannel(const QString &channelName)
+{
+    if (!this->isWatchStreakChannel(channelName))
+    {
+        this->watchStreakChannels.append(channelName);
+    }
+}
+
+void Settings::removeWatchStreakChannel(const QString &channelName)
+{
+    for (std::vector<int>::size_type i = 0;
+         i != this->watchStreakChannels.raw().size(); i++)
+    {
+        if (this->watchStreakChannels.raw()[i].compare(channelName,
+                                                       Qt::CaseInsensitive) ==
+            0)
+        {
+            this->watchStreakChannels.removeAt(i);
+            i--;
+        }
+    }
+}
+
+bool Settings::toggleWatchStreakChannel(const QString &channelName)
+{
+    if (this->isWatchStreakChannel(channelName))
+    {
+        this->removeWatchStreakChannel(channelName);
+        return false;
+    }
+    else
+    {
+        this->addWatchStreakChannel(channelName);
+        return true;
+    }
+}
+
 Settings *Settings::instance_ = nullptr;
 
 Settings::Settings(const Modes &modes, const Args &args,
@@ -251,6 +302,8 @@ Settings::Settings(const Modes &modes, const Args &args,
                            this->moderationActions);
     initializeSignalVector(this->signalHolder, this->loggedChannelsSetting,
                            this->loggedChannels);
+    initializeSignalVector(this->signalHolder, this->watchStreakChannelsSetting,
+                           this->watchStreakChannels);
 
     instance_ = this;
 

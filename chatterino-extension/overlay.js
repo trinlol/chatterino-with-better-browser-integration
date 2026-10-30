@@ -192,6 +192,31 @@
 
     let rect = element.getBoundingClientRect();
 
+    if (
+      document.documentElement?.classList?.contains?.(
+        "chatterino-reward-pending"
+      )
+    ) {
+      const inputArea =
+        document.querySelector?.('[data-a-target="chat-input"]') ||
+        document.querySelector?.('[class*="chat-input"]');
+      if (inputArea?.getBoundingClientRect) {
+        const inputRect = inputArea.getBoundingClientRect();
+        if (
+          inputRect.height > 0 &&
+          inputRect.top > rect.top &&
+          inputRect.top < rect.bottom
+        ) {
+          rect = {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: Math.max(100, Math.round(inputRect.top - rect.top)),
+          };
+        }
+      }
+    }
+
     /* if (
       lastRect.left == rect.left &&
       lastRect.right == rect.right &&
@@ -221,14 +246,14 @@
   }
 
   function sameAttachment(message) {
-    if (attachment.phase === "idle") return false;
+    if (attachment.phase === "idle" && !message.sessionId) return false;
     if (message.sessionId && attachment.sessionId) {
       if (message.sessionId !== attachment.sessionId) return false;
     }
     if (
       message.generation !== undefined &&
       attachment.generation !== null &&
-      Number(message.generation) !== Number(attachment.generation)
+      Number(message.generation) < Number(attachment.generation)
     ) {
       return false;
     }
@@ -253,7 +278,16 @@
   function commitHide(message) {
     console.log('[OVERLAY-DEBUG] commitHide called with message:', message);
     if (!sameAttachment(message)) {
-      console.error('[OVERLAY-DEBUG] commitHide ABORTED - sameAttachment returned false');
+      console.warn(
+        '[OVERLAY-DEBUG] commitHide ABORTED - sameAttachment returned false',
+        JSON.stringify({
+          phase: attachment.phase,
+          sessionId: attachment.sessionId,
+          generation: attachment.generation,
+          msgSessionId: message.sessionId,
+          msgGeneration: message.generation
+        })
+      );
       return;
     }
     console.log('[OVERLAY-DEBUG] sameAttachment check passed, proceeding with commit');
@@ -262,6 +296,12 @@
       attachment.leaseTimer = null;
     }
     attachment.phase = "attached";
+    if (message.sessionId) {
+      attachment.sessionId = message.sessionId;
+    }
+    if (message.generation !== undefined) {
+      attachment.generation = message.generation;
+    }
     console.log('[OVERLAY-DEBUG] Phase set to "attached", dispatching chatterino-companion-active event');
     document.documentElement.classList.add("chatterino-companion-active");
     document.documentElement.setAttribute(
@@ -273,15 +313,24 @@
         detail: { reason: "native-ack", sessionId: message.sessionId },
       })
     );
-    console.log('[OVERLAY-DEBUG] Event dispatched successfully');
     const leaseMs = globalThis.ChatterinoLifecycle.leaseDelay(
       message.leaseExpiresAt
     );
     if (leaseMs !== null) {
       attachment.leaseTimer = setTimeout(() => {
-        revealChat("lease-expired");
-        chrome.runtime.sendMessage({ type: "detach" });
-      }, leaseMs);
+        if (attachment.phase === "attached") {
+          queryChatRect();
+          attachment.leaseTimer = setTimeout(() => {
+            if (attachment.phase === "attached") {
+              revealChat("lease-expired");
+              chrome.runtime.sendMessage({ type: "detach" });
+            }
+          }, 15000);
+        } else {
+          revealChat("lease-expired");
+          chrome.runtime.sendMessage({ type: "detach" });
+        }
+      }, Math.max(1000, leaseMs - 15000));
     }
   }
   function prepareAttachment(message = {}) {
@@ -471,14 +520,28 @@
     true
   );
 
+  let notificationsSyncTimer = null;
   const notificationsObserver = new MutationObserver(() => {
-    syncNotificationsOverlay();
+    if (notificationsSyncTimer !== null) return;
+    notificationsSyncTimer = setTimeout(() => {
+      notificationsSyncTimer = null;
+      syncNotificationsOverlay();
+    }, 100);
   });
   notificationsObserver.observe(document.documentElement, {
     attributes: true,
     childList: true,
     subtree: true,
     attributeFilter: ["aria-expanded", "aria-label"],
+  });
+
+  window.addEventListener("chatterino-companion-reward-pending", () => {
+    queryChatRect();
+    setTimeout(queryChatRect, 100);
+  });
+  window.addEventListener("chatterino-companion-reward-cancelled", () => {
+    queryChatRect();
+    setTimeout(queryChatRect, 100);
   });
 
   // The background script asks for a fresh measurement whenever this Twitch
@@ -508,12 +571,19 @@
         const sameResult = sameAttachment(message);
         console.log('[OVERLAY-DEBUG] sameAttachment returned:', sameResult);
         if (!sameResult) {
-          console.error('[OVERLAY-DEBUG] commitHide will be SKIPPED - sameAttachment check failed!');
-          console.error('[OVERLAY-DEBUG] Failure reason:', {
-            phase: attachment.phase,
-            sessionIdMatch: message.sessionId === attachment.sessionId,
-            generationMatch: message.generation === attachment.generation
-          });
+          console.warn('[OVERLAY-DEBUG] commitHide will be SKIPPED - sameAttachment check failed!');
+          console.warn(
+            '[OVERLAY-DEBUG] Failure reason: ' +
+              JSON.stringify({
+                phase: attachment.phase,
+                sessionIdMatch: message.sessionId === attachment.sessionId,
+                generationMatch: message.generation === attachment.generation,
+                msgSessionId: message.sessionId,
+                attSessionId: attachment.sessionId,
+                msgGeneration: message.generation,
+                attGeneration: attachment.generation,
+              })
+          );
         }
         commitHide(message);
       } else if (

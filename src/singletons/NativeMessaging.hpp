@@ -122,6 +122,10 @@ public:
     static ipc::DeliveryStatus sendNativeChat(const QString &channel,
                                               const QString &message,
                                               const QString &requestId);
+    static ipc::DeliveryStatus sendMinuteWatchedViaBrowser(
+        const QString &channel, const QString &channelId,
+        const QString &streamId, const QString &userId,
+        const QString &requestId);
 
 private:
     class ReceiverThread : public QThread
@@ -143,6 +147,7 @@ private:
         void handleLeaseRenew(const QJsonObject &root);
         void handleReconcile(const QJsonObject &root);
         void handleNativeChatResult(const QJsonObject &root);
+        void handleMinuteWatchedResult(const QJsonObject &root);
 
         void expireSessions();
 

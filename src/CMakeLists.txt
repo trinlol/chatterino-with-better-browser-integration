@@ -336,6 +336,8 @@ set(SOURCE_FILES
 
         controllers/twitch/LiveController.cpp
         controllers/twitch/LiveController.hpp
+        controllers/twitch/WatchStreakController.cpp
+        controllers/twitch/WatchStreakController.hpp
 
         controllers/userdata/UserDataController.cpp
         controllers/userdata/UserDataController.hpp

@@ -10,6 +10,7 @@
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/Command.hpp"
 #include "controllers/commands/CommandController.hpp"
+#include "controllers/emotes/EmoteController.hpp"
 #include "controllers/filters/FilterSet.hpp"
 #include "debug/Benchmark.hpp"
 #include "messages/Emote.hpp"
@@ -22,6 +23,7 @@
 #include "messages/MessageElement.hpp"
 #include "messages/MessageThread.hpp"
 #include "providers/colors/ColorProvider.hpp"
+#include "providers/emoji/Emojis.hpp"
 #include "providers/links/LinkInfo.hpp"
 #include "providers/links/LinkResolver.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
@@ -137,6 +139,30 @@ void addEmoteContextMenuItems(QMenu *menu, const Emote &emote, QStringView kind)
                             [url = emote.homePage] {
                                 QDesktopServices::openUrl(QUrl(url.string));
                             });
+    }
+
+    if (kind == u"emote")
+    {
+        auto emoteNames = getSettings()->favouriteEmotes.getValue();
+        bool isFav = emoteNames.contains(emote.name.string);
+        auto *favAction = menu->addAction(isFav ? "Remove from &favourites"
+                                                : "Add to &favourites");
+        QObject::connect(favAction, &QAction::triggered,
+                         [name = emote.name.string]() {
+                             auto names =
+                                 getSettings()->favouriteEmotes.getValue();
+                             if (names.contains(name))
+                             {
+                                 names.removeIf([&name](const auto &n) {
+                                     return n == name;
+                                 });
+                             }
+                             else
+                             {
+                                 names.push_back(name);
+                             }
+                             getSettings()->favouriteEmotes = names;
+                         });
     }
 }
 
@@ -2474,6 +2500,57 @@ void ChannelView::handleMouseClick(QMouseEvent *event,
             }
 
             this->elementClicked.invoke(hoveredElement, event->modifiers());
+
+            if (!this->property("chatterinoEmotePopupView").toBool() &&
+                event->modifiers().testFlag(
+                    Qt::KeyboardModifier::ControlModifier))
+            {
+                if (auto emote = getClickedEmote(hoveredElement))
+                {
+                    bool isEmoji =
+                        hoveredElement->getCreator().getFlags().hasAny(
+                            MessageElementFlag::EmojiAll);
+                    if (isEmoji)
+                    {
+                        QString shortCode;
+                        for (const auto &emoji :
+                             getApp()->getEmotes()->getEmojis()->getEmojis())
+                        {
+                            if (emoji->value == (*emote)->name.string ||
+                                (emoji->emote &&
+                                 emoji->emote->name == (*emote)->name))
+                            {
+                                if (!emoji->shortCodes.empty())
+                                {
+                                    shortCode = emoji->shortCodes[0];
+                                }
+                                break;
+                            }
+                        }
+                        if (!shortCode.isEmpty())
+                        {
+                            auto emojiNames =
+                                getSettings()->favouriteEmojis.getValue();
+                            if (!emojiNames.contains(shortCode))
+                            {
+                                emojiNames.push_back(shortCode);
+                                getSettings()->favouriteEmojis = emojiNames;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        auto emoteNames =
+                            getSettings()->favouriteEmotes.getValue();
+                        if (!emoteNames.contains((*emote)->name.string))
+                        {
+                            emoteNames.push_back((*emote)->name.string);
+                            getSettings()->favouriteEmotes = emoteNames;
+                        }
+                    }
+                    return;
+                }
+            }
 
             if (this->context_ == Context::None && this->split_ != nullptr)
             {

@@ -2674,11 +2674,41 @@ void MessageBuilder::parseThread(const QString &messageContent,
         {
             color = threadRoot->usernameColor;
         }
+
+        std::unordered_map<QString, EmotePtr> emotes;
+        for (const auto &element : threadRoot->elements)
+        {
+            if (const auto *emoteElement =
+                    dynamic_cast<const EmoteElement *>(element.get()))
+            {
+                auto emote = emoteElement->getEmote();
+                if (emote)
+                {
+                    emotes.emplace(emote->name.string, emote);
+                }
+            }
+            else if (const auto *layered =
+                         dynamic_cast<const LayeredEmoteElement *>(
+                             element.get()))
+            {
+                for (const auto &item : layered->getUniqueEmotes())
+                {
+                    if (item.ptr)
+                    {
+                        emotes.emplace(item.ptr->name.string, item.ptr);
+                    }
+                }
+            }
+        }
+
+        auto *tc = const_cast<TwitchChannel *>(
+            dynamic_cast<const TwitchChannel *>(channel));
+
         this->emplace<SingleLineTextElement>(
                 threadRoot->messageText,
                 MessageElementFlags({MessageElementFlag::RepliedMessage,
                                      MessageElementFlag::Text}),
-                color, FontStyle::ChatMediumSmall)
+                color, FontStyle::ChatMediumSmall, tc, std::move(emotes))
             ->setLink({Link::ViewThread, thread->rootId()});
     }
     else if (tags.has("reply-parent-msg-id"))
@@ -2716,11 +2746,14 @@ void MessageBuilder::parseThread(const QString &messageContent,
                     ->setLink({Link::UserInfo, name});
             }
 
+            auto *tc = const_cast<TwitchChannel *>(
+                dynamic_cast<const TwitchChannel *>(channel));
+
             this->emplace<SingleLineTextElement>(
                 body,
                 MessageElementFlags({MessageElementFlag::RepliedMessage,
                                      MessageElementFlag::Text}),
-                this->textColor_, FontStyle::ChatMediumSmall);
+                this->textColor_, FontStyle::ChatMediumSmall, tc);
         }
     }
 }

@@ -13,6 +13,7 @@
 #include "util/Helpers.hpp"
 #include "util/RapidjsonHelpers.hpp"
 
+#include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -1715,6 +1716,121 @@ void TwitchGql::redeemChannelPointReward(
             failureCallback("Network Error: " +
                             QString::number(result.status().value_or(0)));
         })
+        .execute();
+}
+
+void TwitchGql::sendMinuteWatched(
+    const QString &channelId, const QString &channelLogin,
+    const QString &streamId, const QString &userId,
+    const QString &oauthToken,
+    std::function<void(int statusCode)> successCallback,
+    std::function<void(const QString &)> failureCallback)
+{
+    if (channelId.isEmpty() || streamId.isEmpty() || userId.isEmpty())
+    {
+        if (failureCallback)
+        {
+            failureCallback("Missing required parameters for minute-watched");
+        }
+        return;
+    }
+
+    QJsonObject properties;
+    properties.insert("channel_id", channelId);
+    properties.insert("broadcast_id", streamId);
+    properties.insert("channel", channelLogin.toLower());
+    properties.insert("user_id", userId);
+    properties.insert("live", true);
+    properties.insert("is_live", true);
+    properties.insert("player", "site");
+    properties.insert("client_time",
+                      QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+    properties.insert("logged_in", true);
+    properties.insert("minutes_logged", 1);
+    properties.insert("hidden", false);
+    properties.insert("muted", false);
+
+    QJsonObject event;
+    event.insert("event", "minute-watched");
+    event.insert("properties", properties);
+
+    QJsonArray events;
+    events.append(event);
+
+    QByteArray jsonData = QJsonDocument(events).toJson(QJsonDocument::Compact);
+    QString base64Data = QString::fromLatin1(jsonData.toBase64());
+
+    QJsonObject input;
+    input.insert("data", base64Data);
+
+    QJsonObject variables;
+    variables.insert("input", input);
+
+    constexpr auto query = R"(
+        mutation SendEvents($input: SendSpadeEventsInput!) {
+            sendSpadeEvents(input: $input) {
+                statusCode
+            }
+        }
+    )";
+
+    // Send via Twitch GQL mutation
+    makeInlineGqlRequest(query, variables, oauthToken)
+        .onSuccess([successCallback, failureCallback](const NetworkResult &result) {
+            auto doc = result.parseRapidJson();
+            if (doc.HasParseError())
+            {
+                if (failureCallback)
+                {
+                    failureCallback("Failed to parse GQL response");
+                }
+                return;
+            }
+
+            if (const auto error = gqlFirstErrorMessage(doc); !error.isEmpty())
+            {
+                if (failureCallback)
+                {
+                    failureCallback("Twitch API Error: " + error);
+                }
+                return;
+            }
+
+            int statusCode = 200;
+            const auto *data = gqlDataForOperation(doc, "SendEvents");
+            if (data && data->HasMember("sendSpadeEvents") &&
+                (*data)["sendSpadeEvents"].IsObject())
+            {
+                const auto &spadeResp = (*data)["sendSpadeEvents"];
+                if (spadeResp.HasMember("statusCode") &&
+                    spadeResp["statusCode"].IsInt())
+                {
+                    statusCode = spadeResp["statusCode"].GetInt();
+                }
+            }
+
+            if (successCallback)
+            {
+                successCallback(statusCode);
+            }
+        })
+        .onError([failureCallback](const NetworkResult &result) {
+            if (failureCallback)
+            {
+                failureCallback("Network Error: " + result.formatError());
+            }
+        })
+        .execute();
+
+    // Also dispatch to Spade telemetry endpoint for maximum compatibility
+    QJsonObject spadePayload;
+    spadePayload.insert("data", base64Data);
+    NetworkRequest("https://spade.twitch.tv/track", NetworkRequestType::Post)
+        .timeout(TWITCH_GQL_TIMEOUT_MS)
+        .header("Client-Id", "kimne78kx3ncx6brgo4mv6wki5h1ko")
+        .header("Content-Type", "application/json")
+        .header("Authorization", "OAuth " + oauthToken)
+        .json(spadePayload)
         .execute();
 }
 

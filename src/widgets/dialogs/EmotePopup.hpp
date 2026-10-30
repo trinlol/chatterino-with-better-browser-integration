@@ -65,6 +65,7 @@ private:
     bool eventFilter(QObject *object, QEvent *event) override;
 
     void reloadEmotes();
+    void reloadFavourites();
 
     void addFavouriteEmoji(const QString &shortCode);
     void addFavouriteEmote(const EmoteName &name);

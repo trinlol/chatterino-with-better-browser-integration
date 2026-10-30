@@ -38,6 +38,7 @@
 #include "controllers/sound/MiniaudioBackend.hpp"
 #include "controllers/sound/NullBackend.hpp"
 #include "controllers/twitch/LiveController.hpp"
+#include "controllers/twitch/WatchStreakController.hpp"
 #include "controllers/userdata/UserDataController.hpp"
 #include "debug/AssertInGuiThread.hpp"
 #include "messages/Message.hpp"
@@ -199,6 +200,7 @@ Application::Application(Settings &_settings, const Paths &paths,
     , streamElements(std::make_unique<StreamElementsManager>())
     , kick(std::make_unique<KickManager>())
     , combined(std::make_unique<CombinedManager>())
+    , watchStreakController(std::make_unique<WatchStreakController>())
 #ifdef CHATTERINO_HAVE_PLUGINS
     , plugins(new PluginController(paths))
 #endif
@@ -300,6 +302,7 @@ void Application::initialize(Settings &settings, const Modes &modes,
                                 this->seventvEventAPI.get());
 
     this->streamerMode->start();
+    this->watchStreakController->initialize();
 
     this->initialized = true;
 }
@@ -632,6 +635,14 @@ CombinedManager *Application::getCombined()
     assert(this->combined);
 
     return this->combined.get();
+}
+
+WatchStreakController *Application::getWatchStreakController()
+{
+    assertInGuiThread();
+    assert(this->watchStreakController);
+
+    return this->watchStreakController.get();
 }
 
 void Application::aboutToQuit()

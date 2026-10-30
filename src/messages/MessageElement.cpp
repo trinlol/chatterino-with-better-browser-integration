@@ -12,9 +12,15 @@
 #include "messages/Emote.hpp"
 #include "messages/Image.hpp"
 #include "messages/layouts/MessageLayoutContainer.hpp"
+#include "controllers/accounts/AccountController.hpp"
 #include "messages/layouts/MessageLayoutContext.hpp"
 #include "messages/layouts/MessageLayoutElement.hpp"
+#include "providers/bttv/BttvEmotes.hpp"
 #include "providers/emoji/Emojis.hpp"
+#include "providers/ffz/FfzEmotes.hpp"
+#include "providers/seventv/SeventvEmotes.hpp"
+#include "providers/twitch/TwitchAccount.hpp"
+#include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchEmotes.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
@@ -37,6 +43,79 @@ namespace chatterino {
 using namespace literals;
 
 namespace {
+
+EmotePtr findSingleLineEmote(
+    const QString &word, TwitchChannel *twitchChannel,
+    const std::unordered_map<QString, EmotePtr> &emotes)
+{
+    if (!emotes.empty())
+    {
+        auto it = emotes.find(word);
+        if (it != emotes.end() && it->second)
+        {
+            return it->second;
+        }
+    }
+
+    EmoteNameView name{word};
+
+    if (twitchChannel)
+    {
+        if (auto e = twitchChannel->twitchEmote(name))
+        {
+            return *e;
+        }
+        if (auto e = twitchChannel->ffzEmote(name))
+        {
+            return *e;
+        }
+        if (auto e = twitchChannel->bttvEmote(name))
+        {
+            return *e;
+        }
+        if (auto e = twitchChannel->seventvEmote(name))
+        {
+            return *e;
+        }
+    }
+
+    if (auto *app = getApp())
+    {
+        if (auto *ffz = app->getFfzEmotes())
+        {
+            if (auto e = ffz->emote(name))
+            {
+                return *e;
+            }
+        }
+        if (auto *bttv = app->getBttvEmotes())
+        {
+            if (auto e = bttv->emote(name))
+            {
+                return *e;
+            }
+        }
+        if (auto *seventv = app->getSeventvEmotes())
+        {
+            if (auto e = seventv->globalEmote(name))
+            {
+                return *e;
+            }
+        }
+        if (auto *accs = app->getAccounts())
+        {
+            if (auto current = accs->twitch.getCurrent())
+            {
+                if (auto e = current->twitchEmote(name))
+                {
+                    return *e;
+                }
+            }
+        }
+    }
+
+    return nullptr;
+}
 
 // Computes the bounding box for the given vector of images
 QSizeF getBoundingBoxSize(const std::vector<ImagePtr> &images)
@@ -1112,23 +1191,105 @@ std::unique_ptr<MessageElement> TextElement::clone() const
     return elem;
 }
 
-SingleLineTextElement::SingleLineTextElement(const QString &text,
-                                             MessageElementFlags flags,
-                                             const MessageColor &color,
-                                             FontStyle style)
+SingleLineTextElement::SingleLineTextElement(
+    const QString &text, MessageElementFlags flags, const MessageColor &color,
+    FontStyle style, TwitchChannel *twitchChannel,
+    std::unordered_map<QString, EmotePtr> emotes)
     : MessageElement(flags)
     , color_(color)
     , style_(style)
     , words_(text.split(' '))
 {
+    auto *app = getApp();
+    bool isFirstWord = true;
+
+    for (const auto &word : this->words_)
+    {
+        bool wordLeadingSpace = !isFirstWord;
+        isFirstWord = false;
+
+        if (word.isEmpty())
+        {
+            this->pieces_.push_back(Piece{
+                .type = Piece::Type::Text,
+                .text = {},
+                .emote = nullptr,
+                .emoteElement = nullptr,
+                .spaceBefore = wordLeadingSpace,
+            });
+            continue;
+        }
+
+        if (auto emote = findSingleLineEmote(word, twitchChannel, emotes))
+        {
+            auto emoteEl = std::make_shared<EmoteElement>(
+                emote, MessageElementFlag::Emote, this->color_);
+            this->pieces_.push_back(Piece{
+                .type = Piece::Type::Emote,
+                .text = word,
+                .emote = emote,
+                .emoteElement = std::move(emoteEl),
+                .spaceBefore = wordLeadingSpace,
+            });
+            continue;
+        }
+
+        if (app && app->getEmotes() && app->getEmotes()->getEmojis())
+        {
+            bool firstPart = true;
+            for (const auto &parsedWord :
+                 app->getEmotes()->getEmojis()->parse(word))
+            {
+                bool spaceBefore = firstPart ? wordLeadingSpace : false;
+                firstPart = false;
+
+                if (std::holds_alternative<QStringView>(parsedWord))
+                {
+                    this->pieces_.push_back(Piece{
+                        .type = Piece::Type::Text,
+                        .text = std::get<QStringView>(parsedWord).toString(),
+                        .emote = nullptr,
+                        .emoteElement = nullptr,
+                        .spaceBefore = spaceBefore,
+                    });
+                }
+                else if (std::holds_alternative<EmotePtr>(parsedWord))
+                {
+                    auto emoji = std::get<EmotePtr>(parsedWord);
+                    auto emoteEl = std::make_shared<EmoteElement>(
+                        emoji, MessageElementFlag::EmojiAll, this->color_);
+                    this->pieces_.push_back(Piece{
+                        .type = Piece::Type::Emote,
+                        .text = {},
+                        .emote = emoji,
+                        .emoteElement = std::move(emoteEl),
+                        .spaceBefore = spaceBefore,
+                    });
+                }
+            }
+        }
+        else
+        {
+            this->pieces_.push_back(Piece{
+                .type = Piece::Type::Text,
+                .text = word,
+                .emote = nullptr,
+                .emoteElement = nullptr,
+                .spaceBefore = wordLeadingSpace,
+            });
+        }
+    }
 }
+
 SingleLineTextElement::SingleLineTextElement(
-    SingleLineTextElement::CloneConstructorTag /*hack*/, QStringList words,
-    MessageElementFlags flags, const MessageColor &color, FontStyle style)
+    SingleLineTextElement::CloneConstructorTag /*hack*/,
+    std::vector<Piece> pieces, QStringList words, MessageElementFlags flags,
+    const MessageColor &color, FontStyle style)
     : MessageElement(flags)
     , color_(color)
     , style_(style)
     , words_(std::move(words))
+    , pieces_(std::move(pieces))
 {
 }
 
@@ -1158,72 +1319,79 @@ void SingleLineTextElement::addToContainer(MessageLayoutContainer &container,
 
         static const auto ellipsis = QStringLiteral("…");
 
-        // String to continuously append words onto until we place it in the container
-        // once we encounter an emote or reach the end of the message text. */
         QString currentText;
+        bool done = false;
 
-        bool firstIteration = true;
-        for (const auto &word : this->words_)
+        for (const auto &piece : this->pieces_)
         {
-            if (firstIteration)
-            {
-                firstIteration = false;
-            }
-            else
+            if (piece.spaceBefore)
             {
                 currentText += ' ';
             }
 
-            bool done = false;
-            for (const auto &parsedWord :
-                 app->getEmotes()->getEmojis()->parse(word))
+            if (piece.type == Piece::Type::Text)
             {
-                if (std::holds_alternative<QStringView>(parsedWord))
+                currentText += piece.text;
+                QString prev = currentText;
+                currentText = metrics.elidedText(currentText, Qt::ElideRight,
+                                                 container.remainingWidth());
+                if (currentText != prev)
                 {
-                    currentText += std::get<QStringView>(parsedWord);
-                    QString prev =
-                        currentText;  // only increments the ref-count
-                    currentText =
-                        metrics.elidedText(currentText, Qt::ElideRight,
-                                           container.remainingWidth());
-                    if (currentText != prev)
+                    done = true;
+                    break;
+                }
+            }
+            else if (piece.type == Piece::Type::Emote && piece.emote)
+            {
+                auto image =
+                    piece.emote->images.getImageOrLoaded(container.getScale());
+                if (!image->isEmpty())
+                {
+                    auto emoteScale = getSettings()->emoteScale.getValue();
+                    auto emoteSize =
+                        image->size() * emoteScale * container.getScale();
+
+                    qreal targetHeight = metrics.height();
+                    if (emoteSize.height() > targetHeight)
                     {
+                        qreal ratio = targetHeight / emoteSize.height();
+                        emoteSize =
+                            QSizeF(emoteSize.width() * ratio, targetHeight);
+                    }
+                    else if (emoteSize.height() <= 0)
+                    {
+                        emoteSize = QSizeF(targetHeight, targetHeight);
+                    }
+
+                    auto currentWidth = metrics.horizontalAdvance(currentText);
+
+                    if (!container.fitsInLine(currentWidth + emoteSize.width()))
+                    {
+                        currentText += ellipsis;
+                        currentText = metrics.elidedText(
+                            currentText, Qt::ElideRight,
+                            container.remainingWidth());
                         done = true;
                         break;
                     }
-                }
-                else if (std::holds_alternative<EmotePtr>(parsedWord))
-                {
-                    auto emote = std::get<EmotePtr>(parsedWord);
-                    auto image =
-                        emote->images.getImageOrLoaded(container.getScale());
-                    if (!image->isEmpty())
+
+                    // Add currently pending text to container, then add the emote after.
+                    if (!currentText.isEmpty())
                     {
-                        auto emoteScale = getSettings()->emoteScale.getValue();
-
-                        auto currentWidth =
-                            metrics.horizontalAdvance(currentText);
-                        auto emoteSize =
-                            image->size() * emoteScale * container.getScale();
-
-                        if (!container.fitsInLine(currentWidth +
-                                                  emoteSize.width()))
-                        {
-                            currentText += ellipsis;
-                            done = true;
-                            break;
-                        }
-
-                        // Add currently pending text to container, then add the emote after.
                         container.addElementNoLineBreak(getTextLayoutElement(
                             currentText, currentWidth, false));
                         currentText.clear();
-
-                        container.addElementNoLineBreak(
-                            (new ImageLayoutElement(*this, image, emoteSize))
-                                ->setLink(this->getLink())
-                                ->setTrailingSpace(false));
                     }
+
+                    MessageElement &creator =
+                        piece.emoteElement
+                            ? static_cast<MessageElement &>(*piece.emoteElement)
+                            : static_cast<MessageElement &>(*this);
+
+                    container.addElementNoLineBreak(
+                        (new ImageLayoutElement(creator, image, emoteSize))
+                            ->setLink(this->getLink())
+                            ->setTrailingSpace(false));
                 }
             }
 
@@ -1265,8 +1433,8 @@ std::string_view SingleLineTextElement::type() const
 std::unique_ptr<MessageElement> SingleLineTextElement::clone() const
 {
     auto elem = std::make_unique<SingleLineTextElement>(
-        SingleLineTextElement::CloneConstructorTag{}, this->words_,
-        this->getFlags(), this->color_, this->style_);
+        SingleLineTextElement::CloneConstructorTag{}, this->pieces_,
+        this->words_, this->getFlags(), this->color_, this->style_);
 
     elem->cloneFrom(*this);
     return elem;

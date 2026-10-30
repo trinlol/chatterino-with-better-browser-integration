@@ -68,6 +68,7 @@ class SpellChecker;
 class StreamElementsManager;
 class KickManager;
 class CombinedManager;
+class WatchStreakController;
 
 class IApplication
 {
@@ -126,6 +127,10 @@ public:
     virtual StreamElementsManager *getStreamElements() = 0;
     virtual KickManager *getKick() = 0;
     virtual CombinedManager *getCombined() = 0;
+    virtual WatchStreakController *getWatchStreakController()
+    {
+        return nullptr;
+    }
 };
 
 class Application : public IApplication
@@ -200,6 +205,7 @@ private:
     std::unique_ptr<StreamElementsManager> streamElements;
     std::unique_ptr<KickManager> kick;
     std::unique_ptr<CombinedManager> combined;
+    std::unique_ptr<WatchStreakController> watchStreakController;
 #ifdef CHATTERINO_HAVE_PLUGINS
     std::unique_ptr<PluginController> plugins;
 #endif
@@ -257,6 +263,7 @@ public:
     StreamElementsManager *getStreamElements() override;
     KickManager *getKick() override;
     CombinedManager *getCombined() override;
+    WatchStreakController *getWatchStreakController() override;
 
 private:
     void initNm(const Modes &modes, const Paths &paths);

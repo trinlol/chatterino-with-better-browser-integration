@@ -13,6 +13,7 @@
 namespace chatterino {
 
 class MessageLayout;
+class TwitchChannel;
 
 /// MessageView is a fixed-width widget that displays a single message.
 /// For the message to be rendered, you must call setWidth.
@@ -28,7 +29,8 @@ public:
     MessageView &operator=(const MessageView &) = delete;
     MessageView &operator=(MessageView &&) = delete;
 
-    void setMessage(const MessagePtr &message);
+    void setMessage(const MessagePtr &message,
+                    TwitchChannel *twitchChannel = nullptr);
     void clearMessage();
 
     void setWidth(int width);

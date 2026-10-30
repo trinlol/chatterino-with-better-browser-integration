@@ -40,6 +40,10 @@ html.chatterino-companion-active
 
 /* While a message-based reward redemption is pending, keep the native chat
    input/footer interactive so programmatic sends can complete the redeem. */
+html.chatterino-companion-active.chatterino-reward-pending section.chat-room,
+html.chatterino-companion-active.chatterino-reward-pending .chat-shell,
+html.chatterino-companion-active.chatterino-reward-pending .chat-input,
+html.chatterino-companion-active.chatterino-reward-pending [class*="chat-input"],
 html.chatterino-companion-active.chatterino-reward-pending
   [data-a-target="chat-input"],
 html.chatterino-companion-active.chatterino-reward-pending
@@ -51,8 +55,6 @@ html.chatterino-companion-active.chatterino-reward-pending
   [data-test-selector="chat-input"]
   *,
 html.chatterino-companion-active.chatterino-reward-pending
-  [class*="chat-input"],
-html.chatterino-companion-active.chatterino-reward-pending
   [class*="chat-input"]
   *,
 html.chatterino-companion-active.chatterino-reward-pending
@@ -60,9 +62,14 @@ html.chatterino-companion-active.chatterino-reward-pending
 html.chatterino-companion-active.chatterino-reward-pending
   [data-a-target="chat-send-status"],
 html.chatterino-companion-active.chatterino-reward-pending
-  [data-a-target="chat-rewards-button"] {
+  [data-a-target="chat-rewards-button"],
+html.chatterino-companion-active.chatterino-reward-pending
+  [class*="reward-banner"],
+html.chatterino-companion-active.chatterino-reward-pending
+  [class*="reward-banner"] * {
   visibility: visible !important;
   pointer-events: auto !important;
+  opacity: 1 !important;
 }
 
 html.chatterino-companion-active.chatterino-reward-pending
@@ -84,10 +91,47 @@ html.chatterino-companion-active.chatterino-reward-pending
 }
 
 /* Chat nodes restored after a Chatterino Native Host wipe: kept mounted so
-   Twitch React (and the points button) stays alive, but never visible. */
-.chatterino-cc-restored {
+   Twitch React (and the points button) stays alive, but never visible unless
+   holding an active dialog or pending input. */
+.chatterino-cc-restored:not(
+    :has(
+      .chatterino-native-reward-dialog,
+      .chatterino-native-prediction-dialog,
+      .chatterino-native-chat-identity-dialog,
+      [class*="reward-center"],
+      [class*="rewards-popover"],
+      [class*="tw-balloon"]:has([class*="reward" i], [class*="prediction" i]),
+      [data-test-selector*="prediction-bet"],
+      [data-a-target*="prediction-bet"],
+      [class*="prediction-bet"]
+    )
+  ) {
   visibility: hidden !important;
   pointer-events: none !important;
+}
+
+.chatterino-cc-restored:has(
+    .chatterino-native-reward-dialog,
+    .chatterino-native-prediction-dialog,
+    .chatterino-native-chat-identity-dialog,
+    [class*="reward-center"],
+    [class*="rewards-popover"],
+    [class*="tw-balloon"]:has([class*="reward" i], [class*="prediction" i]),
+    [data-test-selector*="prediction-bet"],
+    [data-a-target*="prediction-bet"],
+    [class*="prediction-bet"]
+  ) {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+html.chatterino-companion-active.chatterino-reward-pending
+  .chatterino-cc-restored:has(
+    [data-a-target="chat-input"],
+    [class*="chat-input"]
+  ) {
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 /* Chatterino's placeholder overlays the restored chat instead of stacking
@@ -99,19 +143,18 @@ html.chatterino-companion-active.chatterino-reward-pending
   z-index: 60 !important;
 }
 
-/* Fixed portal — sits above Twitch UI and receives pointer events */
+/* Fixed portal — positioned above Twitch UI, clicks pass through container to video/controls below */
 #chatterino-toolbar-portal {
   display: inline-flex !important;
   align-items: center !important;
   gap: 8px !important;
   position: fixed !important;
-  pointer-events: auto !important;
+  pointer-events: none !important;
   z-index: 2147483646 !important;
   isolation: isolate !important;
 }
 
-#chatterino-toolbar-portal,
-#chatterino-toolbar-portal * {
+#chatterino-toolbar-portal #chatterino-toolbar-slot > * {
   pointer-events: auto !important;
 }
 
@@ -179,15 +222,51 @@ html.chatterino-video-fullscreen #chatterino-toolbar-portal {
 
 /* Visually hide the original points button while the replica is shown.
    It must stay mounted (no display:none removal from React) so forwarded
-   clicks and auto-claim keep working. */
+   clicks and auto-claim keep working. Never hide when holding an active dialog. */
 html.chatterino-points-replica-active
   [data-test-selector="community-points-summary"]:not(
-    #chatterino-toolbar-portal *
+    #chatterino-toolbar-portal *,
+    :has(
+      .chatterino-native-reward-dialog,
+      .chatterino-native-prediction-dialog,
+      [class*="reward-center"],
+      [class*="rewards-popover"],
+      [class*="tw-balloon"]
+    )
   ),
 html.chatterino-points-replica-active
-  [data-a-target="community-points-summary"]:not(#chatterino-toolbar-portal *) {
+  [data-a-target="community-points-summary"]:not(
+    #chatterino-toolbar-portal *,
+    :has(
+      .chatterino-native-reward-dialog,
+      .chatterino-native-prediction-dialog,
+      [class*="reward-center"],
+      [class*="rewards-popover"],
+      [class*="tw-balloon"]
+    )
+  ) {
   visibility: hidden !important;
   pointer-events: none !important;
+}
+
+html.chatterino-points-replica-active
+  [data-test-selector="community-points-summary"]:has(
+    .chatterino-native-reward-dialog,
+    .chatterino-native-prediction-dialog,
+    [class*="reward-center"],
+    [class*="rewards-popover"],
+    [class*="tw-balloon"]
+  ),
+html.chatterino-points-replica-active
+  [data-a-target="community-points-summary"]:has(
+    .chatterino-native-reward-dialog,
+    .chatterino-native-prediction-dialog,
+    [class*="reward-center"],
+    [class*="rewards-popover"],
+    [class*="tw-balloon"]
+  ) {
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 /* Chat badge replica — generic Twitch badge icon; opens native Chat Identity */
@@ -505,11 +584,49 @@ html.chatterino-companion-active .chatterino-moved-poll-inline * {
 
 div[role="dialog"]:has(.reward-center__content),
 div.ReactModal__Content:has(.reward-center__content),
-div[role="dialog"][aria-labelledby="channel-points-reward-center-header"] {
+div[role="dialog"][aria-labelledby="channel-points-reward-center-header"],
+.chatterino-native-reward-dialog:not(.ReactModal__Overlay):not([class*="backdrop"]) {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
   border: 1px solid #303036 !important;
   background-color: #1f1f23 !important;
   border-radius: 8px !important;
+}
+
+/* Ensure overlays and modal backdrops never receive dialog styling or block pointer events */
+.ReactModal__Overlay,
+[class*="backdrop"] {
+  box-shadow: none !important;
+}
+
+.ReactModal__Overlay.chatterino-native-reward-dialog,
+.ReactModal__Overlay.chatterino-native-prediction-dialog,
+[class*="backdrop"].chatterino-native-reward-dialog,
+[class*="backdrop"].chatterino-native-prediction-dialog {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  pointer-events: none !important;
+  z-index: 1000 !important;
+}
+
+/* Elevate the chat right-column stacking context when containing a repositioned
+   dialog so the dialog renders above the twilight-main / video player area. */
+.channel-root__right-column:has(
+    .chatterino-native-reward-dialog,
+    .chatterino-native-prediction-dialog,
+    .chatterino-native-chat-identity-dialog
+  ),
+.right-column:has(
+    .chatterino-native-reward-dialog,
+    .chatterino-native-prediction-dialog,
+    .chatterino-native-chat-identity-dialog
+  ),
+.stream-chat:has(
+    .chatterino-native-reward-dialog,
+    .chatterino-native-prediction-dialog,
+    .chatterino-native-chat-identity-dialog
+  ) {
+  z-index: 1000 !important;
 }
 
 /* Native Twitch reward dialog when repositioned beside toolbar.
@@ -518,18 +635,19 @@ div[role="dialog"][aria-labelledby="channel-points-reward-center-header"] {
    visible and interactive — including wheel/touch scrolling on the rewards list. */
 html.chatterino-companion-active
   section.chat-room
-  .chatterino-native-reward-dialog,
+  .chatterino-native-reward-dialog:not(.ReactModal__Overlay):not([class*="backdrop"]),
 html.chatterino-companion-active
   section.chat-room
-  .chatterino-native-reward-dialog
+  .chatterino-native-reward-dialog:not(.ReactModal__Overlay):not([class*="backdrop"])
   *,
-.chatterino-native-reward-dialog,
-.chatterino-native-reward-dialog * {
+.chatterino-native-reward-dialog:not(.ReactModal__Overlay):not([class*="backdrop"]),
+.chatterino-native-reward-dialog:not(.ReactModal__Overlay):not([class*="backdrop"]) * {
   visibility: visible !important;
   pointer-events: auto !important;
+  opacity: 1 !important;
 }
 
-.chatterino-native-reward-dialog {
+.chatterino-native-reward-dialog:not(.ReactModal__Overlay):not([class*="backdrop"]) {
   z-index: 2147483647 !important;
 }
 
@@ -545,6 +663,7 @@ html.chatterino-companion-active
 .chatterino-native-chat-identity-dialog * {
   visibility: visible !important;
   pointer-events: auto !important;
+  opacity: 1 !important;
 }
 
 .chatterino-native-chat-identity-dialog {
@@ -597,21 +716,26 @@ html.chatterino-companion-active
   touch-action: pan-y !important;
 }
 
-/* Prediction bet prompt ("How many Channel Points do you want to use?").
+/* Prediction bet prompt and dialog ("How many Channel Points do you want to use?").
    Twitch anchors it to the outcome control, which companion mode parks
    off-screen, so content.js shifts it beside the toolbar. It stays in the
    React root, so force it visible and clickable wherever it was mounted. */
-html.chatterino-companion-active .chatterino-native-prediction-dialog,
-html.chatterino-companion-active .chatterino-native-prediction-dialog *,
-.chatterino-native-prediction-dialog,
-.chatterino-native-prediction-dialog * {
+html.chatterino-companion-active .chatterino-native-prediction-dialog:not(.ReactModal__Overlay):not([class*="backdrop"]),
+html.chatterino-companion-active .chatterino-native-prediction-dialog:not(.ReactModal__Overlay):not([class*="backdrop"]) *,
+.chatterino-native-prediction-dialog:not(.ReactModal__Overlay):not([class*="backdrop"]),
+.chatterino-native-prediction-dialog:not(.ReactModal__Overlay):not([class*="backdrop"]) * {
   visibility: visible !important;
   pointer-events: auto !important;
+  opacity: 1 !important;
 }
 
-.chatterino-native-prediction-dialog {
+.chatterino-native-prediction-dialog:not(.ReactModal__Overlay):not([class*="backdrop"]) {
   z-index: 2147483647 !important;
   opacity: 1 !important;
+  background-color: #1f1f23 !important;
+  border: 1px solid #303036 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
 }
 
 html.chatterino-companion-active
@@ -627,3 +751,26 @@ html.chatterino-companion-active
   overflow-y: auto !important;
   touch-action: pan-y !important;
 }
+
+/* Ensure ancestors of reward and prediction dialogs do not clip them */
+.chat-shell:has(.chatterino-native-reward-dialog, .chatterino-native-prediction-dialog),
+.chat-room:has(.chatterino-native-reward-dialog, .chatterino-native-prediction-dialog),
+.chat-input:has(.chatterino-native-reward-dialog, .chatterino-native-prediction-dialog),
+[class*="chat-input"]:has(.chatterino-native-reward-dialog, .chatterino-native-prediction-dialog) {
+  overflow: visible !important;
+}
+
+.chatterino-native-reward-dialog textarea,
+.chatterino-native-reward-dialog input,
+.chatterino-native-reward-dialog button,
+.chatterino-native-reward-dialog [contenteditable="true"],
+.chatterino-native-prediction-dialog textarea,
+.chatterino-native-prediction-dialog input,
+.chatterino-native-prediction-dialog button,
+.chatterino-native-prediction-dialog [contenteditable="true"] {
+  visibility: visible !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  user-select: text !important;
+}
+
