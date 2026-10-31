@@ -2,6 +2,33 @@
 
 ## Chatterino Better Browser
 
+### v2.7.3 (2026-10-31)
+
+#### Fixed
+
+- **Prediction Banner**: Predictions appear again in the banner at the top of the Chatterino chat. Clicking it opens the voting dialog; it disappears once the prediction ends, and the vote button beside the player hides when voting closes.
+- **Prediction Countdown**: The prediction dialog no longer shows a fake "2:00" countdown when Twitch provides no deadline.
+- **Numpad Enter**: Numpad Enter now sends the message instead of inserting a new line.
+- **Emote Completion**: Picking an emote from the completion popup after an inline emote no longer deletes earlier text.
+- **Page Sync**: The extension's page watcher no longer stops after the first sync, so Twitch controls stay in sync without relying on the 2-second fallback; chat lines (including 7TV/FFZ lists) and typing no longer trigger extra syncs.
+- **Cancelled Activities**: Cancelled or refunded predictions and terminated polls now clear instead of sticking; ended polls clear from the desktop 30 seconds after they finish.
+- **Channel Switching**: Late Twitch responses for the previous channel no longer repopulate polls, predictions or points after switching channels.
+- **Native Host Reconnects**: A missing or crashing desktop app is retried with backoff (up to 60 s) instead of every 5 seconds forever.
+- **Long Messages**: Messages between the browser and the desktop app larger than 1 KB (such as long poll or prediction titles) are no longer silently dropped.
+- **Banner Close Button**: Closing the banner hides only what was shown and no longer brings back a duplicate chat message.
+- **Auto-claim Setting**: Channel point bonuses are no longer claimed when auto-claim is turned off.
+- **Responsiveness**: Status updates to the browser are sent in the background instead of blocking the desktop UI while retrying, and a broken message queue no longer spins at 100% CPU.
+- **Extension Reload**: After the extension reloads, Twitch's own controls come back instead of stale copies.
+- **Minute-watched Results**: Results from the browser now reach the desktop app instead of being dropped.
+
+#### Security
+
+- Twitch auth headers are only captured from Twitch's own GraphQL host, so tokens from other services on the page are never captured or replayed.
+- Data from the Twitch page and from the desktop app is validated before use (shapes, sizes, Twitch channel names, deadlines).
+- Only the extension popup can change settings; page-originated messages are checked and can't target non-Twitch tabs.
+- The prediction banner renders titles as plain text.
+- Removed the broad `tabs` permission, and the popup no longer loads a remote font.
+
 ### v2.7.2 (2026-10-30)
 
 #### Fixed
