@@ -4,7 +4,30 @@
 
 #include "common/ChannelEngagement.hpp"
 
+#include <atomic>
+
 namespace chatterino {
+
+bool isDisplayableEngagementStatus(const QString &status)
+{
+    return status == QStringLiteral("started") ||
+           status == QStringLiteral("locked") ||
+           status == QStringLiteral("ended");
+}
+
+bool isSameEngagementActivity(const EngagementState &previous,
+                              const EngagementState &next)
+{
+    return previous.title == next.title &&
+           (previous.status != QStringLiteral("ended") ||
+            next.status == QStringLiteral("ended"));
+}
+
+std::uint64_t nextEngagementGeneration()
+{
+    static std::atomic<std::uint64_t> counter{0};
+    return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+}
 
 QString formatEngagement(EngagementKind kind, const EngagementState &state,
                          const QDateTime &now)

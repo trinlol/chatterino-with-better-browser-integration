@@ -18,6 +18,10 @@
     "leaseRenew",
     "reconcile",
     "nativeChatResult",
+    // Reply to a native sendMinuteWatched request. The desktop parser accepts
+    // it (NativeAction::MinuteWatchedResult); without it here every result was
+    // dropped by normalizeOutbound before reaching the host.
+    "minuteWatchedResult",
   ]);
 
   const SESSION_FIELDS = [
@@ -49,12 +53,17 @@
           "leaseRenew",
           "reconcile",
           "nativeChatResult",
+          "minuteWatchedResult",
         ].includes(message.action)
       ) {
         return {
           ok: false,
           error: `protocol v2 does not support action: ${message.action}`,
         };
+      }
+      if (message.action === "minuteWatchedResult") {
+        // Informational result; the desktop does not require a session identity.
+        return { ok: true, version };
       }
       if (
         message.action !== "reconcile" &&

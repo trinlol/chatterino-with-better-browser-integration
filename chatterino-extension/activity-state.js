@@ -245,8 +245,11 @@
       };
     }
 
-    nextPublication(kind) {
-      const activity = this.current(kind);
+    // hideEnded publishes a finished activity as a removal, so the desktop
+    // banner clears as soon as the event is over instead of lingering.
+    nextPublication(kind, { hideEnded = false } = {}) {
+      const current = this.current(kind);
+      const activity = hideEnded && current?.status === "ended" ? null : current;
       const fingerprint = publicationFingerprint(activity);
       if (fingerprint === this.published[kind]) return null;
       this.published[kind] = fingerprint;

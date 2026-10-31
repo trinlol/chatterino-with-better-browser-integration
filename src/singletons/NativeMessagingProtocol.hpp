@@ -19,6 +19,21 @@ inline constexpr std::uint32_t MAX_NATIVE_MESSAGE_SIZE = 1024U * 1024U;
     return size > 0 && size <= MAX_NATIVE_MESSAGE_SIZE;
 }
 
+/// Per-message capacity of the IPC queues between the native host and the GUI.
+/// Browser frames may be up to MAX_NATIVE_MESSAGE_SIZE, but real traffic
+/// (selects, long poll/prediction titles with options) is a few KiB at most.
+/// A queue reserves maxMessages * maxMessageSize bytes up front, so keep both
+/// bounded: 32 * 64 KiB = 2 MiB per queue.
+inline constexpr std::uint32_t MAX_IPC_MESSAGE_SIZE = 64U * 1024U;
+inline constexpr std::uint32_t IPC_QUEUE_MAX_MESSAGES = 32;
+static_assert(MAX_IPC_MESSAGE_SIZE <= MAX_NATIVE_MESSAGE_SIZE);
+
+/// Whether a frame fits into the host -> GUI IPC queue.
+[[nodiscard]] constexpr bool fitsIpcQueue(std::uint64_t size)
+{
+    return size > 0 && size <= MAX_IPC_MESSAGE_SIZE;
+}
+
 enum class NativeAction {
     Select,
     Detach,
@@ -66,5 +81,22 @@ struct AttachmentIdentity {
 
 ParsedNativeMessage parseNativeMessage(const QJsonObject &root);
 AttachmentIdentity parseAttachmentIdentity(const QJsonObject &root);
+
+/// Twitch polls and predictions run for at most 30 minutes; anything beyond a
+/// day is treated as malformed browser input.
+inline constexpr qint64 MAX_ENGAGEMENT_WINDOW_MS = 24LL * 60 * 60 * 1000;
+inline constexpr int MAX_ENGAGEMENT_DURATION_SECONDS = 24 * 60 * 60;
+inline constexpr qsizetype MAX_ENGAGEMENT_OPTIONS = 10;
+
+/// Browser messages are untrusted. Only a strict Twitch login may reach
+/// getOrAddChannel, which would otherwise create a channel for any string or
+/// resolve special channels such as "/whispers" or "/mentions".
+[[nodiscard]] bool isValidBrowserChannelName(const QString &name);
+
+/// Parses an engagement `closesAt` (epoch milliseconds, number or string).
+/// Returns 0 for missing, non-finite, non-positive or implausibly distant
+/// values so that the result can always be cast and used safely.
+[[nodiscard]] qint64 parseEngagementClosesAt(const QJsonValue &value,
+                                             qint64 nowMs);
 
 }  // namespace chatterino::nm

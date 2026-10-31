@@ -11,11 +11,15 @@
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QMetaObject>
 #include <QMutex>
+#include <QObject>
 #include <QString>
 #include <QThread>
 
+#include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace chatterino::nm::detail {
@@ -64,6 +68,11 @@ void writeToCout(const QByteArray &array);
 }  // namespace nm::client
 
 /// Outbound messages from Chatterino GUI to the browser extension host.
+/// Never blocks: the message is queued and delivered by a background sender
+/// thread (with a few bounded retries), in the order it was queued relative to
+/// other queued messages (sendToBrowserExtension, sendMinuteWatchedViaBrowser).
+/// NativeMessagingServer::sendNativeChat is synchronous and not ordered
+/// relative to this queue.
 void sendToBrowserExtension(const QJsonObject &obj);
 
 /// The desktop-side record of an acknowledged overlay.  The opaque session
@@ -119,9 +128,17 @@ public:
     static bool isBrowserAttached();
     /// Returns a delivery result only when exactly one live browser overlay
     /// owns `channel`; ambiguous duplicate-channel sessions are never routed.
+    /// Synchronous: the caller (SplitInput) falls back to IRC unless this
+    /// returns Delivered, so it sends directly instead of through the
+    /// background outbox. It can block the calling thread for up to the IPC
+    /// operation timeout (~250 ms) and can overtake queued
+    /// sendToBrowserExtension messages.
     static ipc::DeliveryStatus sendNativeChat(const QString &channel,
                                               const QString &message,
                                               const QString &requestId);
+    /// Asynchronous: returns Queued once the request is accepted by the
+    /// background outbox (the browser answers with minuteWatchedResult), or an
+    /// error status if it cannot be routed.
     static ipc::DeliveryStatus sendMinuteWatchedViaBrowser(
         const QString &channel, const QString &channelId,
         const QString &streamId, const QString &userId,
@@ -149,10 +166,24 @@ private:
         void handleNativeChatResult(const QJsonObject &root);
         void handleMinuteWatchedResult(const QJsonObject &root);
 
-        void expireSessions();
-
         NativeMessagingServer &parent_;
     };
+
+    /// Queues `f` to run on the GUI thread unless the server is destroyed
+    /// first. Callable from any thread; always queued (never run inline), so
+    /// `f` never runs while guiContextMutex_ is held.
+    template <typename F>
+    void postToGui(F &&f)
+    {
+        QMutexLocker lock(&this->guiContextMutex_);
+        if (this->guiContext_)
+        {
+            QMetaObject::invokeMethod(this->guiContext_.get(),
+                                      std::forward<F>(f), Qt::QueuedConnection);
+        }
+    }
+
+    void expireSessions();
 
     void syncChannels(const QJsonArray &twitchChannels);
     void updateEngagement(const QJsonObject &root);
@@ -165,6 +196,11 @@ private:
                      QStringView reason);
 
     ReceiverThread *thread;
+    /// Context object for jobs posted to the GUI thread. Destroying it (in
+    /// the destructor, under guiContextMutex_) drops jobs that have not run
+    /// yet, so none of them can touch a destroyed server.
+    QMutex guiContextMutex_;
+    std::unique_ptr<QObject> guiContext_;
     static NativeMessagingServer *instance_;
     AttachmentSessionRegistry sessions_;
     bool legacyBrowserAttached_ = false;

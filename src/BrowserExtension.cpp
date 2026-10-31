@@ -376,14 +376,16 @@ void runBrowserOutboundLoop()
     // backlog, every GUI try_send returns QueueFull and responses are dropped,
     // which breaks the desktop->browser path permanently. Replace (remove then
     // create) so each host launch starts from a clean, drained queue.
-    auto [messageQueue, error] =
-        ipc::IpcQueue::tryReplaceOrCreate("chatterino_browser", 100, 1024);
+    auto [messageQueue, error] = ipc::IpcQueue::tryReplaceOrCreate(
+        "chatterino_browser", nm::IPC_QUEUE_MAX_MESSAGES,
+        nm::MAX_IPC_MESSAGE_SIZE);
 
     if (!error.isEmpty() || !messageQueue)
     {
-        std::osyncstream(std::cerr) << "[BrowserExtension] runBrowserOutboundLoop: failed to "
-                  << "open/create IPC queue 'chatterino_browser' - error: "
-                  << error.toStdString() << std::endl;
+        std::osyncstream(std::cerr)
+            << "[BrowserExtension] runBrowserOutboundLoop: failed to "
+            << "open/create IPC queue 'chatterino_browser' - error: "
+            << error.toStdString() << std::endl;
         return;
     }
 

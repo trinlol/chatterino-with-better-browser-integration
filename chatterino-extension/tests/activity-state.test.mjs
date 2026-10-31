@@ -106,3 +106,40 @@ test("missing timing data remains untimed instead of inventing two minutes", asy
   assert.equal(activity.closesAt, 0);
   assert.equal(activity.durationSeconds, 0);
 });
+
+test("a prediction appears when it starts and is removed once it has ended", async () => {
+  const { ActivityStore } = await loadModule();
+  const store = new ActivityStore();
+  store.setChannel("example");
+  const prediction = { title: "Will we win?", options: ["Yes", "No"] };
+
+  store.applyGraphql({ prediction: { ...prediction, status: "started" } });
+  assert.equal(
+    store.nextPublication("prediction", { hideEnded: true }).lifecycle,
+    "upsert"
+  );
+
+  // Locked: voting is closed but the banner stays up while the result is pending.
+  store.applyGraphql({ prediction: { ...prediction, status: "locked" } });
+  assert.equal(
+    store.nextPublication("prediction", { hideEnded: true }).lifecycle,
+    "upsert"
+  );
+
+  store.applyGraphql({
+    prediction: { ...prediction, status: "ended", winner: "Yes" },
+  });
+  assert.equal(
+    store.nextPublication("prediction", { hideEnded: true }).lifecycle,
+    "remove"
+  );
+  assert.equal(store.nextPublication("prediction", { hideEnded: true }), null);
+});
+
+test("polls still publish their ended result by default", async () => {
+  const { ActivityStore } = await loadModule();
+  const store = new ActivityStore();
+  store.setChannel("example");
+  store.applyGraphql({ poll: { title: "Best map?", options: ["A", "B"], status: "ended" } });
+  assert.equal(store.nextPublication("poll").lifecycle, "upsert");
+});

@@ -40,6 +40,11 @@
       `Prediction: ${content?.activities?.prediction?.title || "none"}`,
       `GraphQL: ${formatAge(content?.graphqlUpdatedAt, now)}`,
     ];
+    if (content?.detected) {
+      lines.push(
+        `Found on page: points ${formatAge(content.detected.points, now)}, badges ${formatAge(content.detected.badges, now)}`
+      );
+    }
     if (native.lastError) lines.push(`Error: ${native.lastError}`);
     if (native.retryAt && native.retryAt > now) {
       lines.push(

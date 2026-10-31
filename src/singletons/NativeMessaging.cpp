@@ -40,7 +40,10 @@
 
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
+#include <deque>
 #include <iostream>
+#include <mutex>
 #include <syncstream>
 #include <thread>
 
@@ -57,7 +60,12 @@ using namespace chatterino;
 using namespace chatterino::literals;
 
 const QString EXTENSION_ID = u"glknmaideaikkmemifbfkhnomoknepka"_s;
-constexpr const size_t MESSAGE_SIZE = 1024;
+constexpr const size_t MESSAGE_SIZE = nm::MAX_IPC_MESSAGE_SIZE;
+constexpr const size_t QUEUE_MAX_MESSAGES = nm::IPC_QUEUE_MAX_MESSAGES;
+/// Consecutive receive errors after which the GUI queue is recreated.
+constexpr int MAX_CONSECUTIVE_RECEIVE_ERRORS = 20;
+/// How often idle attachment leases are checked for expiry.
+constexpr int LEASE_EXPIRY_INTERVAL_MS = 5000;
 
 struct Config {
 #ifdef Q_OS_WIN
@@ -560,6 +568,17 @@ namespace nm::client {
 
 void sendMessage(const QByteArray &array)
 {
+    // The browser may legitimately send frames up to MAX_NATIVE_MESSAGE_SIZE,
+    // but the GUI queue holds at most MAX_IPC_MESSAGE_SIZE per message. Say so
+    // explicitly instead of reporting a bare delivery status.
+    if (!nm::fitsIpcQueue(static_cast<std::uint64_t>(array.size())))
+    {
+        std::osyncstream(std::cerr)
+            << "[BrowserExtension] dropping message for chatterino_gui: size "
+            << array.size() << " exceeds IPC limit of "
+            << nm::MAX_IPC_MESSAGE_SIZE << " bytes" << std::endl;
+        return;
+    }
     const auto status = ipc::sendMessage("chatterino_gui", array);
     if (status != ipc::DeliveryStatus::Delivered)
     {
@@ -583,88 +602,230 @@ void writeToCout(const QByteArray &array)
 
 }  // namespace nm::client
 
+namespace {
+
+const char *deliveryFailureReason(ipc::DeliveryStatus status)
+{
+    switch (status)
+    {
+        case ipc::DeliveryStatus::QueueUnavailable:
+            return "queue unavailable (native host not running?)";
+        case ipc::DeliveryStatus::QueueFull:
+            return "queue full";
+        case ipc::DeliveryStatus::InvalidMessage:
+            return "invalid message (empty or larger than the queue allows)";
+        case ipc::DeliveryStatus::Delivered:
+        case ipc::DeliveryStatus::Queued:
+            break;
+    }
+    return "unknown";
+}
+
+/// Delivers GUI -> browser messages on a dedicated thread. A send can block
+/// for up to the IPC operation timeout per attempt (plus retry delays), which
+/// must never happen on the GUI thread. A single FIFO worker keeps messages
+/// queued here in the order they were enqueued, across all calling threads.
+/// (NativeMessagingServer::sendNativeChat sends synchronously and is not
+/// ordered relative to this queue.)
+class BrowserOutbox
+{
+public:
+    /// Intentionally leaked: the worker must not be joined during static
+    /// destruction. NativeMessagingServer shuts it down explicitly.
+    static BrowserOutbox &instance()
+    {
+        static auto *outbox = new BrowserOutbox;
+        return *outbox;
+    }
+
+    /// Returns false if the message was not accepted (outbox shutting down).
+    bool enqueue(QByteArray message)
+    {
+        {
+            std::lock_guard lock(this->mutex_);
+            if (!this->accepting_)
+            {
+                return false;
+            }
+            if (this->pending_.size() >= MAX_PENDING)
+            {
+                qCWarning(chatterinoNativeMessage)
+                    << "sendToBrowserExtension: outbound backlog full -"
+                    << "dropping oldest message";
+                this->pending_.pop_front();
+            }
+            this->pending_.push_back(std::move(message));
+            if (!this->worker_.joinable())
+            {
+                this->worker_ = std::thread([this] {
+                    this->run();
+                });
+            }
+        }
+        this->cv_.notify_all();
+        return true;
+    }
+
+    /// Stops accepting messages, lets the worker flush what is queued for up
+    /// to DRAIN_TIMEOUT, then aborts and joins it (bounded by one in-flight
+    /// IPC operation). The outbox accepts messages again afterwards, so a
+    /// later server in the same process can still send.
+    void shutdown()
+    {
+        std::unique_lock lock(this->mutex_);
+        this->accepting_ = false;
+        this->cv_.notify_all();
+        const bool drained = this->cv_.wait_for(lock, DRAIN_TIMEOUT, [this] {
+            return this->pending_.empty() && !this->busy_;
+        });
+        if (!drained)
+        {
+            qCWarning(chatterinoNativeMessage)
+                << "sendToBrowserExtension: dropping" << this->pending_.size()
+                << "undelivered message(s) at shutdown";
+        }
+        this->abort_ = true;
+        this->cv_.notify_all();
+        auto worker = std::move(this->worker_);
+        lock.unlock();
+
+        if (worker.joinable())
+        {
+            worker.join();
+        }
+
+        lock.lock();
+        this->pending_.clear();
+        this->busy_ = false;
+        this->abort_ = false;
+        this->accepting_ = true;
+    }
+
+private:
+    static constexpr size_t MAX_PENDING = 256;
+    static constexpr int MAX_ATTEMPTS = 3;
+    static constexpr std::chrono::milliseconds RETRY_DELAY{50};
+    static constexpr std::chrono::milliseconds DRAIN_TIMEOUT{500};
+
+    void run()
+    {
+        while (true)
+        {
+            QByteArray message;
+            {
+                std::unique_lock lock(this->mutex_);
+                this->cv_.wait(lock, [this] {
+                    return this->abort_ || !this->pending_.empty() ||
+                           !this->accepting_;
+                });
+                // Exit on abort, or once a shutdown drain has emptied the
+                // queue.
+                if (this->abort_ || this->pending_.empty())
+                {
+                    return;
+                }
+                message = std::move(this->pending_.front());
+                this->pending_.pop_front();
+                this->busy_ = true;
+            }
+
+            try
+            {
+                this->deliver(message);
+            }
+            catch (const std::exception &ex)
+            {
+                qCWarning(chatterinoNativeMessage)
+                    << "sendToBrowserExtension: delivery threw:" << ex.what();
+            }
+            catch (...)
+            {
+                qCWarning(chatterinoNativeMessage)
+                    << "sendToBrowserExtension: delivery threw";
+            }
+
+            {
+                std::lock_guard lock(this->mutex_);
+                this->busy_ = false;
+            }
+            // Wakes a draining shutdown().
+            this->cv_.notify_all();
+        }
+    }
+
+    void deliver(const QByteArray &message)
+    {
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; ++attempt)
+        {
+            const auto status =
+                ipc::sendMessage(BROWSER_IPC_QUEUE_NAME, message);
+            if (status == ipc::DeliveryStatus::Delivered)
+            {
+                if (attempt > 1)
+                {
+                    qCDebug(chatterinoNativeMessage)
+                        << "sendToBrowserExtension: delivered on retry"
+                        << attempt;
+                }
+                return;
+            }
+            const auto *reason = deliveryFailureReason(status);
+            // Retrying cannot make an invalid message valid.
+            if (status == ipc::DeliveryStatus::InvalidMessage ||
+                attempt == MAX_ATTEMPTS)
+            {
+                qCWarning(chatterinoNativeMessage)
+                    << "sendToBrowserExtension: delivery failed after"
+                    << attempt << "attempt(s) -" << reason << "- message lost ("
+                    << message.size() << "bytes)";
+                return;
+            }
+            qCDebug(chatterinoNativeMessage)
+                << "sendToBrowserExtension: delivery failed -" << reason
+                << "- retrying (" << attempt << "/" << MAX_ATTEMPTS << ")";
+
+            std::unique_lock lock(this->mutex_);
+            if (this->cv_.wait_for(lock, RETRY_DELAY, [this] {
+                    return this->abort_;
+                }))
+            {
+                return;
+            }
+        }
+    }
+
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    std::deque<QByteArray> pending_;
+    std::thread worker_;
+    bool accepting_ = true;
+    bool abort_ = false;
+    /// The worker is delivering a message it already took off pending_.
+    bool busy_ = false;
+};
+
+}  // namespace
+
 void sendToBrowserExtension(const QJsonObject &obj)
 {
-    auto *app = tryGetApp();
-    if (!app)
+    if (!tryGetApp())
     {
-        std::cerr << "[STDERR] sendToBrowserExtension: FAILED - app unavailable" << std::endl;
         qCWarning(chatterinoNativeMessage)
             << "sendToBrowserExtension: failed - app unavailable";
         return;
     }
 
-    const auto &paths = app->getPaths();
-    (void)paths;
-    const auto message = QJsonDocument(obj).toJson(QJsonDocument::Compact);
-
-    std::cerr << "[STDERR] sendToBrowserExtension: attempting to send to IPC queue 'chatterino_browser' - message: "
-              << message.toStdString() << std::endl;
-
+    auto message = QJsonDocument(obj).toJson(QJsonDocument::Compact);
     qCDebug(chatterinoNativeMessage)
-        << "sendToBrowserExtension: sending to IPC queue 'chatterino_browser' - message:"
+        << "sendToBrowserExtension: queueing message for 'chatterino_browser':"
         << message;
-
-    // Check delivery status and retry on failure
-    constexpr int MAX_RETRIES = 3;
-    for (int attempt = 1; attempt <= MAX_RETRIES; ++attempt)
-    {
-        std::cerr << "[STDERR] sendToBrowserExtension: attempt " << attempt << "/" << MAX_RETRIES << std::endl;
-
-        auto status = ipc::sendMessage(BROWSER_IPC_QUEUE_NAME, message);
-
-        if (status == ipc::DeliveryStatus::Delivered)
-        {
-            std::cerr << "[STDERR] sendToBrowserExtension: SUCCESS - delivered on attempt " << attempt << std::endl;
-            if (attempt > 1)
-            {
-                qCDebug(chatterinoNativeMessage)
-                    << "sendToBrowserExtension: delivered on retry" << attempt;
-            }
-            return;
-        }
-
-        // Log failure with specific reason
-        const char *reason = "unknown";
-        switch (status)
-        {
-            case ipc::DeliveryStatus::QueueUnavailable:
-                reason = "queue unavailable (native host not running?)";
-                break;
-            case ipc::DeliveryStatus::QueueFull:
-                reason = "queue full (100 messages backlog)";
-                break;
-            case ipc::DeliveryStatus::InvalidMessage:
-                reason = "invalid message (empty or > 1024 bytes)";
-                break;
-            default:
-                break;
-        }
-
-        if (attempt < MAX_RETRIES)
-        {
-            std::cerr << "[STDERR] sendToBrowserExtension: delivery FAILED - " << reason
-                      << " - retrying (" << attempt << "/" << MAX_RETRIES << ")" << std::endl;
-            qCWarning(chatterinoNativeMessage)
-                << "sendToBrowserExtension: delivery failed -" << reason
-                << "- retrying (" << attempt << "/" << MAX_RETRIES << ")";
-            // Brief delay before retry
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-        else
-        {
-            std::cerr << "[STDERR] sendToBrowserExtension: delivery FAILED after " << MAX_RETRIES
-                      << " attempts - " << reason << " - message LOST" << std::endl;
-            qCWarning(chatterinoNativeMessage)
-                << "sendToBrowserExtension: delivery failed after" << MAX_RETRIES
-                << "attempts -" << reason << "- message lost";
-        }
-    }
+    BrowserOutbox::instance().enqueue(std::move(message));
 }
 
 // SERVER
 NativeMessagingServer::NativeMessagingServer()
     : thread(new ReceiverThread(*this))
+    , guiContext_(std::make_unique<QObject>())
 {
     instance_ = this;
     this->thread->setObjectName("C2NMReceiver");
@@ -741,9 +902,13 @@ ipc::DeliveryStatus NativeMessagingServer::sendMinuteWatchedViaBrowser(
                         {u"browserWindowId"_s, session->browserWindowId},
                         {u"tabId"_s, session->tabId},
                         {u"generation"_s, session->generation}};
-    return ipc::sendMessage(
-        BROWSER_IPC_QUEUE_NAME,
-        QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    // The browser reports the outcome via a minuteWatchedResult message, so
+    // no caller needs a synchronous status: keep the GUI thread unblocked and
+    // the message ordered behind queued status reports.
+    return BrowserOutbox::instance().enqueue(
+               QJsonDocument(payload).toJson(QJsonDocument::Compact))
+               ? ipc::DeliveryStatus::Queued
+               : ipc::DeliveryStatus::QueueUnavailable;
 }
 
 NativeMessagingServer::~NativeMessagingServer()
@@ -761,6 +926,12 @@ NativeMessagingServer::~NativeMessagingServer()
         qCWarning(chatterinoNativeMessage)
             << "Native messaging receiver did not stop cooperatively";
     }
+    {
+        // Drops GUI jobs (and the lease timer) that still reference `this`.
+        QMutexLocker lock(&this->guiContextMutex_);
+        this->guiContext_.reset();
+    }
+    BrowserOutbox::instance().shutdown();
     if (!ipc::IpcQueue::remove("chatterino_gui"))
     {
         qCWarning(chatterinoNativeMessage) << "Failed to remove message queue";
@@ -769,6 +940,18 @@ NativeMessagingServer::~NativeMessagingServer()
 
 void NativeMessagingServer::start()
 {
+    assertInGuiThread();
+
+    // Leases must expire even when no browser message arrives (e.g. the
+    // browser was force-killed), so check them periodically on the GUI thread
+    // as well as after each received message.
+    auto *leaseTimer = new QTimer(this->guiContext_.get());
+    QObject::connect(leaseTimer, &QTimer::timeout, this->guiContext_.get(),
+                     [this] {
+                         this->expireSessions();
+                     });
+    leaseTimer->start(LEASE_EXPIRY_INTERVAL_MS);
+
     this->thread->start();
 }
 
@@ -785,10 +968,10 @@ void NativeMessagingServer::ReceiverThread::run()
     // send) can leave the file-backed queue with a permanently locked
     // emulated interprocess mutex, after which every send or receive on it
     // hangs. Replace the queue so this GUI always starts from a clean one.
-    auto [messageQueue, error] =
-        ipc::IpcQueue::tryReplaceOrCreate("chatterino_gui", 100, MESSAGE_SIZE);
+    auto [messageQueue, error] = ipc::IpcQueue::tryReplaceOrCreate(
+        "chatterino_gui", QUEUE_MAX_MESSAGES, MESSAGE_SIZE);
 
-    if (!error.isEmpty())
+    if (!error.isEmpty() || !messageQueue)
     {
         qCDebug(chatterinoNativeMessage)
             << "Failed to create message queue:" << error;
@@ -800,22 +983,52 @@ void NativeMessagingServer::ReceiverThread::run()
     // A native host may already have forwarded the initial selection before
     // this queue existed. Announce that the desktop receiver is ready so the
     // extension can request and replay fresh geometry.
-    ipc::sendMessage(
-        BROWSER_IPC_QUEUE_NAME,
-        QByteArrayLiteral(
-            R"({"type":"status","status":"desktop-ready","protocolVersion":2,"capabilities":["sessions"]})"));
+    const auto announceReady = [] {
+        (void)ipc::sendMessage(
+            BROWSER_IPC_QUEUE_NAME,
+            QByteArrayLiteral(
+                R"({"type":"status","status":"desktop-ready","protocolVersion":2,"capabilities":["sessions"]})"));
+    };
+    announceReady();
 
+    int consecutiveErrors = 0;
     while (!this->isInterruptionRequested())
     {
         auto buf = messageQueue->receive();
         if (buf.isEmpty())
         {
+            // receive() only returns empty on an error (it already backs off
+            // briefly). A queue that keeps failing is broken: recreate it once
+            // in a while, and give up if even that fails.
+            if (++consecutiveErrors < MAX_CONSECUTIVE_RECEIVE_ERRORS)
+            {
+                continue;
+            }
+            consecutiveErrors = 0;
+            qCWarning(chatterinoNativeMessage)
+                << "Message queue keeps failing - recreating it";
+            messageQueue.reset();
+            auto [replacement, replaceError] =
+                ipc::IpcQueue::tryReplaceOrCreate(
+                    "chatterino_gui", QUEUE_MAX_MESSAGES, MESSAGE_SIZE);
+            if (!replaceError.isEmpty() || !replacement)
+            {
+                qCWarning(chatterinoNativeMessage)
+                    << "Failed to recreate message queue:" << replaceError;
+                nmIpcError().set(replaceError);
+                return;
+            }
+            messageQueue = std::move(replacement);
+            // Messages sent while the queue was broken are lost; let the
+            // extension replay its geometry into the new queue.
+            announceReady();
             continue;
         }
+        consecutiveErrors = 0;
         auto document = QJsonDocument::fromJson(buf);
 
         this->handleMessage(document.object());
-        this->expireSessions();
+        this->parent_.expireSessions();
     }
 }
 
@@ -1058,6 +1271,17 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
         return;
     }
 
+    if (!name.isEmpty() && !nm::isValidBrowserChannelName(name))
+    {
+        qCDebug(chatterinoNativeMessage) << "NM invalid channel name";
+        if (v2)
+        {
+            this->parent_.reportSession(session, u"attachment-rejected"_s,
+                                        u"invalid-channel"_s, requestId);
+        }
+        return;
+    }
+
 #ifdef USEWINSDK
     if ((attach || attachFullscreen) &&
         (browserTarget == nullptr ||
@@ -1108,7 +1332,7 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
         // select; acknowledging here leaves the overlay at its old position.
     }
 
-    postToThread([=, &parent = this->parent_] {
+    this->parent_.postToGui([=, &parent = this->parent_] {
         // Legacy peers retained a single watching-channel model. v2 overlays
         // never update it: the session owns channel routing instead.
         if (!v2 && !name.isEmpty())
@@ -1191,7 +1415,7 @@ void NativeMessagingServer::ReceiverThread::handleDetach(
             return;
         }
 #ifdef USEWINSDK
-        postToThread([session, &parent = this->parent_] {
+        this->parent_.postToGui([session, &parent = this->parent_] {
             AttachedWindow::detach(session.winId, session.sessionId);
             parent.reportSession(session, u"detached"_s);
         });
@@ -1210,7 +1434,7 @@ void NativeMessagingServer::ReceiverThread::handleDetach(
     }
 
 #ifdef USEWINSDK
-    postToThread([winId, &parent = this->parent_] {
+    this->parent_.postToGui([winId, &parent = this->parent_] {
         qCDebug(chatterinoNativeMessage) << "NW detach";
         parent.legacyBrowserAttached_ = false;
         AttachedWindow::detach(winId);
@@ -1310,19 +1534,21 @@ void NativeMessagingServer::ReceiverThread::handleMinuteWatchedResult(
         << "statusCode:" << statusCode << "reason:" << reason;
 }
 
-void NativeMessagingServer::ReceiverThread::expireSessions()
+void NativeMessagingServer::expireSessions()
 {
-    for (const auto &session : this->parent_.sessions_.expire(currentUtcMs()))
+    // Called from the receiver thread and from the GUI-thread lease timer;
+    // the registry is mutex-protected and expire() hands each session out
+    // exactly once.
+    for (const auto &session : this->sessions_.expire(currentUtcMs()))
     {
 #ifdef USEWINSDK
-        postToThread([session, &parent = this->parent_] {
+        this->postToGui([session, this] {
             AttachedWindow::detach(session.winId, session.sessionId);
-            parent.reportSession(session, u"attachment-lost"_s,
-                                 u"lease-expired"_s);
+            this->reportSession(session, u"attachment-lost"_s,
+                                u"lease-expired"_s);
         });
 #else
-        this->parent_.reportSession(session, u"attachment-lost"_s,
-                                    u"lease-expired"_s);
+        this->reportSession(session, u"attachment-lost"_s, u"lease-expired"_s);
 #endif
     }
 }
@@ -1331,8 +1557,8 @@ void NativeMessagingServer::ReceiverThread::handleSync(const QJsonObject &root)
 {
     // Structure:
     // { action: 'sync', twitchChannels?: string[] }
-    postToThread([&parent = this->parent_,
-                  twitch = root["twitchChannels"_L1].toArray()] {
+    this->parent_.postToGui([&parent = this->parent_,
+                             twitch = root["twitchChannels"_L1].toArray()] {
         parent.syncChannels(twitch);
     });
 }
@@ -1423,7 +1649,7 @@ void NativeMessagingServer::loseSession(const QString &sessionId,
 void NativeMessagingServer::ReceiverThread::handleEngagement(
     const QJsonObject &root)
 {
-    postToThread([&parent = this->parent_, root] {
+    this->parent_.postToGui([&parent = this->parent_, root] {
         parent.updateEngagement(root);
     });
 }
@@ -1431,7 +1657,7 @@ void NativeMessagingServer::ReceiverThread::handleEngagement(
 void NativeMessagingServer::ReceiverThread::handlePinnedMessage(
     const QJsonObject &root)
 {
-    postToThread([&parent = this->parent_, root] {
+    this->parent_.postToGui([&parent = this->parent_, root] {
         parent.updatePinnedMessage(root);
     });
 }
@@ -1442,6 +1668,11 @@ void NativeMessagingServer::updatePinnedMessage(const QJsonObject &root)
 
     QString text = root["message"_L1].toString();
     QString channelName = root["channel"_L1].toString();
+
+    if (!channelName.isEmpty() && !nm::isValidBrowserChannelName(channelName))
+    {
+        return;
+    }
 
     ChannelPtr channel;
     if (!channelName.isEmpty())
@@ -1468,6 +1699,10 @@ void NativeMessagingServer::updateEngagement(const QJsonObject &root)
     assertInGuiThread();
 
     const auto channelName = root["channel"_L1].toString();
+    if (!channelName.isEmpty() && !nm::isValidBrowserChannelName(channelName))
+    {
+        return;
+    }
     ChannelPtr channel =
         channelName.isEmpty()
             ? getApp()->getTwitch()->getWatchingChannel().get()
@@ -1482,8 +1717,21 @@ void NativeMessagingServer::updateEngagement(const QJsonObject &root)
                           : EngagementKind::Prediction;
     const auto lifecycle =
         root["lifecycle"_L1].toString(QStringLiteral("upsert"));
-    if (lifecycle == QStringLiteral("remove"))
+    const auto status =
+        root["status"_L1].toString(QStringLiteral("started")).toLower();
+    // Statuses the banner cannot show ("canceled", "cancelled", "refunded"
+    // from older extensions, ...) would otherwise be stored forever: they are
+    // neither displayed nor auto-cleared. They mean the activity is gone.
+    if (lifecycle == QStringLiteral("remove") ||
+        !isDisplayableEngagementStatus(status))
     {
+        // An unknown status for an activity we never stored is not a
+        // removal of anything; do not report one to plugins.
+        if (lifecycle != QStringLiteral("remove") &&
+            !channel->getEngagement(kind).has_value())
+        {
+            return;
+        }
         channel->clearEngagement(kind);
 #ifdef CHATTERINO_HAVE_PLUGINS
         dispatchBetterBrowserEvent(BetterBrowserEvent{
@@ -1501,31 +1749,39 @@ void NativeMessagingServer::updateEngagement(const QJsonObject &root)
     }
 
     EngagementState state;
-    state.title = root["title"_L1].toString().trimmed();
-    state.status = root["status"_L1].toString(QStringLiteral("started"));
-    state.winner = root["winner"_L1].toString();
+    // simplified() also folds embedded newlines, which would otherwise split
+    // one banner row or system message into several.
+    state.title = root["title"_L1].toString().simplified();
+    if (state.title.isEmpty())
+    {
+        // Legacy (unversioned) peers bypass the protocol shape check.
+        return;
+    }
+    state.status = status;
+    state.winner = root["winner"_L1].toString().simplified();
     for (const auto &option : root["options"_L1].toArray())
     {
-        const auto text = option.toString().trimmed();
+        if (state.options.size() >= nm::MAX_ENGAGEMENT_OPTIONS)
+        {
+            break;
+        }
+        const auto text = option.toString().simplified();
         if (!text.isEmpty())
         {
             state.options.append(text);
         }
     }
     const auto &previous = channel->getEngagement(kind);
-    const auto duration = root["duration"_L1].toInt(0);
+    state.generation = previous && previous->generation != 0 &&
+                               isSameEngagementActivity(*previous, state)
+                           ? previous->generation
+                           : nextEngagementGeneration();
+    const auto duration = std::min(root["duration"_L1].toInt(0),
+                                   nm::MAX_ENGAGEMENT_DURATION_SECONDS);
     if (state.status == QStringLiteral("started"))
     {
-        const auto closesAtValue = root["closesAt"_L1];
-        qint64 closesAtMs = 0;
-        if (closesAtValue.isDouble())
-        {
-            closesAtMs = static_cast<qint64>(closesAtValue.toDouble());
-        }
-        else if (closesAtValue.isString())
-        {
-            closesAtMs = closesAtValue.toString().toLongLong();
-        }
+        const auto closesAtMs =
+            nm::parseEngagementClosesAt(root["closesAt"_L1], currentUtcMs());
 
         if (closesAtMs > 0)
         {
@@ -1546,6 +1802,17 @@ void NativeMessagingServer::updateEngagement(const QJsonObject &root)
     const bool transition = !previous || previous->title != state.title ||
                             previous->status != state.status ||
                             previous->winner != state.winner;
+    // Keep a banner the user dismissed hidden while the same activity keeps
+    // being refreshed. An ended activity followed by a started one with the
+    // same title is a new activity and is shown again, as is a re-run with
+    // different options.
+    if (previous && previous->dismissed && previous->title == state.title &&
+        previous->options == state.options &&
+        (previous->status != QStringLiteral("ended") ||
+         state.status == QStringLiteral("ended")))
+    {
+        state.dismissed = true;
+    }
     channel->setEngagement(kind, state);
 
 #ifdef CHATTERINO_HAVE_PLUGINS
@@ -1593,16 +1860,18 @@ void NativeMessagingServer::updateEngagement(const QJsonObject &root)
     if (state.status == QStringLiteral("ended"))
     {
         const std::weak_ptr<Channel> weakChannel = channel;
-        const auto title = state.title;
-        QTimer::singleShot(30000, [weakChannel, kind, title] {
+        const auto generation = state.generation;
+        QTimer::singleShot(30000, [weakChannel, kind, generation] {
             const auto channel = weakChannel.lock();
             if (!channel)
             {
                 return;
             }
             const auto &current = channel->getEngagement(kind);
+            // Only clear the activity that ended; a newer activity with the
+            // same title that ended within the delay has its own timer.
             if (current && current->status == QStringLiteral("ended") &&
-                current->title == title)
+                current->generation == generation)
             {
                 channel->clearEngagement(kind);
             }
@@ -1613,7 +1882,7 @@ void NativeMessagingServer::updateEngagement(const QJsonObject &root)
 void NativeMessagingServer::ReceiverThread::handleRewardPending(
     const QJsonObject &root)
 {
-    postToThread([&parent = this->parent_, root] {
+    this->parent_.postToGui([&parent = this->parent_, root] {
         parent.updateRewardPending(root);
     });
 }
@@ -1621,7 +1890,7 @@ void NativeMessagingServer::ReceiverThread::handleRewardPending(
 void NativeMessagingServer::ReceiverThread::handleRewardClear(
     const QJsonObject &root)
 {
-    postToThread([&parent = this->parent_, root] {
+    this->parent_.postToGui([&parent = this->parent_, root] {
         parent.clearRewardPending(root);
     });
 }
@@ -1634,6 +1903,11 @@ void NativeMessagingServer::updateRewardPending(const QJsonObject &root)
     QString rewardId = root["rewardId"_L1].toString();
     QString title = root["title"_L1].toString();
     QString prompt = root["prompt"_L1].toString();
+
+    if (!channelName.isEmpty() && !nm::isValidBrowserChannelName(channelName))
+    {
+        return;
+    }
 
     ChannelPtr channel;
     if (!channelName.isEmpty())
@@ -1674,6 +1948,11 @@ void NativeMessagingServer::clearRewardPending(const QJsonObject &root)
 
     QString channelName = root["channel"_L1].toString();
 
+    if (!channelName.isEmpty() && !nm::isValidBrowserChannelName(channelName))
+    {
+        return;
+    }
+
     ChannelPtr channel;
     if (!channelName.isEmpty())
     {
@@ -1704,7 +1983,7 @@ void NativeMessagingServer::syncChannels(const QJsonArray &twitchChannels)
     for (const auto value : twitchChannels)
     {
         auto name = value.toString();
-        if (name.isEmpty())
+        if (name.isEmpty() || !nm::isValidBrowserChannelName(name))
         {
             continue;
         }

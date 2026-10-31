@@ -23,6 +23,9 @@ PredictionBannerWidget::PredictionBannerWidget(QWidget *parent)
 
     this->textLabel_ = new QLabel(this);
     this->textLabel_->setWordWrap(true);
+    // Titles and options come from the browser page; never render them as
+    // rich text (QLabel's AutoText would interpret tags such as <img>).
+    this->textLabel_->setTextFormat(Qt::PlainText);
     this->textLabel_->setStyleSheet(
         "color: #ffffff; font-weight: 600; font-size: 12px; "
         "background: transparent;");
@@ -38,10 +41,26 @@ PredictionBannerWidget::PredictionBannerWidget(QWidget *parent)
     this->closeButton_->setFixedSize(20, 20);
     this->closeButton_->setCursor(Qt::PointingHandCursor);
 
-    connect(this->closeButton_, &QPushButton::clicked, [this]() {
-        if (this->channel_)
+    connect(this->closeButton_, &QPushButton::clicked, this, [this]() {
+        if (!this->channel_)
         {
-            this->channel_->clearEngagements();
+            return;
+        }
+        // Dismiss only the rows that are currently shown, and keep tracking
+        // them: clearing would drop a hidden activity and make the next
+        // browser refresh re-show the banner and repeat its chat message.
+        for (const auto kind :
+             {EngagementKind::Poll, EngagementKind::Prediction})
+        {
+            const auto &engagement = this->channel_->getEngagement(kind);
+            if (!engagement || engagement->dismissed ||
+                formatEngagement(kind, *engagement).isEmpty())
+            {
+                continue;
+            }
+            auto dismissed = *engagement;
+            dismissed.dismissed = true;
+            this->channel_->setEngagement(kind, std::move(dismissed));
         }
     });
 
@@ -70,8 +89,7 @@ void PredictionBannerWidget::openPredictionDialog()
 {
     // Clicking the prediction banner opens the prediction popout
     // (interaction ported from Moltorino, MIT, (c) MoltoBenne).
-    auto *twitchChannel =
-        dynamic_cast<TwitchChannel *>(this->channel_.get());
+    auto *twitchChannel = dynamic_cast<TwitchChannel *>(this->channel_.get());
     if (twitchChannel == nullptr)
     {
         return;
@@ -110,7 +128,7 @@ void PredictionBannerWidget::updateState()
     for (const auto kind : {EngagementKind::Poll, EngagementKind::Prediction})
     {
         const auto &engagement = this->channel_->getEngagement(kind);
-        if (!engagement)
+        if (!engagement || engagement->dismissed)
         {
             continue;
         }
@@ -159,6 +177,10 @@ QColor PredictionBannerWidget::backgroundColor() const
              {EngagementKind::Poll, EngagementKind::Prediction})
         {
             const auto &engagement = this->channel_->getEngagement(kind);
+            if (!engagement || engagement->dismissed)
+            {
+                continue;
+            }
             hasPrediction |=
                 kind == EngagementKind::Prediction && engagement.has_value();
             hasLocked |=

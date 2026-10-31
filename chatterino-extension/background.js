@@ -116,6 +116,11 @@ class Settings {
     },
   };
 
+  /** @returns {key is keyof SettingTypes} */
+  static has(key) {
+    return typeof key === "string" && Object.hasOwn(this.#defaults, key);
+  }
+
   /**
    * @template {keyof SettingTypes} T
    * @param {T} key
@@ -153,7 +158,7 @@ class Settings {
     try {
       await chrome.storage.local.set({ [key]: value });
     } catch (e) {
-      console.warn(`Failed to set {key} to`, value);
+      console.warn(`Failed to set ${key} to`, value, e);
     }
   }
 }
@@ -172,6 +177,83 @@ function matchChannelName(url) {
   return undefined;
 }
 
+const TWITCH_TAB_URL = /^https:\/\/([a-z0-9-]+\.)*twitch\.tv\//i;
+// Content-originated payloads are relayed verbatim to the native host; keep
+// them far below Chrome's native-messaging frame limits.
+const MAX_FORWARDED_MESSAGE_CHARS = 64 * 1024;
+// Twitch rejects chat messages longer than 500 characters.
+const MAX_NATIVE_CHAT_CHARS = 500;
+const MAX_GEOMETRY_PX = 32768;
+
+/** A content script running in a Twitch tab (not a popup or other page). */
+function isTwitchTabSender(sender) {
+  return (
+    Number.isInteger(sender?.tab?.id) &&
+    sender.tab.id >= 0 &&
+    TWITCH_TAB_URL.test(sender.tab.url || "")
+  );
+}
+
+/** One of this extension's own pages (popup), never a content script. */
+function isExtensionPageSender(sender) {
+  if (!sender) return false;
+  const ownId = chrome.runtime?.id;
+  if (ownId && sender.id && sender.id !== ownId) return false;
+  const base = chrome.runtime?.getURL?.("") || "";
+  // The popup can also be opened as a tab (chrome-extension://…/popup.html);
+  // content scripts always carry a web page URL.
+  if (sender.url && base) return sender.url.startsWith(base);
+  return !sender.tab;
+}
+
+function isFiniteInRange(value, min, max) {
+  return typeof value === "number" && Number.isFinite(value) &&
+    value >= min && value <= max;
+}
+
+function isValidChatGeometry(message) {
+  const rect = message?.rect;
+  return (
+    rect !== null &&
+    typeof rect === "object" &&
+    isFiniteInRange(rect.x, -MAX_GEOMETRY_PX, MAX_GEOMETRY_PX) &&
+    // 0 is meaningful: overlay.js reports a collapsed chat column as width 0
+    // and the desktop hides the attached window for it.
+    isFiniteInRange(rect.width, 0, MAX_GEOMETRY_PX) &&
+    isFiniteInRange(rect.height, 0, MAX_GEOMETRY_PX) &&
+    (message.dpr === undefined || isFiniteInRange(message.dpr, 0.05, 16)) &&
+    (message.viewportX === undefined ||
+      isFiniteInRange(message.viewportX, -MAX_GEOMETRY_PX, MAX_GEOMETRY_PX))
+  );
+}
+
+function boundedSize(message) {
+  try {
+    return JSON.stringify(message).length;
+  } catch {
+    return Infinity;
+  }
+}
+
+/**
+ * Resolve a session's tab only while it still shows that session's Twitch
+ * channel in that window. Native-host commands are routed through this so
+ * they can never act on a tab that navigated away or moved.
+ */
+async function getSessionTwitchTab(session) {
+  if (!Number.isInteger(session?.tabId)) return null;
+  const tab = await chrome.tabs.get(session.tabId).catch(() => null);
+  if (!tab || Number(tab.windowId) !== Number(session.windowId)) return null;
+  const channel = matchChannelName(tab.url || "");
+  if (
+    !channel ||
+    channel.toLowerCase() !== String(session.channel || "").toLowerCase()
+  ) {
+    return null;
+  }
+  return tab;
+}
+
 const appName = "com.chatterino.chatterino";
 let port = null;
 let portConnectBlocked = false; // legacy health field; state remains recoverable
@@ -180,6 +262,9 @@ let lastNativeError = "";
 let lastNativeConnectedAt = 0;
 const PORT_CONNECT_COOLDOWN_MS = 5000;
 const PORT_RETRY_MAX_MS = 60000;
+// connectNative() returns a port even when the host is missing or crashes on
+// launch; only a port that talks to us or stays up this long is healthy.
+const NATIVE_STABLE_MS = 10000;
 // Keep the lease comfortably longer than the one-minute reconciliation alarm
 // so a delayed alarm still has time to renew an otherwise healthy session.
 const NATIVE_LEASE_MS = 180000;
@@ -384,6 +469,23 @@ async function ensureDesiredSession(windowId, tabId, channel) {
   };
   await sessionStore.put(session);
   return session;
+}
+
+// Undo ensureDesiredSession for a measurement that lost a race with a tab
+// switch, unless a newer attach for the same session already took over.
+async function abandonDesiredSession(session) {
+  const current = await sessionStore.get(session.sessionId);
+  if (!current || current.generation !== session.generation) return;
+  if (pendingAttachRequests.get(String(current.windowId))?.sessionId ===
+      current.sessionId) return;
+  if (await isCurrentChannelTab(current.tabId, current.windowId, current.channel)) {
+    return;
+  }
+  current.desired = false;
+  current.attached = false;
+  current.leaseExpiresAt = 0;
+  await sessionStore.put(current);
+  await sendOverlayState(current, "revealed", "detach");
 }
 
 async function sessionsForWindow(windowId) {
@@ -670,12 +772,16 @@ function connectPort(fromRetry = false) {
   setNativeState("connecting", { reason: fromRetry ? "retry" : "demand" });
 
   console.log('[ATTACH-DEBUG] Attempting to connect to native host:', appName);
+  let thisPort;
+  let portProvedHealthy = false;
   try {
-    port = chrome.runtime.connectNative(appName);
+    port = thisPort = chrome.runtime.connectNative(appName);
     console.log('[ATTACH-DEBUG] Native host connection successful');
     lastNativeError = "";
     lastNativeConnectedAt = Date.now();
-    nativeBackoff.reset();
+    // Do not reset the backoff here: a missing or crash-looping host still
+    // yields a port, and resetting on every attempt pinned retries at the
+    // base delay forever. Reset once the port proves healthy instead.
     nativeRetryAt = 0;
     setNativeState("connected", { reason: "connected" });
   } catch (error) {
@@ -693,7 +799,14 @@ function connectPort(fromRetry = false) {
     return;
   }
 
-  port.onMessage.addListener((msg) => {
+  thisPort.onMessage.addListener((msg) => {
+    // Ignore late traffic from a port that has since been replaced.
+    if (port !== thisPort) return;
+    if (!portProvedHealthy) {
+      portProvedHealthy = true;
+      nativeBackoff.reset();
+    }
+    if (!msg || typeof msg !== "object") return;
     if (msg?.action === "nativeChatResult") {
       void routeNativeChatResult(msg);
       return;
@@ -747,6 +860,8 @@ function connectPort(fromRetry = false) {
             const leaseExpiresAt = Number(msg.leaseExpiresAt);
             if (
               !session ||
+              // A renewal racing a detach must not re-hide Twitch chat.
+              session.desired !== true ||
               (msg.generation !== undefined &&
                 Number(msg.generation) !== Number(session.generation)) ||
               !Number.isFinite(leaseExpiresAt) ||
@@ -788,9 +903,16 @@ function connectPort(fromRetry = false) {
       return;
     }
   });
-  port.onDisconnect.addListener(() => {
+  thisPort.onDisconnect.addListener(() => {
     const lastError = chrome.runtime.lastError?.message ?? "";
+    if (port !== thisPort) return;
     lastNativeError = lastError;
+    if (
+      !portProvedHealthy &&
+      Date.now() - lastNativeConnectedAt >= NATIVE_STABLE_MS
+    ) {
+      nativeBackoff.reset();
+    }
 
     console.warn(
       "[ATTACH-DEBUG] Native port DISCONNECTED. lastError:",
@@ -882,11 +1004,23 @@ if (chrome.alarms?.onAlarm?.addListener) {
       void reconcileDesiredSessions();
     }
   });
-  try {
-    chrome.alarms.create("chatterino-reconcile", { periodInMinutes: 1 });
-  } catch {
-    // Firefox/older test harnesses may not expose alarms.
-  }
+  // Every worker wake-up re-evaluates this file. Re-creating the periodic
+  // alarm each time restarts its one-minute countdown, so a worker woken more
+  // often than once a minute never reconciled or renewed leases. Only create
+  // it when it is missing.
+  void (async () => {
+    try {
+      const existing = chrome.alarms.get
+        ? await chrome.alarms.get("chatterino-reconcile")
+        : undefined;
+      if (existing) return;
+      await chrome.alarms.create("chatterino-reconcile", {
+        periodInMinutes: 1,
+      });
+    } catch {
+      // Firefox/older test harnesses may not expose alarms.
+    }
+  })();
 }
 
 if (chrome.runtime?.onStartup?.addListener) {
@@ -939,11 +1073,12 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
   const window = await safeGetWindow(windowId);
   if (!window) return;
 
-  // this returns all tabs when the query fails
-  const tabs = await chrome.tabs.query({
-    windowId: windowId,
-    active: true,
-  });
+  const tabs = await chrome.tabs
+    .query({
+      windowId: windowId,
+      active: true,
+    })
+    .catch(() => []);
   if (tabs.length === 1) {
     let tab = tabs[0];
 
@@ -1081,6 +1216,9 @@ function forwardNativeMessage(message) {
     return;
   }
 
+  // A configuration failure (host not registered or forbidden) cannot succeed
+  // via a one-shot either; each attempt would only produce another error.
+  if (nativeConnection.state === "blocked") return;
   console.log('[ATTACH-DEBUG] No persistent port, using sendNativeMessage:', outbound);
   chrome.runtime.sendNativeMessage(appName, outbound, () => {
     if (chrome.runtime.lastError) {
@@ -1173,14 +1311,17 @@ async function routeSendNativeChat(message) {
       postV2Result("rejected", "identity-mismatch");
       return;
     }
-
-    const targetTab = await chrome.tabs.get(session.tabId).catch(() => null);
     if (
-      !targetTab ||
-      Number(targetTab.windowId) !== Number(session.windowId) ||
-      String(matchChannelName(targetTab.url || "") || "").toLowerCase() !==
-        String(session.channel || "").toLowerCase()
+      typeof message.message !== "string" ||
+      !message.message.trim() ||
+      [...message.message].length > MAX_NATIVE_CHAT_CHARS
     ) {
+      postV2Result("rejected", "invalid-message");
+      return;
+    }
+
+    const targetTab = await getSessionTwitchTab(session);
+    if (!targetTab) {
       postV2Result("rejected", "tab-context-mismatch");
       return;
     }
@@ -1258,12 +1399,22 @@ async function routeSendMinuteWatched(message) {
     );
   }
 
-  if (!session?.tabId) {
+  if (!session?.tabId || session.desired !== true) {
     postResult("rejected", "no-active-session");
     return;
   }
+  if (
+    message.channel !== undefined &&
+    String(message.channel).toLowerCase() !==
+      String(session.channel || "").toLowerCase()
+  ) {
+    postResult("rejected", "identity-mismatch");
+    return;
+  }
 
-  const targetTab = await chrome.tabs.get(session.tabId).catch(() => null);
+  // The native host must never be able to direct this at a tab that has left
+  // the session's Twitch channel (or Twitch entirely).
+  const targetTab = await getSessionTwitchTab(session);
   if (!targetTab) {
     postResult("rejected", "tab-not-found");
     return;
@@ -1293,6 +1444,8 @@ async function routeSendMinuteWatched(message) {
 // receiving messages from content scripts and the popup
 chrome.runtime.onMessage.addListener((message, sender, callback) => {
   if (!message || typeof message !== "object") return;
+  const ownId = chrome.runtime?.id;
+  if (ownId && sender?.id && sender.id !== ownId) return;
   if (
     message.action === "engagement" ||
     message.action === "prediction" ||
@@ -1301,10 +1454,9 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
     message.action === "rewardClear" ||
     message.action === "minuteWatchedResult"
   ) {
-    if (
-      !sender.tab?.id ||
-      !/^https:\/\/([a-z0-9-]+\.)*twitch\.tv\//i.test(sender.tab.url || "")
-    ) {
+    if (!isTwitchTabSender(sender)) return;
+    if (boundedSize(message) > MAX_FORWARDED_MESSAGE_CHARS) {
+      console.warn("[Chatterino] Dropping oversized message:", message.action);
       return;
     }
     forwardNativeMessage(message);
@@ -1313,12 +1465,31 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
 
   switch (message.type) {
     case "get-integration-health":
-      getIntegrationHealth().then(callback);
+      // Exposes native error text and transition history: popup only.
+      if (!isExtensionPageSender(sender)) return;
+      getIntegrationHealth()
+        .then(callback)
+        .catch(() => callback(null));
       return true;
     case "get-setting":
-      Settings.get(message.key).then(callback);
+      if (!Settings.has(message.key)) {
+        callback(undefined);
+        return;
+      }
+      Settings.get(message.key)
+        .then(callback)
+        .catch(() => callback(undefined));
       return true;
     case "set-setting":
+      // Content scripts relay page-world events, so only the popup may change
+      // settings, and only to a value of the expected type.
+      if (
+        !isExtensionPageSender(sender) ||
+        !Settings.has(message.key) ||
+        typeof message.value !== "boolean"
+      ) {
+        return;
+      }
       (async () => {
         await Settings.set(message.key, message.value);
 
@@ -1343,7 +1514,9 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
           }
         }
         await updateBadge();
-      })();
+      })().catch((error) =>
+        console.warn("[Chatterino] Failed to apply setting:", error)
+      );
       break;
     case "get-os":
       chrome.runtime.getPlatformInfo((info) => callback(info.os));
@@ -1353,7 +1526,10 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
       // https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/onMessage
       return true;
       break;
-    case "location-updated":
+    case "location-updated": {
+      if (!isTwitchTabSender(sender) || !sender.tab.active) return;
+      const locationChannel = matchChannelName(sender.tab.url);
+      if (!locationChannel) return;
       safeGetWindow(sender.tab.windowId).then((window) => {
         if (!window?.focused) return;
 
@@ -1362,12 +1538,17 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
           type: "twitch",
           winId: sender.tab.windowId,
           version: 0,
-          name: matchChannelName(sender.tab.url),
+          name: locationChannel,
         };
         forwardNativeMessage(data);
       });
       break;
-    case "chat-resized":
+    }
+    case "chat-resized": {
+      if (!isTwitchTabSender(sender)) return;
+      // Geometry is relayed to the native window placement code; reject
+      // malformed or absurd values instead of crashing on them or sending NaN.
+      if (!isValidChatGeometry(message)) return;
       const startupReplayDeadline = pendingStartupReplayTabs.get(
         sender.tab?.id
       );
@@ -1419,8 +1600,17 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
           sender.tab.id,
           matchChannelName(sender.tab.url)
         );
+        if (measurementRevision !== windowRevision(sender.tab.windowId)) {
+          // A tab switch (and its tryDetach) ran while the session was being
+          // written; do not leave the background tab marked as desired.
+          await abandonDesiredSession(session);
+          return;
+        }
         await sendOverlayState(session, "prepare");
-        if (measurementRevision !== windowRevision(sender.tab.windowId)) return;
+        if (measurementRevision !== windowRevision(sender.tab.windowId)) {
+          await abandonDesiredSession(session);
+          return;
+        }
         await tryAttach(sender.tab.windowId, window.state == "fullscreen", {
           name: matchChannelName(sender.tab.url),
           size: size,
@@ -1430,12 +1620,16 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
           sessionId: session.sessionId,
           generation: session.generation,
         }, measurementRevision);
-      });
+      }).catch((error) =>
+        console.warn("[Chatterino] Failed to process chat geometry:", error)
+      );
       break;
+    }
     case "detach":
+      if (!Number.isInteger(sender?.tab?.id)) return;
       // A background Twitch tab may finish navigating after another tab won.
       chrome.tabs.get(sender.tab.id).then((tab) => {
-        if (tab.active) return tryDetach(tab.windowId);
+        if (tab?.active) return tryDetach(tab.windowId);
       }).catch(() => {});
       break;
   }
@@ -1558,11 +1752,24 @@ async function sendDetach(winID, knownSessions) {
 
 
 async function routeNativeChatResult(message) {
-  if (!message.sessionId) return;
+  if (typeof message.sessionId !== "string" || !message.sessionId) return;
+  if (
+    !["accepted", "rejected", "uncertain"].includes(message.status) ||
+    (message.reason !== undefined &&
+      (typeof message.reason !== "string" ||
+        message.reason.length > 96 ||
+        !/^[a-z0-9][a-z0-9._-]*$/i.test(message.reason))) ||
+    (message.requestId !== undefined &&
+      (typeof message.requestId !== "string" ||
+        !/^[a-z0-9._:-]{1,128}$/i.test(message.requestId)))
+  ) {
+    return;
+  }
   const session = await sessionStore.get(message.sessionId);
   if (!session || Number(message.generation) !== Number(session.generation)) {
     return;
   }
+  if (!(await getSessionTwitchTab(session))) return;
   try {
     await chrome.tabs.sendMessage(session.tabId, {
       action: "nativeChatResult",
@@ -1577,10 +1784,16 @@ async function routeNativeChatResult(message) {
   }
 }
 
+// Badge text is not persisted across browser restarts, so this also runs on
+// every worker start.
 async function updateBadge() {
-  chrome.action.setBadgeText({
-    text: (await Settings.get("replaceTwitchChat")) ? "" : "off",
-  });
+  try {
+    await chrome.action?.setBadgeText?.({
+      text: (await Settings.get("replaceTwitchChat")) ? "" : "off",
+    });
+  } catch (error) {
+    console.warn("[Chatterino] Failed to update badge:", error);
+  }
 }
 
 function getPreviousTabs() {
@@ -1623,12 +1836,21 @@ async function syncTabs() {
 
   await setPreviousTabs(previousTabs);
 }
-syncTabs();
+function syncTabsSafely() {
+  return syncTabs().catch((error) =>
+    console.warn("[Chatterino] Failed to sync Twitch tabs:", error)
+  );
+}
+syncTabsSafely();
+void updateBadge();
 
-chrome.tabs.onCreated.addListener(() => syncTabs());
-chrome.tabs.onRemoved.addListener(() => syncTabs());
+chrome.tabs.onCreated.addListener(() => syncTabsSafely());
+chrome.tabs.onRemoved.addListener(() => syncTabsSafely());
 chrome.tabs.onUpdated.addListener((id, changeInfo) => {
-  if ("url" in changeInfo) {
-    syncTabs();
+  // Without the `tabs` permission changeInfo.url is only reported for Twitch
+  // URLs, so a Twitch tab navigating to another site never carried a url
+  // change. A finished load is a cheap, de-duplicated signal for that case.
+  if ("url" in changeInfo || changeInfo.status === "complete") {
+    syncTabsSafely();
   }
 });

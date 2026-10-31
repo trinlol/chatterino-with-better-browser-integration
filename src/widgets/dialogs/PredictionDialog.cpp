@@ -2613,19 +2613,20 @@ void PredictionDialog::buildBettingUI()
         statusLabel->setAlignment(Qt::AlignCenter);
         questionCardLayout->addWidget(statusLabel);
 
-        if (prediction.status == "ACTIVE")
+        if (prediction.status == "ACTIVE" &&
+            (!prediction.createdAt.isValid() ||
+             prediction.predictionWindowSeconds <= 0))
+        {
+            // Twitch didn't expose a lock deadline. Don't invent one: a
+            // fabricated window restarted on every refresh and stuck near
+            // "Closing in 2:00".
+            statusLabel->setText("Submissions open");
+        }
+        else if (prediction.status == "ACTIVE")
         {
             QPointer<QLabel> labelPtr = statusLabel;
-            auto createdAt = prediction.createdAt;
-            int windowSecs = prediction.predictionWindowSeconds;
-            if (!createdAt.isValid())
-            {
-                createdAt = QDateTime::currentDateTimeUtc();
-            }
-            if (windowSecs <= 0)
-            {
-                windowSecs = 120;
-            }
+            const auto createdAt = prediction.createdAt;
+            const int windowSecs = prediction.predictionWindowSeconds;
             auto updateCountdown = [labelPtr, createdAt, windowSecs]() {
                 if (!labelPtr)
                 {

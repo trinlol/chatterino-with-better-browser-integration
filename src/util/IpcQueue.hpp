@@ -26,6 +26,8 @@ enum class DeliveryStatus {
     QueueUnavailable,
     QueueFull,
     InvalidMessage,
+    /// Accepted for asynchronous delivery; the outcome is only logged.
+    Queued,
 };
 
 [[nodiscard]] DeliveryStatus sendMessage(const char *name,

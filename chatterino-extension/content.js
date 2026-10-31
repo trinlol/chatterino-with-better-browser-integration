@@ -98,6 +98,7 @@
     "chatterino-companion-active"
   );
   let domPointsLastSeen = 0;
+  let domBadgesLastSeen = 0;
   let domPredictionLastSeen = 0;
   let activeBanner = null;
   let activePredictionSource = null;
@@ -107,7 +108,29 @@
   let syncTimer = null;
   let lastSyncAt = 0;
   let syncInProgress = false;
+  let observerAttached = false;
   const MIN_SYNC_INTERVAL_MS = 250;
+  // Set once the extension context is invalidated (extension reloaded or
+  // updated). The orphaned script must stop all of its timers and observers:
+  // every chrome.* call would throw from then on.
+  let contextTornDown = false;
+
+  // chrome.runtime.sendMessage throws synchronously once the context is
+  // invalidated and returns a rejecting promise when the service worker has
+  // no receiver. Neither may escape into the sync loop or a Twitch event.
+  function safeSendMessage(message) {
+    if (contextTornDown || isContextInvalidated()) {
+      return false;
+    }
+    try {
+      const result = chrome.runtime.sendMessage(message);
+      result?.catch?.(() => {});
+      return true;
+    } catch (_err) {
+      isContextInvalidated();
+      return false;
+    }
+  }
 
   function recordObserverCallback(startedAt) {
     const metrics = window.ChatterinoPerformanceMetrics;
@@ -276,7 +299,7 @@
       return;
     }
     setRewardPendingUi(true);
-    chrome.runtime.sendMessage({
+    safeSendMessage({
       action: "rewardPending",
       channel: channelName,
       rewardId: detail?.rewardId || "",
@@ -291,7 +314,7 @@
     if (!channelName) {
       return;
     }
-    chrome.runtime.sendMessage({
+    safeSendMessage({
       action: "rewardClear",
       channel: channelName,
       reason: reason || "",
@@ -348,6 +371,9 @@
   }
 
   function scheduleSync() {
+    if (contextTornDown) {
+      return;
+    }
     syncPending = true;
     if (syncTimer !== null) {
       return;
@@ -450,13 +476,20 @@
       return;
     }
     intentionalRewardDialogOpen = true;
-    const clearIntentional = setInterval(() => {
+    // One watcher at a time: each click used to stack another 250 ms interval
+    // (each living up to 120 s), and an older one could clear the flag for a
+    // newer click.
+    stopIntentionalRewardWatcher();
+    intentionalRewardWatchId = setInterval(() => {
       if (!findNativeRewardDialog()) {
         intentionalRewardDialogOpen = false;
-        clearInterval(clearIntentional);
+        stopIntentionalRewardWatcher();
       }
     }, 250);
-    setTimeout(() => clearInterval(clearIntentional), 120000);
+    intentionalRewardWatchTimeout = setTimeout(
+      stopIntentionalRewardWatcher,
+      120000
+    );
     // Programmatic click bubbles through the React root, so Twitch's own
     // handler opens/closes the reward center even if the button is hidden.
     nativeBtn.click();
@@ -507,7 +540,7 @@
     if (replica.__ccSourceHtml !== sourceHtml) {
       replica.__ccSourceHtml = sourceHtml;
       replica.className = summary.parentElement?.className || "";
-      replica.innerHTML = sourceHtml;
+      replica.replaceChildren(summary.cloneNode(true));
       replica
         .querySelectorAll("[id]")
         .forEach((el) => el.removeAttribute("id"));
@@ -630,6 +663,7 @@
   }
 
   let identityDialogWatchId = null;
+  let identityDialogWatchTimeout = null;
 
   function findNativeChatIdentityDialog() {
     return (
@@ -733,10 +767,16 @@
     return true;
   }
 
+  // The 60 s cap timeout is tracked with the interval: an untracked cap from
+  // an earlier opening used to stop a watcher started for a later opening.
   function stopChatIdentityDialogWatcher() {
     if (identityDialogWatchId) {
       clearInterval(identityDialogWatchId);
       identityDialogWatchId = null;
+    }
+    if (identityDialogWatchTimeout) {
+      clearTimeout(identityDialogWatchTimeout);
+      identityDialogWatchTimeout = null;
     }
   }
 
@@ -751,9 +791,10 @@
       positionNativeChatIdentityDialog(anchorEl);
     }, 100);
 
-    setTimeout(() => {
-      stopChatIdentityDialogWatcher();
-    }, 60000);
+    identityDialogWatchTimeout = setTimeout(
+      stopChatIdentityDialogWatcher,
+      60000
+    );
   }
 
   function handleBadgeReplicaClick(replica) {
@@ -826,8 +867,19 @@
   }
 
   let rewardDialogWatchId = null;
+  let rewardDialogWatchTimeout = null;
   let predictionDialogWatchId = null;
+  let predictionDialogWatchTimeout = null;
+  let intentionalRewardWatchId = null;
+  let intentionalRewardWatchTimeout = null;
   let intentionalRewardDialogOpen = false;
+
+  function stopIntentionalRewardWatcher() {
+    clearInterval(intentionalRewardWatchId);
+    clearTimeout(intentionalRewardWatchTimeout);
+    intentionalRewardWatchId = null;
+    intentionalRewardWatchTimeout = null;
+  }
   let unintendedDismissTimer = null;
   let lastSuccessfulClaimAt = 0;
   let claimAttemptTimer = null;
@@ -1091,6 +1143,10 @@
       clearInterval(rewardDialogWatchId);
       rewardDialogWatchId = null;
     }
+    if (rewardDialogWatchTimeout) {
+      clearTimeout(rewardDialogWatchTimeout);
+      rewardDialogWatchTimeout = null;
+    }
   }
 
   function dismissNativeRewardDialog() {
@@ -1160,6 +1216,7 @@
     gqlState = null;
     activityStore.applyGraphql(null);
     intentionalRewardDialogOpen = false;
+    stopIntentionalRewardWatcher();
     lastSuccessfulClaimAt = 0;
     stopClaimBootstrap();
     stopRewardDialogWatcher();
@@ -1196,9 +1253,7 @@
       positionNativeRewardDialog(anchorEl);
     }, 100);
 
-    setTimeout(() => {
-      stopRewardDialogWatcher();
-    }, 60000);
+    rewardDialogWatchTimeout = setTimeout(stopRewardDialogWatcher, 60000);
   }
 
   // Prediction bet prompt — Twitch's "How many Channel Points do you want to
@@ -1461,6 +1516,10 @@
       clearInterval(predictionDialogWatchId);
       predictionDialogWatchId = null;
     }
+    if (predictionDialogWatchTimeout) {
+      clearTimeout(predictionDialogWatchTimeout);
+      predictionDialogWatchTimeout = null;
+    }
   }
 
   function startPredictionDialogWatcher(anchorEl) {
@@ -1473,9 +1532,10 @@
       positionNativePredictionDialog(anchorEl);
     }, 100);
 
-    setTimeout(() => {
-      stopPredictionDialogWatcher();
-    }, 60000);
+    predictionDialogWatchTimeout = setTimeout(
+      stopPredictionDialogWatcher,
+      60000
+    );
   }
 
   function schedulePredictionDialogPositioning(anchorEl) {
@@ -1503,9 +1563,14 @@
 
   function syncGqlFromDomAttributes() {
     const root = document.documentElement;
-    const balance = root.getAttribute("data-cc-gql-balance");
+    const PageData = window.ChatterinoPageData;
+    const balance = PageData.sanitizeBalance(
+      root.getAttribute("data-cc-gql-balance")
+    );
     const claim = root.getAttribute("data-cc-gql-claim");
-    const claimId = root.getAttribute("data-cc-gql-claim-id");
+    const claimId = PageData.sanitizeId(
+      root.getAttribute("data-cc-gql-claim-id")
+    );
     const predRaw = root.getAttribute("data-cc-gql-prediction");
     const pollRaw = root.getAttribute("data-cc-gql-poll");
     const rewardsRaw = root.getAttribute("data-cc-gql-rewards");
@@ -1538,39 +1603,15 @@
     };
 
     if (hasPrediction) {
-      if (predRaw) {
-        try {
-          gqlState.prediction = JSON.parse(predRaw);
-        } catch (_) {
-          gqlState.prediction = {
-            title: predRaw,
-            options: [],
-            status: "started",
-          };
-        }
-      } else {
-        gqlState.prediction = null;
-      }
+      gqlState.prediction = PageData.parseActivityAttribute(predRaw);
     }
 
     if (hasPoll) {
-      if (pollRaw) {
-        try {
-          gqlState.poll = JSON.parse(pollRaw);
-        } catch (_) {
-          gqlState.poll = { title: pollRaw, options: [], status: "started" };
-        }
-      } else {
-        gqlState.poll = null;
-      }
+      gqlState.poll = PageData.parseActivityAttribute(pollRaw);
     }
 
     if (rewardsRaw) {
-      try {
-        gqlState.rewards = JSON.parse(rewardsRaw);
-      } catch (_) {
-        gqlState.rewards = [];
-      }
+      gqlState.rewards = PageData.parseRewardsAttribute(rewardsRaw);
     }
 
     activityStore.applyGraphql(gqlState);
@@ -1591,13 +1632,49 @@
 
     document.body.appendChild(portal);
 
-    window.addEventListener("scroll", () => positionToolbarPortal(), true);
-    window.addEventListener("resize", () => positionToolbarPortal());
+    // Listeners are installed once per script, not once per portal: if the
+    // portal is ever removed and rebuilt they would otherwise stack.
+    if (!portalListenersInstalled) {
+      portalListenersInstalled = true;
+      window.addEventListener("scroll", schedulePortalReposition, true);
+      window.addEventListener("resize", schedulePortalReposition);
+    }
 
     return portal;
   }
 
+  let portalListenersInstalled = false;
+  let portalRepositionFrame = null;
+  let portalRepositionFollowUp = false;
+
+  // Capture-phase scroll fires for every scrolling element on the page (chat
+  // list, sidebars); a full reposition per event forced a layout each time.
+  // Coalesce scroll/resize/mount requests into at most one reposition per
+  // frame, plus a single follow-up frame for layout that settles late.
+  function schedulePortalReposition(withFollowUp = false) {
+    if (contextTornDown) {
+      return;
+    }
+    if (withFollowUp === true) {
+      portalRepositionFollowUp = true;
+    }
+    if (portalRepositionFrame !== null) {
+      return;
+    }
+    portalRepositionFrame = requestAnimationFrame(() => {
+      portalRepositionFrame = null;
+      positionToolbarPortal();
+      if (portalRepositionFollowUp) {
+        portalRepositionFollowUp = false;
+        schedulePortalReposition();
+      }
+    });
+  }
+
   function positionToolbarPortal() {
+    if (contextTornDown) {
+      return null;
+    }
     ensureToolbarPortal();
     const portal = document.getElementById("chatterino-toolbar-portal");
     const slot = document.getElementById("chatterino-toolbar-slot");
@@ -1681,24 +1758,33 @@
 
   function getToolbarSlot() {
     ensureToolbarPortal();
-    positionToolbarPortal();
     return document.getElementById("chatterino-toolbar-slot");
   }
 
+  // Every replica is mounted on every sync. Each mount used to run two
+  // synchronous repositions plus two nested animation frames, i.e. ~20 layout
+  // passes per sync. Reposition synchronously only when the slot content
+  // actually changed; otherwise the coalesced frame (and runSync's final
+  // reposition) keep the portal aligned.
   function mountInSlot(element, orderIndex) {
     const slot = getToolbarSlot();
     if (!slot || !element) {
       return;
     }
-    element.style.order = String(orderIndex);
+    const order = String(orderIndex);
+    let changed = false;
+    if (element.style.order !== order) {
+      element.style.order = order;
+      changed = true;
+    }
     if (element.parentElement !== slot) {
       slot.appendChild(element);
+      changed = true;
     }
-    positionToolbarPortal();
-    requestAnimationFrame(() => {
+    if (changed) {
       positionToolbarPortal();
-      requestAnimationFrame(() => positionToolbarPortal());
-    });
+    }
+    schedulePortalReposition(true);
   }
 
   function getTwitchChannelName() {
@@ -1729,16 +1815,97 @@
   }
 
   function isContextInvalidated() {
-    if (!chrome?.runtime?.id) {
-      if (pollIntervalId) {
-        clearInterval(pollIntervalId);
-      }
-      if (syncIntervalId) {
-        clearInterval(syncIntervalId);
-      }
+    if (contextTornDown) {
+      return true;
+    }
+    let alive = false;
+    try {
+      alive = Boolean(chrome?.runtime?.id);
+    } catch (_err) {
+      alive = false;
+    }
+    if (!alive) {
+      teardownOrphanedScript();
       return true;
     }
     return false;
+  }
+
+  // Previously only the two intervals were cleared, so the document-wide
+  // MutationObservers, watcher intervals and claim timers of an orphaned
+  // script kept running (and throwing on chrome.* calls) until the tab closed.
+  function teardownOrphanedScript() {
+    if (contextTornDown) {
+      return;
+    }
+    contextTornDown = true;
+    clearInterval(pollIntervalId);
+    clearInterval(syncIntervalId);
+    pollIntervalId = null;
+    syncIntervalId = null;
+    clearTimeout(syncTimer);
+    syncTimer = null;
+    syncPending = false;
+    clearTimeout(claimAttemptTimer);
+    claimAttemptTimer = null;
+    clearTimeout(claimBonusDebounceTimer);
+    claimBonusDebounceTimer = null;
+    clearTimeout(bootstrapObserveTimer);
+    bootstrapObserveTimer = null;
+    channelResetTimers.forEach(clearTimeout);
+    channelResetTimers = [];
+    stopClaimBootstrap();
+    stopRewardDialogWatcher();
+    stopIntentionalRewardWatcher();
+    stopUnintendedDismissWatcher();
+    stopChatIdentityDialogWatcher();
+    stopPredictionDialogWatcher();
+    observer.disconnect();
+    bootstrapObserver.disconnect();
+    claimBonusObserver.disconnect();
+    observerAttached = false;
+    removeToolbarReplicas();
+  }
+
+  // The orphaned script can no longer keep its toolbar replicas current (or
+  // forward their clicks), so they are removed and the native controls they
+  // stood in for are revealed again. Only DOM owned by this script is touched.
+  function removeToolbarReplicas() {
+    try {
+      cancelAnimationFrame(portalRepositionFrame);
+    } catch (_err) {
+      // requestAnimationFrame may be unavailable; nothing to cancel then.
+    }
+    portalRepositionFrame = null;
+    portalRepositionFollowUp = false;
+    if (portalListenersInstalled) {
+      try {
+        window.removeEventListener("scroll", schedulePortalReposition, true);
+        window.removeEventListener("resize", schedulePortalReposition);
+      } catch (_err) {
+        // The listeners are inert after teardown anyway.
+      }
+      portalListenersInstalled = false;
+    }
+    for (const cleanup of [
+      removeBadgeReplica,
+      removePointsReplica,
+      cleanupPredictionUi,
+      cleanupPollUi,
+    ]) {
+      try {
+        cleanup();
+      } catch (_err) {
+        // Keep removing the rest even if Twitch markup changed underneath.
+      }
+    }
+    for (const id of [
+      "chatterino-points-fallback",
+      "chatterino-toolbar-portal",
+    ]) {
+      document.getElementById(id)?.remove();
+    }
+    document.documentElement.classList.remove("chatterino-video-fullscreen");
   }
 
   function resetFingerprints() {
@@ -1915,7 +2082,7 @@
   }
 
   function scheduleAutoClaimAttempt() {
-    if (claimAttemptTimer !== null) {
+    if (contextTornDown || claimAttemptTimer !== null) {
       return;
     }
     claimAttemptTimer = setTimeout(() => {
@@ -1949,7 +2116,9 @@
     }
     const claimId =
       gqlState?.channelPoints?.claimId ||
-      document.documentElement.getAttribute("data-cc-gql-claim-id");
+      window.ChatterinoPageData.sanitizeId(
+        document.documentElement.getAttribute("data-cc-gql-claim-id")
+      );
     if (!claimId) {
       return;
     }
@@ -2199,7 +2368,7 @@
     const pinFingerprint = JSON.stringify({ text: pinnedText });
     if (pinFingerprint !== lastPinFingerprint) {
       lastPinFingerprint = pinFingerprint;
-      chrome.runtime.sendMessage({
+      safeSendMessage({
         action: "pin",
         channel: channelName,
         message: pinnedText,
@@ -2308,18 +2477,26 @@
     return { title, options, status, durationSeconds, winner };
   }
 
+  // Ended DOM activities expire like GraphQL ones do in twitch-api.js. The
+  // native card itself (and its toolbar replica) stays as Twitch shows it;
+  // only what is published to the desktop is affected.
+  const domEndedExpiry = window.ChatterinoPageData.createEndedActivityExpiry();
+
   function mergeVotingDetails(kind, domDetails) {
     activityStore.applyGraphql(gqlState);
-    return activityStore.observeDom(kind, domDetails);
+    return activityStore.observeDom(
+      kind,
+      domEndedExpiry.filter(kind, domDetails)
+    );
   }
 
-  function sendVotingMessage(kind, channelName) {
-    const publication = activityStore.nextPublication(kind);
+  function sendVotingMessage(kind, channelName, options) {
+    const publication = activityStore.nextPublication(kind, options);
     if (!publication || !channelName) {
       return;
     }
     const details = publication.activity;
-    chrome.runtime.sendMessage(
+    safeSendMessage(
       window.ChatterinoProtocol.create("engagement", {
         kind,
         channel: channelName,
@@ -2343,7 +2520,7 @@
       return;
     }
     for (const kind of window.ChatterinoActivity.ACTIVITY_KINDS) {
-      chrome.runtime.sendMessage(
+      safeSendMessage(
         window.ChatterinoProtocol.create("engagement", {
           lifecycle: "remove",
           kind,
@@ -2353,15 +2530,12 @@
     }
   }
 
-  // Predictions are voted on through the moved-elements replica beside the
-  // player (Twitch's native banner, parked off-screen and cloned into the
-  // toolbar, or a fallback entry that reopens the native bet prompt). We do
-  // NOT forward the engagement to the desktop: the desktop banner would just
-  // paste the prediction title over the Chatterino chat instead of opening a
-  // place to actually spend points. Polls still sync because the desktop
-  // banner opens a working prediction/poll dialog for them.
-  function sendPredictionMessage(_channelName) {
-    /* intentionally a no-op — see comment above */
+  // Predictions are voted on in two places: the replica beside the player and
+  // the sticky banner at the top of the Chatterino chat, whose click opens the
+  // desktop prediction dialog. Both follow the same activity store, so the
+  // banner appears when a prediction starts and is removed when it ends.
+  function sendPredictionMessage(channelName) {
+    sendVotingMessage("prediction", channelName, { hideEnded: true });
   }
 
   function sendPollMessage(channelName) {
@@ -2415,7 +2589,12 @@
             requestAnimationFrame(() => scheduleSync());
             setTimeout(scheduleSync, 100);
           } else if (kind === "prediction") {
-            if (sourceRoot && typeof sourceRoot.click === "function") {
+            // A source detached by a Twitch re-render (or SPA navigation)
+            // swallows the click; fall back to the live native trigger.
+            if (
+              sourceRoot?.isConnected &&
+              typeof sourceRoot.click === "function"
+            ) {
               sourceRoot.click();
             } else {
               window.ChatterinoVotingUi?.activateVotingTrigger(
@@ -2502,6 +2681,17 @@
     }
 
     sendPredictionMessage(channelName);
+    // Voting is over once Twitch reports the prediction locked or ended. Only
+    // trust that when GraphQL confirmed it: the DOM text heuristic can misread
+    // a title containing "won't".
+    if (
+      details?.source === "dom+graphql" &&
+      (details.status === "locked" || details.status === "ended")
+    ) {
+      document.getElementById("chatterino-prediction-replica")?.remove();
+      document.getElementById("chatterino-prediction-min-icon")?.remove();
+      return;
+    }
     if (activePredictionSource && activePredictionSource !== source) {
       releaseVotingSource(activePredictionSource);
     }
@@ -2563,6 +2753,7 @@
       prediction.status === "locked"
     ) {
       document.getElementById("chatterino-prediction-fallback")?.remove();
+      sendPredictionMessage(channelName);
       return;
     }
 
@@ -2604,6 +2795,7 @@
 
     pill.querySelector(".label").textContent = prediction.title;
     mountInSlot(pill, 1);
+    sendPredictionMessage(channelName);
   }
 
   function cleanupPredictionUi() {
@@ -2675,6 +2867,22 @@
     );
   }
 
+  let lastSyncStageError = "";
+  let channelResetTimers = [];
+
+  function runSyncStage(name, stage) {
+    try {
+      stage();
+    } catch (err) {
+      // Log each distinct failure once instead of on every sync.
+      const signature = `${name}: ${err?.message || err}`;
+      if (signature !== lastSyncStageError) {
+        lastSyncStageError = signature;
+        console.warn("[Chatterino Companion] sync stage failed", signature);
+      }
+    }
+  }
+
   function runSync() {
     if (isContextInvalidated()) {
       return;
@@ -2686,6 +2894,7 @@
     syncInProgress = true;
     const syncStartedAt = window.performance?.now?.() ?? Date.now();
     observer.disconnect();
+    observerAttached = false;
     try {
       syncGqlFromDomAttributes();
       syncCompanionState();
@@ -2693,9 +2902,11 @@
       const channelName = getTwitchChannelName();
       if (channelName !== currentChannel) {
         removeVotingMessages(currentChannel);
+        domEndedExpiry.reset();
         currentChannel = channelName;
         activityStore.setChannel(channelName);
         domPointsLastSeen = 0;
+        domBadgesLastSeen = 0;
         lastPinFingerprint = "";
         resetFingerprints();
         cleanupPredictionUi();
@@ -2707,102 +2918,121 @@
           })
         );
         scheduleClaimBootstrap();
-        setTimeout(resetFingerprints, 1000);
-        setTimeout(resetFingerprints, 2000);
-        setTimeout(resetFingerprints, 5000);
+        // Republish shortly after a channel change. Timers of a previous,
+        // quickly abandoned channel are cancelled first.
+        channelResetTimers.forEach(clearTimeout);
+        channelResetTimers = [1000, 2000, 5000].map((delay) =>
+          setTimeout(resetFingerprints, delay)
+        );
       }
 
       scheduleAutoClaimAttempt();
-      handlePinnedMessages(channelName);
+      // Each stage is isolated: a Twitch markup change that makes one of
+      // them throw must not skip the remaining stages (voting replicas,
+      // dialog positioning, portal placement) on every single sync.
+      runSyncStage("pinned", () => handlePinnedMessages(channelName));
 
-      if (findChatBadgeCarousel() || findNativeChatBadgeButton()) {
-        ensureBadgeReplica();
-      } else if (channelName === "") {
-        removeBadgeReplica();
-      } else if (document.getElementById("chatterino-badge-replica")) {
-        ensureBadgeReplica();
-      }
-
-      const pointsSummary = findPointsSummary();
-      if (pointsSummary) {
-        domPointsLastSeen = Date.now();
-      }
-
-      const pointsText =
-        scrapePointsText(pointsSummary) ||
-        gqlState?.channelPoints?.balance ||
-        "";
-      if (pointsSummary) {
-        ensurePointsReplica();
-      } else if (channelName === "") {
-        removePointsReplica();
-      } else {
-        // Native summary was destroyed (e.g. Chatterino chat wipe) — keep the
-        // existing clone alive and refresh its balance from GQL data.
-        updateReplicaBalanceFromGql();
-      }
-
-      const pollBanner = findPollBanner();
-      if (pollBanner) {
-        handlePollBanner(pollBanner, channelName);
-      } else {
-        activityStore.removeDom("poll");
-        cleanupPollUi();
-        if (
-          gqlState?.poll?.title &&
-          (companionActive || isChatShellWiped() || channelName)
-        ) {
-          handlePollFallback(channelName);
-        } else {
-          sendPollMessage(channelName);
+      runSyncStage("badges", () => {
+        if (findChatBadgeCarousel() || findNativeChatBadgeButton()) {
+          domBadgesLastSeen = Date.now();
+          ensureBadgeReplica();
+        } else if (channelName === "") {
+          removeBadgeReplica();
+        } else if (document.getElementById("chatterino-badge-replica")) {
+          ensureBadgeReplica();
         }
-      }
+      });
 
-      const banner = findBanner();
-      if (banner) {
-        handlePredictionBanner(banner, channelName, pointsText);
-      } else {
-        activityStore.removeDom("prediction");
-        cleanupPredictionUi();
-        if (
-          gqlState?.prediction?.title &&
-          (companionActive || isChatShellWiped() || channelName)
-        ) {
-          handlePredictionFallback(channelName);
-        } else {
-          document.getElementById("chatterino-prediction-fallback")?.remove();
+      let pointsText = gqlState?.channelPoints?.balance || "";
+      runSyncStage("points", () => {
+        const pointsSummary = findPointsSummary();
+        if (pointsSummary) {
+          domPointsLastSeen = Date.now();
         }
-      }
 
-      const openRewardDialog = findNativeRewardDialog();
-      if (openRewardDialog && openRewardDialog.isConnected) {
-        positionNativeRewardDialog();
-      } else {
-        document
-          .querySelectorAll(".chatterino-native-reward-dialog")
-          .forEach((el) => {
-            unmarkRewardDialog(el);
-          });
-      }
-      const openPredictionDialog = findNativePredictionDialog();
-      if (openPredictionDialog && openPredictionDialog.isConnected) {
-        positionNativePredictionDialog();
-      } else {
-        document
-          .querySelectorAll(".chatterino-native-prediction-dialog")
-          .forEach((el) => {
-            unmarkPredictionDialog(el);
-          });
-      }
-      const openIdentityDialog = findNativeChatIdentityDialog();
-      if (!openIdentityDialog || !openIdentityDialog.isConnected) {
-        document.querySelectorAll(".chatterino-native-chat-identity-dialog").forEach((el) => {
-          el.classList.remove("chatterino-native-chat-identity-dialog");
-        });
-      }
-      checkNativeRewardPending();
+        pointsText =
+          scrapePointsText(pointsSummary) ||
+          gqlState?.channelPoints?.balance ||
+          "";
+        if (pointsSummary) {
+          ensurePointsReplica();
+        } else if (channelName === "") {
+          removePointsReplica();
+        } else {
+          // Native summary was destroyed (e.g. Chatterino chat wipe) — keep the
+          // existing clone alive and refresh its balance from GQL data.
+          updateReplicaBalanceFromGql();
+        }
+      });
 
-      positionToolbarPortal();
+      runSyncStage("poll", () => {
+        const pollBanner = findPollBanner();
+        if (pollBanner) {
+          handlePollBanner(pollBanner, channelName);
+        } else {
+          activityStore.removeDom("poll");
+          cleanupPollUi();
+          if (
+            gqlState?.poll?.title &&
+            (companionActive || isChatShellWiped() || channelName)
+          ) {
+            handlePollFallback(channelName);
+          } else {
+            sendPollMessage(channelName);
+          }
+        }
+      });
+
+      runSyncStage("prediction", () => {
+        const banner = findBanner();
+        if (banner) {
+          handlePredictionBanner(banner, channelName, pointsText);
+        } else {
+          activityStore.removeDom("prediction");
+          cleanupPredictionUi();
+          if (
+            gqlState?.prediction?.title &&
+            (companionActive || isChatShellWiped() || channelName)
+          ) {
+            handlePredictionFallback(channelName);
+          } else {
+            document.getElementById("chatterino-prediction-fallback")?.remove();
+            sendPredictionMessage(channelName);
+          }
+        }
+      });
+
+      runSyncStage("dialogs", () => {
+        const openRewardDialog = findNativeRewardDialog();
+        if (openRewardDialog && openRewardDialog.isConnected) {
+          positionNativeRewardDialog();
+        } else {
+          document
+            .querySelectorAll(".chatterino-native-reward-dialog")
+            .forEach((el) => {
+              unmarkRewardDialog(el);
+            });
+        }
+        const openPredictionDialog = findNativePredictionDialog();
+        if (openPredictionDialog && openPredictionDialog.isConnected) {
+          positionNativePredictionDialog();
+        } else {
+          document
+            .querySelectorAll(".chatterino-native-prediction-dialog")
+            .forEach((el) => {
+              unmarkPredictionDialog(el);
+            });
+        }
+        const openIdentityDialog = findNativeChatIdentityDialog();
+        if (!openIdentityDialog || !openIdentityDialog.isConnected) {
+          document.querySelectorAll(".chatterino-native-chat-identity-dialog").forEach((el) => {
+            el.classList.remove("chatterino-native-chat-identity-dialog");
+          });
+        }
+      });
+      runSyncStage("reward-pending", checkNativeRewardPending);
+
+      runSyncStage("portal", positionToolbarPortal);
     } finally {
       recordObserverCallback(syncStartedAt);
       syncInProgress = false;
@@ -2845,7 +3075,11 @@
 
   window.addEventListener("chatterino-companion-gql", (event) => {
     const prevClaimAvailable = gqlState?.channelPoints?.claimAvailable;
-    gqlState = event.detail;
+    const snapshot = window.ChatterinoPageData.sanitizeSnapshot(event.detail);
+    if (!snapshot) {
+      return;
+    }
+    gqlState = snapshot;
     activityStore.applyGraphql(gqlState);
     if (gqlState?.channelPoints?.claimAvailable) {
       scheduleAutoClaimAttempt();
@@ -2870,9 +3104,20 @@
   window.addEventListener(
     "chatterino-companion-minute-watched-result",
     (event) => {
-      chrome.runtime.sendMessage({
+      // The page can dispatch this event itself, so only known fields of the
+      // expected types are relayed and `action` cannot be overridden.
+      const detail = event.detail || {};
+      const text = (value, max) =>
+        typeof value === "string" ? value.slice(0, max) : "";
+      safeSendMessage({
+        ok: detail.ok === true,
+        statusCode: Number.isInteger(detail.statusCode) ? detail.statusCode : 0,
+        error: text(detail.error, 200),
+        requestId: text(detail.requestId, 128),
+        channel: text(detail.channel, 64),
+        streamId: text(detail.streamId, 64),
+        sessionId: text(detail.sessionId, 128),
         action: "minuteWatchedResult",
-        ...event.detail,
       });
     }
   );
@@ -2894,6 +3139,11 @@
           document.documentElement.getAttribute("data-cc-gql-updated") || 0
         ),
         activities: activityStore.snapshot(),
+        // When Twitch changes its markup, these stop updating first.
+        detected: {
+          points: domPointsLastSeen,
+          badges: domBadgesLastSeen,
+        },
       });
       return true;
     }
@@ -2938,24 +3188,73 @@
   syncIntervalId = setInterval(resetFingerprints, 10000);
   pollIntervalId = setInterval(scheduleSync, SAFETY_POLL_MS);
 
-  const observer = new MutationObserver(() => {
-    measureObserverWork(() => scheduleSync());
+  // Chat lines are added and trimmed constantly (also while the restored
+  // native chat is hidden in companion mode). None of the synced controls live
+  // inside the message list, so those records must not drive a full sync.
+  const CHAT_MESSAGE_LIST_SELECTOR = [
+    '[data-test-selector="chat-scrollable-area__message-container"]',
+    ".chat-scrollable-area__message-container",
+    ".chat-list__lines",
+    '[role="log"]',
+    // 7TV / FFZ replace Twitch's list with their own containers, and typing in
+    // the chat input mutates the editor on every keystroke.
+    ".seventv-chat-list",
+    ".ffz--chat-list",
+    '[data-a-target="chat-input"]',
+    ".chat-input__textarea",
+  ].join(",");
+
+  function isRelevantSyncMutation(record) {
+    const target = record?.target;
+    if (!target || target.nodeType !== 1 || typeof target.closest !== "function") {
+      return true;
+    }
+    return !target.closest(CHAT_MESSAGE_LIST_SELECTOR);
+  }
+
+  const observer = new MutationObserver((records) => {
+    measureObserverWork(() => {
+      if (records.some(isRelevantSyncMutation)) {
+        scheduleSync();
+      }
+    });
   });
 
   let shellObserved = false;
   let streamChatObserved = false;
+  let observedShell = null;
+  let observedStreamChat = null;
 
+  // runSync disconnects the observer while it works. The old version only
+  // observed when the "already observed" flags were false, and the flags were
+  // never cleared, so after the first sync the observer stayed disconnected
+  // for good (only the 2 s safety poll was left) and a .chat-shell replaced by
+  // SPA navigation was never observed. Re-attach to the current nodes instead.
   const observeTarget = () => {
+    if (contextTornDown) {
+      return;
+    }
     const shell = document.querySelector(".chat-shell");
     const streamChat = document.querySelector(".stream-chat");
-    if (shell && !shellObserved) {
+    if (
+      observerAttached &&
+      shell === observedShell &&
+      streamChat === observedStreamChat
+    ) {
+      return;
+    }
+    observer.disconnect();
+    observedShell = shell;
+    observedStreamChat = streamChat;
+    if (shell) {
       observer.observe(shell, { childList: true, subtree: true });
-      shellObserved = true;
     }
-    if (streamChat && !streamChatObserved) {
+    if (streamChat && !shell?.contains(streamChat)) {
       observer.observe(streamChat, { childList: true, subtree: true });
-      streamChatObserved = true;
     }
+    shellObserved = Boolean(shell);
+    streamChatObserved = Boolean(streamChat);
+    observerAttached = Boolean(shell || streamChat);
   };
 
   observeTarget();

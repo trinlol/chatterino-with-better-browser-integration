@@ -20,6 +20,14 @@
     return PLACEHOLDER_MARKERS.some((marker) => text.includes(marker));
   }
 
+  function isCompanionModeActive() {
+    const root = document.documentElement;
+    return Boolean(
+      root?.classList?.contains("chatterino-companion-active") &&
+        root.hasAttribute?.("data-chatterino-companion-active")
+    );
+  }
+
   function activateCompanionMode(reason) {
     document.documentElement.classList.add("chatterino-companion-active");
     document.documentElement.setAttribute(
@@ -86,7 +94,15 @@
     }
   }
 
+  // Runs for every mutation batch on the whole document. Once companion mode
+  // is active there is nothing to detect; re-activating on each batch used to
+  // re-dispatch chatterino-companion-active (content.js then reset every
+  // publication fingerprint and resynced) and write chrome.storage, many
+  // times per second, and forced a layout through innerText each time.
   function tryProtectChatShell() {
+    if (isCompanionModeActive()) {
+      return;
+    }
     if (isChatShellWiped()) {
       activateCompanionMode("wipe-detected");
     }

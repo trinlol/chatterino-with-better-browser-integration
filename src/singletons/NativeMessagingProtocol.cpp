@@ -5,6 +5,7 @@
 #include "singletons/NativeMessagingProtocol.hpp"
 
 #include "common/Literals.hpp"
+#include "util/Twitch.hpp"
 
 #include <cmath>
 
@@ -91,6 +92,10 @@ ParsedNativeMessage parseNativeMessage(const QJsonObject &root)
         else if (root["channel"_L1].toString().trimmed().isEmpty())
         {
             parsed.error = u"engagement channel is required"_s;
+        }
+        else if (!isValidBrowserChannelName(root["channel"_L1].toString()))
+        {
+            parsed.error = u"engagement channel is not a Twitch login"_s;
         }
         else if (lifecycle == u"upsert" &&
                  root["title"_L1].toString().trimmed().isEmpty())
@@ -226,6 +231,36 @@ AttachmentIdentity parseAttachmentIdentity(const QJsonObject &root)
         identity.channel.clear();
     }
     return identity;
+}
+
+bool isValidBrowserChannelName(const QString &name)
+{
+    return twitchUserLoginRegexp().match(cleanChannelName(name)).hasMatch();
+}
+
+qint64 parseEngagementClosesAt(const QJsonValue &value, qint64 nowMs)
+{
+    double closesAt = 0;
+    if (value.isDouble())
+    {
+        closesAt = value.toDouble();
+    }
+    else if (value.isString())
+    {
+        bool ok = false;
+        closesAt = value.toString().toDouble(&ok);
+        if (!ok)
+        {
+            return 0;
+        }
+    }
+
+    if (!std::isfinite(closesAt) || closesAt <= 0 ||
+        closesAt > static_cast<double>(nowMs + MAX_ENGAGEMENT_WINDOW_MS))
+    {
+        return 0;
+    }
+    return static_cast<qint64>(closesAt);
 }
 
 }  // namespace chatterino::nm

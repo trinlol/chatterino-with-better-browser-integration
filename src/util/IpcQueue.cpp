@@ -14,7 +14,9 @@
 #include <QString>
 #include <QtGlobal>
 
+#include <algorithm>
 #include <chrono>
+#include <thread>
 
 namespace boost_ipc = boost::interprocess;
 
@@ -31,6 +33,15 @@ static const chatterino::Paths *PATHS = nullptr;
 // lifetime of the process. Every operation therefore completes (success,
 // timeout, or exception) within this bound.
 constexpr std::chrono::milliseconds OPERATION_TIMEOUT{250};
+
+// A broken queue makes every receive throw immediately. Callers loop on an
+// empty result, so back off before reporting the error instead of letting
+// them spin at 100% CPU. Successful receives never wait for this.
+constexpr std::chrono::milliseconds ERROR_BACKOFF{100};
+
+// How often tryReplaceOrCreate retries when remove() could not delete a queue
+// that a peer still holds open and the reused queue is too small.
+constexpr int REPLACE_ATTEMPTS = 3;
 
 }  // namespace
 
@@ -112,7 +123,32 @@ public:
     {
     }
 
+    /// Receives into a buffer allocated once, sized to the queue's maximum
+    /// message, then copies out only the bytes that arrived. Without this,
+    /// every receive would allocate a full max-size buffer.
+    QByteArray receiveInto(const boost::posix_time::ptime &deadline)
+    {
+        const auto capacity =
+            static_cast<qsizetype>(this->queue.get_max_msg_size());
+        if (this->buffer.size() != capacity)
+        {
+            // The new storage is uninitialized
+            this->buffer.resize(capacity);
+        }
+
+        size_t messageSize = 0;
+        unsigned int priority = 0;
+        if (!this->queue.timed_receive(this->buffer.data(),
+                                       size_t(this->buffer.size()), messageSize,
+                                       priority, deadline))
+        {
+            return {};
+        }
+        return {this->buffer.constData(), static_cast<qsizetype>(messageSize)};
+    }
+
     boost_ipc::message_queue queue;
+    QByteArray buffer;
 };
 
 IpcQueue::IpcQueue(IpcQueuePrivate *priv)
@@ -124,11 +160,34 @@ std::pair<std::unique_ptr<IpcQueue>, QString> IpcQueue::tryReplaceOrCreate(
 {
     try
     {
-        boost_ipc::message_queue::remove(name);
+        std::unique_ptr<IpcQueuePrivate> priv;
+        for (int attempt = 1;; ++attempt)
+        {
+            boost_ipc::message_queue::remove(name);
+            priv = std::make_unique<IpcQueuePrivate>(name, maxMessages,
+                                                     maxMessageSize);
+            // remove() fails while a peer still has a file-backed queue open
+            // (Windows). open_or_create then silently reuses that queue with
+            // the geometry of whoever created it, e.g. an older version that
+            // used a smaller message size.
+            if (priv->queue.get_max_msg_size() >= maxMessageSize ||
+                attempt >= REPLACE_ATTEMPTS)
+            {
+                break;
+            }
+            priv.reset();
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        if (priv->queue.get_max_msg_size() < maxMessageSize)
+        {
+            qCWarning(chatterinoNativeMessage)
+                << "Could not replace IPC queue" << name
+                << "- reusing existing queue with max message size"
+                << priv->queue.get_max_msg_size() << "instead of"
+                << maxMessageSize;
+        }
         return std::make_pair(
-            std::unique_ptr<IpcQueue>(new IpcQueue(
-                new IpcQueuePrivate(name, maxMessages, maxMessageSize))),
-            QString());
+            std::unique_ptr<IpcQueue>(new IpcQueue(priv.release())), QString());
     }
     catch (boost_ipc::interprocess_exception &ex)
     {
@@ -166,31 +225,22 @@ QByteArray IpcQueue::receive()
     {
         try
         {
-            auto *d = this->private_.get();
-
-            QByteArray buf;
-            // The new storage is uninitialized
-            buf.resize(static_cast<qsizetype>(d->queue.get_max_msg_size()));
-
-            size_t messageSize = 0;
-            unsigned int priority = 0;
             const auto deadline =
                 boost::posix_time::microsec_clock::universal_time() +
                 boost::posix_time::milliseconds(OPERATION_TIMEOUT.count());
-            if (!d->queue.timed_receive(buf.data(), buf.size(), messageSize,
-                                        priority, deadline))
+            auto buf = this->private_->receiveInto(deadline);
+            if (buf.isEmpty())
             {
+                // timed out (or a zero-length message); keep waiting
                 continue;
             }
-
-            // truncate to the initialized storage
-            buf.truncate(static_cast<qsizetype>(messageSize));
             return buf;
         }
         catch (boost_ipc::interprocess_exception &ex)
         {
             qCDebug(chatterinoNativeMessage)
                 << "Failed to receive message:" << ex.what();
+            std::this_thread::sleep_for(ERROR_BACKOFF);
             return {};
         }
     }
@@ -200,27 +250,16 @@ QByteArray IpcQueue::receiveFor(std::chrono::milliseconds timeout)
 {
     try
     {
-        auto *d = this->private_.get();
-        QByteArray buf;
-        buf.resize(static_cast<qsizetype>(d->queue.get_max_msg_size()));
-
-        size_t messageSize = 0;
-        unsigned int priority = 0;
         const auto deadline =
             boost::posix_time::microsec_clock::universal_time() +
             boost::posix_time::milliseconds(timeout.count());
-        if (!d->queue.timed_receive(buf.data(), buf.size(), messageSize,
-                                    priority, deadline))
-        {
-            return {};
-        }
-        buf.truncate(static_cast<qsizetype>(messageSize));
-        return buf;
+        return this->private_->receiveInto(deadline);
     }
     catch (boost_ipc::interprocess_exception &ex)
     {
         qCDebug(chatterinoNativeMessage)
             << "Failed to receive message:" << ex.what();
+        std::this_thread::sleep_for(std::min(timeout, ERROR_BACKOFF));
     }
     return {};
 }

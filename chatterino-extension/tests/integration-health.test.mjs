@@ -46,3 +46,22 @@ test("healthy content reports both Activity slots", async () => {
   assert.ok(summary.lines.includes("Poll: Best map?"));
   assert.ok(summary.lines.includes("Prediction: Will we win?"));
 });
+
+test("health reports when page elements were last found", async () => {
+  const { summarize } = await loadModule();
+  const now = 1_000_000;
+  const summary = summarize(
+    {
+      native: { connected: true },
+      tab: { channel: "example" },
+      content: {
+        channel: "example",
+        companionActive: true,
+        activities: {},
+        detected: { points: now - 2000, badges: 0 },
+      },
+    },
+    now
+  );
+  assert.ok(summary.lines.includes("Found on page: points now, badges never"));
+});

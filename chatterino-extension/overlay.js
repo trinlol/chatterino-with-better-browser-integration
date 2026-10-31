@@ -34,6 +34,50 @@
   };
 
   let errors = {};
+  let isCollapsed = false;
+  let installRetryTimer = null;
+  let pathPollTimer = null;
+  let notificationsObserver = null;
+  let chatShellObserver = null;
+  let observedChatShell = null;
+  let chatShellRetry = null;
+  let contextTornDown = false;
+
+  function isContextInvalidated() {
+    try {
+      return !chrome?.runtime?.id;
+    } catch (_err) {
+      return true;
+    }
+  }
+
+  // After the extension is reloaded this script is orphaned: every
+  // chrome.runtime call throws "Extension context invalidated". Stop the
+  // path poll and the document-wide observers instead of throwing from them
+  // until the tab is closed.
+  function teardownOrphanedScript() {
+    if (contextTornDown) return;
+    contextTornDown = true;
+    clearInterval(pathPollTimer);
+    clearTimeout(installRetryTimer);
+    clearInterval(chatShellRetry);
+    notificationsObserver?.disconnect?.();
+    chatShellObserver?.disconnect?.();
+  }
+
+  function sendRuntimeMessage(message) {
+    if (contextTornDown) return false;
+    try {
+      const result = chrome.runtime.sendMessage(message);
+      result?.catch?.(() => {});
+      return true;
+    } catch (_err) {
+      if (isContextInvalidated()) {
+        teardownOrphanedScript();
+      }
+      return false;
+    }
+  }
 
   // return channel name if it should contain a chat or undefined
   function matchChannelName(url) {
@@ -71,7 +115,7 @@
       }
     } else {
       showingChat = false;
-      chrome.runtime.sendMessage({ type: "detach" });
+      sendRuntimeMessage({ type: "detach" });
     }
   }
 
@@ -125,7 +169,13 @@
 
     // retry if needed
     if (retry) {
-      setTimeout(installChatterino, 1000);
+      // One pending retry at a time: path changes while the shell is missing
+      // used to start parallel retry chains.
+      clearTimeout(installRetryTimer);
+      installRetryTimer = setTimeout(() => {
+        installRetryTimer = null;
+        installChatterino();
+      }, 1000);
     } else {
       log("installed all events");
     }
@@ -171,7 +221,7 @@
 
   // query the rect of the chat
   function queryChatRect() {
-    if (!showingChat) {
+    if (!showingChat || contextTornDown) {
       return;
     }
 
@@ -180,7 +230,7 @@
       notificationsSuppressed ||
       window.ChatterinoNotificationUi?.isOpen(document)
     ) {
-      chrome.runtime.sendMessage({ type: "detach" });
+      sendRuntimeMessage({ type: "detach" });
       return;
     }
 
@@ -188,6 +238,9 @@
 
     if (element === undefined) {
       return;
+    }
+    if (element !== observedChatShell) {
+      observeChatShell();
     }
 
     let rect = element.getBoundingClientRect();
@@ -242,6 +295,9 @@
     } catch (err) {
       errors.sendMessage = true;
       updateErrors();
+      if (isContextInvalidated()) {
+        teardownOrphanedScript();
+      }
     }
   }
 
@@ -323,12 +379,12 @@
           attachment.leaseTimer = setTimeout(() => {
             if (attachment.phase === "attached") {
               revealChat("lease-expired");
-              chrome.runtime.sendMessage({ type: "detach" });
+              sendRuntimeMessage({ type: "detach" });
             }
           }, 15000);
         } else {
           revealChat("lease-expired");
-          chrome.runtime.sendMessage({ type: "detach" });
+          sendRuntimeMessage({ type: "detach" });
         }
       }, Math.max(1000, leaseMs - 15000));
     }
@@ -412,7 +468,7 @@
       attachment.phase = "idle";
       attachment.sessionId = null;
       attachment.generation = null;
-      chrome.runtime.sendMessage({ type: "detach" });
+      sendRuntimeMessage({ type: "detach" });
       return;
     }
     installedObjects = {};
@@ -448,24 +504,41 @@
   // Twitch relayouts the chat column without firing window resize (theater
   // mode, sidebar toggles, player size changes). Track the shell itself so
   // the overlay always matches its current rect.
-  if (typeof ResizeObserver !== "undefined") {
-    const chatShellObserver = new ResizeObserver(() => queryChatRect());
-    const observeChatShell = () => {
-      const shell = findChatDiv();
-      if (shell) {
-        chatShellObserver.observe(shell);
-        return true;
-      }
+  // Twitch replaces .chat-shell on SPA channel navigation, so the observed
+  // node is re-checked on path changes and measurements instead of only once
+  // at load.
+  function observeChatShell() {
+    if (!chatShellObserver || contextTornDown) {
       return false;
-    };
-    if (!observeChatShell()) {
-      // Shell not mounted yet - retry until it appears
-      const shellRetry = setInterval(() => {
-        if (observeChatShell()) {
-          clearInterval(shellRetry);
-        }
-      }, 1000);
     }
+    const shell = findChatDiv();
+    if (!shell) {
+      return false;
+    }
+    if (shell !== observedChatShell) {
+      if (observedChatShell) {
+        chatShellObserver.unobserve(observedChatShell);
+      }
+      chatShellObserver.observe(shell);
+      observedChatShell = shell;
+    }
+    return true;
+  }
+  function ensureChatShellObserved() {
+    if (!chatShellObserver || observeChatShell() || chatShellRetry !== null) {
+      return;
+    }
+    // Shell not mounted yet - retry until it appears
+    chatShellRetry = setInterval(() => {
+      if (observeChatShell() || contextTornDown) {
+        clearInterval(chatShellRetry);
+        chatShellRetry = null;
+      }
+    }, 1000);
+  }
+  if (typeof ResizeObserver !== "undefined") {
+    chatShellObserver = new ResizeObserver(() => queryChatRect());
+    ensureChatShellObserved();
   }
 
   function syncNotificationsOverlay() {
@@ -473,7 +546,7 @@
     const isOpen = notificationUi?.isOpen(document) || false;
     if (isOpen) {
       notificationsSuppressed = true;
-      chrome.runtime.sendMessage({ type: "detach" });
+      sendRuntimeMessage({ type: "detach" });
 
       const panel = notificationUi.findPanel(document);
       const chatRect = findChatDiv()?.getBoundingClientRect?.();
@@ -508,7 +581,7 @@
       if (window.ChatterinoNotificationUi.toggleWillOpen(toggle)) {
         notificationsSuppressed = true;
         notificationsTogglePendingUntil = Date.now() + 1500;
-        chrome.runtime.sendMessage({ type: "detach" });
+        sendRuntimeMessage({ type: "detach" });
       } else {
         notificationsTogglePendingUntil = 0;
       }
@@ -521,7 +594,7 @@
   );
 
   let notificationsSyncTimer = null;
-  const notificationsObserver = new MutationObserver(() => {
+  notificationsObserver = new MutationObserver(() => {
     if (notificationsSyncTimer !== null) return;
     notificationsSyncTimer = setTimeout(() => {
       notificationsSyncTimer = null;
@@ -597,9 +670,11 @@
   });
 
   let path = location.pathname;
-  setInterval(() => {
+  pathPollTimer = setInterval(() => {
+    if (contextTornDown) return;
     if (location.pathname != path) {
       path = location.pathname;
+      ensureChatShellObserved();
 
       log("path changed");
 
@@ -609,7 +684,7 @@
         updatePopupChatLink();
       }
       if (matchChannelName(window.location.href)) {
-        chrome.runtime.sendMessage({ type: "location-updated" });
+        sendRuntimeMessage({ type: "location-updated" });
       }
     }
   }, 1000);

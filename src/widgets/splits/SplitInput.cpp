@@ -1123,7 +1123,9 @@ void SplitInput::installTextEditEvents()
         // insert a newline. Keep the default Enter behavior reliable at the
         // key-event boundary while preserving Ctrl+Enter's keep-input mode.
         const auto key = event->key();
-        const auto modifiers = event->modifiers();
+        // Numpad Enter carries KeypadModifier, which would otherwise make it
+        // miss the NoModifier check below and insert a newline.
+        const auto modifiers = event->modifiers() & ~Qt::KeypadModifier;
         const bool isSendKey = key == Qt::Key_Return || key == Qt::Key_Enter;
         const bool isSendModifier =
             modifiers == Qt::NoModifier || modifiers == Qt::ShiftModifier ||
@@ -1472,8 +1474,21 @@ void SplitInput::insertCompletionText(const QString &input_) const
         input = "@" + userMention + " ";
     }
 
+    // The prefix is measured in expanded text, where an inline emote counts as
+    // its full name, but an inline emote occupies a single document position.
+    // Walk back until the expanded text covers the prefix so a Tab popup
+    // opened right after an inline emote replaces only that emote.
+    const auto expandedEnd = edit.textUpToPosition(originalPosition).size();
+    auto replaceStart = originalPosition;
+    while (replaceStart > 0 &&
+           expandedEnd - edit.textUpToPosition(replaceStart).size() <
+               replaceLength)
+    {
+        --replaceStart;
+    }
+
     auto cursor = edit.textCursor();
-    cursor.setPosition(originalPosition - replaceLength);
+    cursor.setPosition(replaceStart);
     cursor.setPosition(originalPosition, QTextCursor::KeepAnchor);
 
     auto channel = this->split_->getChannel();
