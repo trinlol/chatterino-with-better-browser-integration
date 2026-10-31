@@ -20,6 +20,7 @@
 - **Responsiveness**: Status updates to the browser are sent in the background instead of blocking the desktop UI while retrying, and a broken message queue no longer spins at 100% CPU.
 - **Extension Reload**: After the extension reloads, Twitch's own controls come back instead of stale copies.
 - **Minute-watched Results**: Results from the browser now reach the desktop app instead of being dropped.
+- **Extension Package**: The portable package now includes every extension file the manifest loads; `notification-ui.js` and `extension-lifecycle.js` were missing from earlier packages, which stopped the bundled extension from loading.
 
 #### Security
 
