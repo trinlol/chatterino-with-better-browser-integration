@@ -69,6 +69,10 @@ Chatterino Better Browser on a live Twitch channel — full chat in the overlay,
 
 ### 🌐 Browser integration
 
+<p align="center">
+  <img src="docs/hero.svg" alt="How Chatterino Better Browser works — Twitch in your browser communicates with Chatterino desktop via the extension" width="100%">
+</p>
+
 - 📌 **Pinned messages** — moderator pins show as a compact purple banner in Chatterino with clickable links and a dismiss button
 - 🗳️ **Clickable polls & predictions** — voting controls appear beside the Twitch player so you can vote without reopening native Twitch chat
 - 🟢 **Accurate prediction banner** — the green Chatterino banner follows Twitch's real lock deadline instead of getting stuck at `2:00`

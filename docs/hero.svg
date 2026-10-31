@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" role="img" aria-labelledby="t d" font-family="'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif">
+<title id="t">Chatterino Better Browser</title>
+<desc id="d">Animation: Twitch chat messages travel from the browser through the extension and the Chatterino app into a desktop chat window, followed by a pinned message, a prediction countdown and a channel points claim.</desc>
+<style>@keyframes m0{0.000%{opacity:0;transform:translateX(-10px)}10.000%{opacity:0;transform:translateX(-10px)}12.917%{opacity:1;transform:none}93.333%{opacity:1;transform:none}98.333%{opacity:0;transform:none}100.000%{opacity:0;transform:translateX(-10px)}}.m0{animation:m0 12s linear infinite;}@keyframes m1{0.000%{opacity:0;transform:translateX(-10px)}20.000%{opacity:0;transform:translateX(-10px)}22.917%{opacity:1;transform:none}93.333%{opacity:1;transform:none}98.333%{opacity:0;transform:none}100.000%{opacity:0;transform:translateX(-10px)}}.m1{animation:m1 12s linear infinite;}@keyframes m2{0.000%{opacity:0;transform:translateX(-10px)}30.000%{opacity:0;transform:translateX(-10px)}32.917%{opacity:1;transform:none}93.333%{opacity:1;transform:none}98.333%{opacity:0;transform:none}100.000%{opacity:0;transform:translateX(-10px)}}.m2{animation:m2 12s linear infinite;}@keyframes m3{0.000%{opacity:0;transform:translateX(-10px)}40.000%{opacity:0;transform:translateX(-10px)}42.917%{opacity:1;transform:none}93.333%{opacity:1;transform:none}98.333%{opacity:0;transform:none}100.000%{opacity:0;transform:translateX(-10px)}}.m3{animation:m3 12s linear infinite;}@keyframes m4{0.000%{opacity:0;transform:translateX(-10px)}50.000%{opacity:0;transform:translateX(-10px)}52.917%{opacity:1;transform:none}93.333%{opacity:1;transform:none}98.333%{opacity:0;transform:none}100.000%{opacity:0;transform:translateX(-10px)}}.m4{animation:m4 12s linear infinite;}@keyframes m5{0.000%{opacity:0;transform:translateX(-10px)}60.000%{opacity:0;transform:translateX(-10px)}62.917%{opacity:1;transform:none}93.333%{opacity:1;transform:none}98.333%{opacity:0;transform:none}100.000%{opacity:0;transform:translateX(-10px)}}.m5{animation:m5 12s linear infinite;}@keyframes pin{0.000%{opacity:0;transform:translateY(-12px)}25.000%{opacity:0;transform:translateY(-12px)}28.750%{opacity:1;transform:none}93.333%{opacity:1;transform:none}98.333%{opacity:0;transform:none}100.000%{opacity:0;transform:translateY(-12px)}}.pin{animation:pin 12s linear infinite;}@keyframes pred{0.000%{opacity:0;transform:translateY(-12px)}45.000%{opacity:0;transform:translateY(-12px)}48.750%{opacity:1;transform:none}93.333%{opacity:1;transform:none}98.333%{opacity:0;transform:none}100.000%{opacity:0;transform:translateY(-12px)}}.pred{animation:pred 12s linear infinite;}@keyframes bar{0.000%{transform:scaleX(1)}48.750%{transform:scaleX(1)}88.333%{transform:scaleX(0)}100.000%{transform:scaleX(0)}}.bar{animation:bar 12s linear infinite;transform-box:fill-box;transform-origin:left center;}@keyframes p0{0.000%{opacity:0;transform:translateX(0)}2.500%{opacity:0;transform:translateX(0)}3.167%{opacity:1;transform:translateX(0)}9.583%{opacity:1;transform:translateX(370px)}10.417%{opacity:0;transform:translateX(370px)}100.000%{opacity:0;transform:translateX(370px)}}.p0{animation:p0 12s linear infinite;}@keyframes p1{0.000%{opacity:0;transform:translateX(0)}12.500%{opacity:0;transform:translateX(0)}13.167%{opacity:1;transform:translateX(0)}19.583%{opacity:1;transform:translateX(370px)}20.417%{opacity:0;transform:translateX(370px)}100.000%{opacity:0;transform:translateX(370px)}}.p1{animation:p1 12s linear infinite;}@keyframes p2{0.000%{opacity:0;transform:translateX(0)}22.500%{opacity:0;transform:translateX(0)}23.167%{opacity:1;transform:translateX(0)}29.583%{opacity:1;transform:translateX(370px)}30.417%{opacity:0;transform:translateX(370px)}100.000%{opacity:0;transform:translateX(370px)}}.p2{animation:p2 12s linear infinite;}@keyframes p3{0.000%{opacity:0;transform:translateX(0)}32.500%{opacity:0;transform:translateX(0)}33.167%{opacity:1;transform:translateX(0)}39.583%{opacity:1;transform:translateX(370px)}40.417%{opacity:0;transform:translateX(370px)}100.000%{opacity:0;transform:translateX(370px)}}.p3{animation:p3 12s linear infinite;}@keyframes p4{0.000%{opacity:0;transform:translateX(0)}42.500%{opacity:0;transform:translateX(0)}43.167%{opacity:1;transform:translateX(0)}49.583%{opacity:1;transform:translateX(370px)}50.417%{opacity:0;transform:translateX(370px)}100.000%{opacity:0;transform:translateX(370px)}}.p4{animation:p4 12s linear infinite;}@keyframes p5{0.000%{opacity:0;transform:translateX(0)}52.500%{opacity:0;transform:translateX(0)}53.167%{opacity:1;transform:translateX(0)}59.583%{opacity:1;transform:translateX(370px)}60.417%{opacity:0;transform:translateX(370px)}100.000%{opacity:0;transform:translateX(370px)}}.p5{animation:p5 12s linear infinite;}@keyframes nodeA{0.000%{opacity:0.25}3.750%{opacity:0.25}5.000%{opacity:1}7.917%{opacity:0.25}13.750%{opacity:0.25}15.000%{opacity:1}17.917%{opacity:0.25}23.750%{opacity:0.25}25.000%{opacity:1}27.917%{opacity:0.25}33.750%{opacity:0.25}35.000%{opacity:1}37.917%{opacity:0.25}43.750%{opacity:0.25}45.000%{opacity:1}47.917%{opacity:0.25}53.750%{opacity:0.25}55.000%{opacity:1}57.917%{opacity:0.25}100.000%{opacity:0.25}}.nodeA{animation:nodeA 12s linear infinite;}@keyframes nodeB{0.000%{opacity:0.25}6.250%{opacity:0.25}7.500%{opacity:1}10.417%{opacity:0.25}16.250%{opacity:0.25}17.500%{opacity:1}20.417%{opacity:0.25}26.250%{opacity:0.25}27.500%{opacity:1}30.417%{opacity:0.25}36.250%{opacity:0.25}37.500%{opacity:1}40.417%{opacity:0.25}46.250%{opacity:0.25}47.500%{opacity:1}50.417%{opacity:0.25}56.250%{opacity:0.25}57.500%{opacity:1}60.417%{opacity:0.25}100.000%{opacity:0.25}}.nodeB{animation:nodeB 12s linear infinite;}@keyframes ptsOld{0.000%{opacity:1}70.000%{opacity:1}71.250%{opacity:0}93.333%{opacity:0}98.333%{opacity:1}100.000%{opacity:1}}@keyframes ptsNew{0.000%{opacity:0}70.000%{opacity:0}71.250%{opacity:1}93.333%{opacity:1}98.333%{opacity:0}100.000%{opacity:0}}@keyframes chest{0.000%{transform:scale(1)}69.167%{transform:scale(1)}71.000%{transform:scale(1.35)}73.750%{transform:scale(1)}100.000%{transform:scale(1)}}@keyframes plus{0.000%{opacity:0;transform:translateY(0)}70.000%{opacity:0;transform:translateY(0)}71.250%{opacity:1;transform:translateY(-4px)}80.833%{opacity:0;transform:translateY(-22px)}100.000%{opacity:0;transform:translateY(-22px)}}.ptsOld{animation:ptsOld 12s linear infinite;}.ptsNew{animation:ptsNew 12s linear infinite;}.chest{animation:chest 12s linear infinite;transform-box:fill-box;transform-origin:center;}.plus{animation:plus 12s linear infinite;}@keyframes dash{to{stroke-dashoffset:-24}}.wire{animation:dash 1.4s linear infinite}@media (prefers-reduced-motion:reduce){*{animation:none!important;opacity:1!important;transform:none!important}.bar{transform:scaleX(.55)!important}.plus,.ptsNew{opacity:0!important}.p0,.p1,.p2,.p3,.p4,.p5{opacity:0!important}}
+text{font-kerning:normal}
+</style>
+<defs>
+  <linearGradient id="vid" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a2a7a"/><stop offset="1" stop-color="#1f1747"/></linearGradient>
+  <clipPath id="chatclip"><rect x="640" y="46" width="290" height="328" rx="10"/></clipPath>
+</defs>
+<rect width="960" height="420" rx="16" fill="#171233"/>
+
+<!-- browser: the Twitch page -->
+<g>
+  <rect x="30" y="46" width="228" height="328" rx="10" fill="#221a46" stroke="#3d3170"/>
+  <path d="M30 56a10 10 0 0 1 10-10h208a10 10 0 0 1 10 10v18H30z" fill="#2d2358"/>
+  <circle cx="46" cy="60" r="3.5" fill="#3d3170"/><circle cx="59" cy="60" r="3.5" fill="#3d3170"/><circle cx="72" cy="60" r="3.5" fill="#3d3170"/>
+  <rect x="88" y="52" width="158" height="16" rx="8" fill="#171233"/>
+  <text x="100" y="64" font-size="10" fill="#9d92c9">twitch.tv/yourchannel</text>
+  <rect x="42" y="86" width="204" height="115" rx="6" fill="url(#vid)"/>
+  <path d="M132 130l22 13.500-22 13.500z" fill="#efeaff" opacity=".55"/>
+  <rect x="42" y="209" width="204" height="1" fill="#3d3170"/>
+  <!-- toolbar: chat identity + channel points -->
+  <g transform="translate(42 222)">
+    <rect width="34" height="28" rx="7" fill="#2d2358"/>
+    <path d="M17 7l2.600 5.300 5.900.8-4.300 4.100 1 5.800L17 20.200 11.800 23l1-5.800-4.300-4.100 5.900-.8z" fill="#a98bff"/>
+    <rect x="42" width="96" height="28" rx="14" fill="#2d2358"/>
+    <g class="chest"><circle cx="58" cy="14" r="8" fill="#ffc857"/><rect x="54" y="11" width="8" height="6" rx="1.500" fill="#171233" opacity=".55"/></g>
+    <text class="ptsOld" x="72" y="18" font-size="12" font-weight="700" fill="#efeaff">1,240</text>
+    <text class="ptsNew" x="72" y="18" font-size="12" font-weight="700" fill="#ffc857" style="opacity:0">1,290</text>
+    <text class="plus" x="106" y="-2" font-size="12" font-weight="800" fill="#ffc857" style="opacity:0">+50</text>
+  </g>
+  <rect x="42" y="266" width="132" height="8" rx="4" fill="#3d3170" opacity=".7"/>
+  <rect x="42" y="282" width="184" height="8" rx="4" fill="#3d3170" opacity=".45"/>
+  <rect x="42" y="298" width="96" height="8" rx="4" fill="#3d3170" opacity=".45"/>
+  <text x="144" y="392" text-anchor="middle" font-size="12" fill="#9d92c9">Twitch in your browser</text>
+</g>
+
+<!-- wire: extension → native host -->
+<line x1="258" y1="210" x2="628" y2="210" stroke="#3d3170" stroke-width="2"/>
+<line class="wire" x1="258" y1="210" x2="628" y2="210" stroke="#a98bff" stroke-opacity=".35" stroke-width="2" stroke-dasharray="4 8"/>
+<rect x="318" y="186" width="92" height="48" rx="10" fill="#171233"/><rect x="470" y="186" width="104" height="48" rx="10" fill="#171233"/>
+<g class="nodeA" style="opacity:.25">
+  <rect x="318" y="186" width="92" height="48" rx="10" fill="#2d2358" stroke="#a98bff"/>
+  <text x="364" y="215" text-anchor="middle" font-size="13" font-weight="700" fill="#efeaff">Extension</text>
+</g>
+<g class="nodeB" style="opacity:.25">
+  <rect x="470" y="186" width="104" height="48" rx="10" fill="#2d2358" stroke="#a98bff"/>
+  <text x="522" y="215" text-anchor="middle" font-size="13" font-weight="700" fill="#efeaff">Chatterino</text>
+</g>
+<text x="364" y="256" text-anchor="middle" font-size="11" fill="#9d92c9">reads Twitch</text>
+<text x="522" y="256" text-anchor="middle" font-size="11" fill="#9d92c9">native messaging</text>
+<g class="p0" style="opacity:0"><circle cx="258" cy="210" r="9" fill="#a98bff" opacity=".25"/><circle cx="258" cy="210" r="4.5" fill="#a98bff"/></g><g class="p1" style="opacity:0"><circle cx="258" cy="210" r="9" fill="#a98bff" opacity=".25"/><circle cx="258" cy="210" r="4.5" fill="#a98bff"/></g><g class="p2" style="opacity:0"><circle cx="258" cy="210" r="9" fill="#a98bff" opacity=".25"/><circle cx="258" cy="210" r="4.5" fill="#a98bff"/></g><g class="p3" style="opacity:0"><circle cx="258" cy="210" r="9" fill="#a98bff" opacity=".25"/><circle cx="258" cy="210" r="4.5" fill="#a98bff"/></g><g class="p4" style="opacity:0"><circle cx="258" cy="210" r="9" fill="#a98bff" opacity=".25"/><circle cx="258" cy="210" r="4.5" fill="#a98bff"/></g><g class="p5" style="opacity:0"><circle cx="258" cy="210" r="9" fill="#a98bff" opacity=".25"/><circle cx="258" cy="210" r="4.5" fill="#a98bff"/></g>
+
+<!-- chatterino window -->
+<g>
+  <rect x="640" y="46" width="290" height="328" rx="10" fill="#221a46" stroke="#3d3170"/>
+  <g clip-path="url(#chatclip)">
+    <rect x="640" y="46" width="290" height="26" fill="#2d2358"/>
+    <text x="654" y="63" font-size="12" font-weight="700" fill="#efeaff">yourchannel</text>
+    <circle cx="912" cy="59" r="4" fill="#5ee0b0"/>
+
+    <!-- pinned message -->
+    <g class="pin" style="opacity:0">
+      <rect x="652" y="80" width="266" height="34" rx="7" fill="#a98bff" fill-opacity=".22" stroke="#a98bff"/>
+      <circle cx="672" cy="97" r="6" fill="#a98bff"/><circle cx="672" cy="97" r="2.200" fill="#171233"/>
+      <text x="690" y="95" font-size="11" fill="#efeaff">Pinned by a moderator</text>
+      <text x="690" y="108" font-size="11" fill="#9d92c9">Giveaway ends at 8pm — rules in /info</text>
+    </g>
+
+    <!-- prediction -->
+    <g class="pred" style="opacity:0">
+      <rect x="652" y="122" width="266" height="40" rx="7" fill="#5ee0b0" fill-opacity=".14" stroke="#5ee0b0"/>
+      <text x="664" y="138" font-size="11" font-weight="700" fill="#5ee0b0">Prediction</text>
+      <text x="728" y="138" font-size="11" fill="#efeaff">Win this round?</text>
+      <rect x="664" y="148" width="242" height="5" rx="2.500" fill="#171233"/>
+      <rect class="bar" x="664" y="148" width="242" height="5" rx="2.500" fill="#5ee0b0"/>
+    </g>
+
+  <g class="m0" style="opacity:0">
+    <text x="664" y="176" font-size="12.5" font-weight="700" fill="#ff7ab6">emotelord<tspan fill="#9d92c9" font-weight="400">:</tspan><tspan fill="#efeaff" font-weight="400" dx="6">chat is moving so fast tonight</tspan></text>
+  </g>
+  <g class="m1" style="opacity:0">
+    <text x="664" y="207" font-size="12.5" font-weight="700" fill="#5ee0b0">pixelfern<tspan fill="#9d92c9" font-weight="400">:</tspan><tspan fill="#efeaff" font-weight="400" dx="6">ctrl+click an emote to reuse it</tspan></text>
+  </g>
+  <g class="m2" style="opacity:0">
+    <text x="664" y="238" font-size="12.5" font-weight="700" fill="#6cb8ff">nightowl_77<tspan fill="#9d92c9" font-weight="400">:</tspan><tspan fill="#efeaff" font-weight="400" dx="6">wait, is that pin new?</tspan></text>
+  </g>
+  <g class="m3" style="opacity:0">
+    <text x="664" y="269" font-size="12.5" font-weight="700" fill="#ffc857">tabcomplete<tspan fill="#9d92c9" font-weight="400">:</tspan><tspan fill="#efeaff" font-weight="400" dx="6">:catJAM  → 7TV only, finally</tspan></text>
+  </g>
+  <g class="m4" style="opacity:0">
+    <text x="664" y="300" font-size="12.5" font-weight="700" fill="#c79bff">gridlock<tspan fill="#9d92c9" font-weight="400">:</tspan><tspan fill="#efeaff" font-weight="400" dx="6">locking in my prediction</tspan></text>
+  </g>
+  <g class="m5" style="opacity:0">
+    <text x="664" y="331" font-size="12.5" font-weight="700" fill="#ff9a6c">mossy<tspan fill="#9d92c9" font-weight="400">:</tspan><tspan fill="#efeaff" font-weight="400" dx="6">no tab switching, love it</tspan></text>
+  </g>
+  </g>
+  <rect x="652" y="344" width="266" height="22" rx="6" fill="#171233"/>
+  <text x="664" y="359" font-size="11" fill="#9d92c9">Send a message</text>
+  <text x="785" y="392" text-anchor="middle" font-size="12" fill="#9d92c9">Chatterino, on your desktop</text>
+</g>
+
+<text x="480" y="30" text-anchor="middle" font-size="15" font-weight="700" fill="#efeaff" letter-spacing=".2">Chatterino Better Browser</text>
+<text x="480" y="408" text-anchor="middle" font-size="12" fill="#9d92c9">Your Twitch page and your desktop chat, kept in sync</text>
+</svg>
