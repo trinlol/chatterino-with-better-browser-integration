@@ -2,6 +2,16 @@
 
 ## Chatterino Better Browser
 
+### v2.7.4 (2026-11-19)
+
+#### Fixed
+
+- **Overlay Vertical Alignment**: The attached Chatterino chat overlay now tracks the bottom offset between Twitch's `.chat-shell` and the browser viewport bottom (and clamps maximized DWM frame bounds to the monitor work area), so bottom banners or shortened chat areas no longer shift the overlay downward.
+- **Chat Auto-Scrolling**: Fixed multiple cases where chat stopped auto-scrolling when new messages arrived — including reversing a smooth-scroll upward gesture, `scrollToBottom()` when `currentValue` already matched the bottom, resizing/clearing non-overflowing views, unpausing after a large message burst, and mouse-wheel scrolling down when `minimum > 0`.
+- **Twitch GTA VI Promotional Bottom Banner**: Blocked and dismissed Twitch's site-wide GTA VI bottom promotional banner on load so it does not crowd the page or shift chat geometry.
+- **Input Completion & Spellcheck Popups**: Emote/mention completion and spellcheck hover popups now stay above the attached browser overlay (`TopMost`).
+- **Native Messaging Host & Sessions**: Terminates the native messaging host cleanly when its ancestor browser process exits, resolves owned browser windows on startup, serializes extension session storage updates to prevent duplicate sessions, and guards null `WatchStreakController` in `SplitHeader`.
+
 ### v2.7.3 (2026-10-31)
 
 #### Fixed
