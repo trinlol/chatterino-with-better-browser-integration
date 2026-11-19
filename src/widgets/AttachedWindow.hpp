@@ -14,6 +14,7 @@
 
 namespace chatterino {
 
+class BaseWindow;
 class Split;
 class Channel;
 using ChannelPtr = std::shared_ptr<Channel>;
@@ -52,10 +53,15 @@ public:
     /// Called by the WinEvent hook while the browser is moving or changing
     /// window state.
     void syncToTargetWindow();
+
+    /// Ensure a top-level popup launched from this overlay sits above both the
+    /// browser and this HWND_TOPMOST overlay.
+    void bringPopupToFront(BaseWindow *popup);
 #endif
 
 protected:
     void showEvent(QShowEvent *) override;
+    void hideEvent(QHideEvent *) override;
     //    virtual void nativeEvent(const QByteArray &eventType, void *message,
     //    long *result) override;
 
@@ -76,6 +82,9 @@ private:
     void attachToHwnd(void *attached);
     void updateWindowRect(void *attached);
     void reportLoss(QString reason);
+#ifdef USEWINSDK
+    void syncChildPopupsTopMost(bool browserActive);
+#endif
 
     void *target_;
     double x_ = -1;

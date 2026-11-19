@@ -336,10 +336,17 @@ SettingsDialogTab *SettingsDialog::tab(SettingsTabId id)
     return nullptr;
 }
 
+namespace {
+
+SettingsDialog *settingsDialogInstance = nullptr;
+
+}  // namespace
+
 void SettingsDialog::showDialog(QWidget *parent,
                                 SettingsDialogPreference preferredTab)
 {
     static SettingsDialog *instance = new SettingsDialog(parent);
+    settingsDialogInstance = instance;
     static bool hasShownBefore = false;
     if (hasShownBefore)
     {
@@ -445,6 +452,12 @@ void SettingsDialog::onCancelClicked()
     getSettings()->restoreSnapshot();
 
     this->close();
+}
+
+bool SettingsDialog::isDialogOpen()
+{
+    return settingsDialogInstance != nullptr &&
+           settingsDialogInstance->isVisible();
 }
 
 }  // namespace chatterino

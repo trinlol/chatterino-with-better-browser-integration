@@ -11,6 +11,7 @@
 #include "mocks/BaseApplication.hpp"
 #include "mocks/Helix.hpp"
 #include "mocks/UserData.hpp"
+#include "providers/colors/ColorProvider.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchBadge.hpp"  // for Badge
 #include "Test.hpp"
@@ -218,6 +219,11 @@ protected:
 
     void TearDown() override
     {
+        if (auto subColor =
+                ColorProvider::instance().color(ColorType::Subscription))
+        {
+            *subColor = HighlightPhrase::FALLBACK_SUB_COLOR;
+        }
         this->mockApplication.reset();
 
         delete this->mockHelix;

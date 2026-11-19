@@ -9,20 +9,24 @@
 #include "common/Modes.hpp"
 #include "common/network/NetworkManager.hpp"
 #include "common/QLogging.hpp"
+#include "controllers/hotkeys/HotkeyController.hpp"
 #include "singletons/CrashHandler.hpp"
 #include "singletons/Paths.hpp"
 #include "singletons/Resources.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Updates.hpp"
+#include "singletons/WindowManager.hpp"
 #include "util/ApplicationIcon.hpp"
 #include "util/CombinePath.hpp"
 #include "util/SelfCheck.hpp"
 #include "util/UnixSignalHandler.hpp"
 #include "widgets/dialogs/LastRunCrashDialog.hpp"
+#include "widgets/dialogs/SettingsDialog.hpp"
 
 #include <QApplication>
 #include <QFile>
 #include <QPalette>
+#include <QSessionManager>
 #include <QStyleFactory>
 #include <Qt>
 #include <QtConcurrent>
@@ -281,6 +285,30 @@ void runGui(QApplication &a, const Modes &modes, const Paths &paths,
 
     chatterino::NetworkManager::init();
     updates.checkForUpdates();
+
+    // Periodically flush changed runtime settings (muted channels, watch-streak
+    // channels, popup sizes, etc.) when the Settings dialog is not open.
+    // SettingManager uses OnlySaveIfChanged, so this is a no-op when clean.
+    auto *settingsSaveTimer = new QTimer(qApp);
+    settingsSaveTimer->setInterval(60 * 1000);
+    QObject::connect(settingsSaveTimer, &QTimer::timeout, [&settings] {
+        if (!SettingsDialog::isDialogOpen())
+        {
+            settings.requestSave();
+        }
+    });
+    settingsSaveTimer->start();
+
+    QObject::connect(qApp, &QGuiApplication::commitDataRequest,
+                     [&settings](QSessionManager & /*manager*/) {
+                         if (auto *app =
+                                 dynamic_cast<Application *>(tryGetApp()))
+                         {
+                             app->getHotkeys()->save();
+                             app->getWindows()->save();
+                         }
+                         settings.requestSave();
+                     });
 
     QObject::connect(qApp, &QApplication::aboutToQuit, [] {
         auto *app = dynamic_cast<Application *>(tryGetApp());

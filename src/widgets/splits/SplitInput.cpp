@@ -24,6 +24,7 @@
 #include "util/Helpers.hpp"
 #include "util/LayoutCreator.hpp"
 #include "util/PostToThread.hpp"
+#include "widgets/AttachedWindow.hpp"
 #include "widgets/buttons/LabelButton.hpp"
 #include "widgets/buttons/SvgButton.hpp"
 #include "widgets/dialogs/EmotePopup.hpp"
@@ -41,6 +42,7 @@
 
 #include <QActionGroup>
 #include <QCompleter>
+#include <QGuiApplication>
 #include <QJsonObject>
 #include <QPainter>
 #include <QSignalBlocker>
@@ -166,6 +168,10 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
         this->inputHighlighter->setChannel(this->split_->getChannel());
         this->bindNukePreviewChannel();
         this->updateNukePreview(this->ui_.textEdit->toPlainText());
+        if (this->emotePopup_)
+        {
+            this->emotePopup_->loadChannel(channel);
+        }
     });
 
     getSettings()->enableSpellChecking.connect(
@@ -669,13 +675,30 @@ void SplitInput::openEmotePopup()
                         textToInsert = " " + textToInsert;
                     }
                     this->insertText(textToInsert);
-                    this->ui_.textEdit->activateWindow();
+                    if (!QGuiApplication::keyboardModifiers().testFlag(
+                            Qt::ShiftModifier))
+                    {
+                        this->ui_.textEdit->activateWindow();
+                    }
                 }
             });
     }
 
     this->emotePopup_->loadChannel(this->split_->getChannel());
-    this->emotePopup_->show();
+    if (this->emotePopup_->isMinimized())
+    {
+        this->emotePopup_->showNormal();
+    }
+    else
+    {
+        this->emotePopup_->show();
+    }
+#ifdef USEWINSDK
+    if (auto *attached = dynamic_cast<AttachedWindow *>(this->window()))
+    {
+        attached->bringPopupToFront(this->emotePopup_);
+    }
+#endif
     this->emotePopup_->raise();
     this->emotePopup_->activateWindow();
 }

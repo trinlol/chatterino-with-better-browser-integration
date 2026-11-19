@@ -9,6 +9,7 @@
 #include "singletons/Settings.hpp"
 #include "util/ApplicationIcon.hpp"
 #include "util/DebugCount.hpp"
+#include "widgets/BaseWindow.hpp"
 #include "widgets/splits/Split.hpp"
 
 #include <QTimer>
@@ -403,6 +404,34 @@ void AttachedWindow::showEvent(QShowEvent *event)
     this->attachToHwnd(this->target_);
 }
 
+void AttachedWindow::hideEvent(QHideEvent *event)
+{
+    QWidget::hideEvent(event);
+
+#ifdef USEWINSDK
+    if (this->targetWindowTransitioning_)
+    {
+        return;
+    }
+#endif
+
+    for (auto *popup : this->findChildren<BaseWindow *>())
+    {
+        if (!popup->isWindow() || !popup->isVisible())
+        {
+            continue;
+        }
+        if (popup->testAttribute(Qt::WA_DeleteOnClose))
+        {
+            popup->close();
+        }
+        else
+        {
+            popup->hide();
+        }
+    }
+}
+
 void AttachedWindow::attachToHwnd(void *_attachedPtr)
 {
 #ifdef USEWINSDK
@@ -567,6 +596,57 @@ void AttachedWindow::syncToTargetWindow()
 
     this->updateWindowRect(this->target_);
 }
+
+void AttachedWindow::bringPopupToFront(BaseWindow *popup)
+{
+    if (popup == nullptr || !popup->isWindow())
+    {
+        return;
+    }
+
+    if (!popup->hasFixedTopMost())
+    {
+        popup->setTopMost(true);
+    }
+
+    if (popup->testAttribute(Qt::WA_WState_Created))
+    {
+        auto popupHwnd = reinterpret_cast<HWND>(popup->winId());
+        ::SetWindowPos(popupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                       SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    }
+}
+
+void AttachedWindow::syncChildPopupsTopMost(bool browserActive)
+{
+    const bool desiredTopMost =
+        browserActive || getSettings()->windowTopMost.getValue();
+
+    for (auto *popup : this->findChildren<BaseWindow *>())
+    {
+        if (!popup->isWindow() || popup->hasFixedTopMost())
+        {
+            continue;
+        }
+
+        popup->setTopMost(desiredTopMost);
+        if (popup->isVisible() && popup->testAttribute(Qt::WA_WState_Created))
+        {
+            auto popupHwnd = reinterpret_cast<HWND>(popup->winId());
+            HWND owner = ::GetWindow(popupHwnd, GW_OWNER);
+            // If the popup is natively owned by this overlay and the overlay
+            // just dropped to non-topmost, do not re-promote it (which would
+            // also drag this overlay back to topmost).
+            if (owner != nullptr && desiredTopMost && !browserActive)
+            {
+                continue;
+            }
+            ::SetWindowPos(popupHwnd,
+                           desiredTopMost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0,
+                           0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+    }
+}
 #endif
 
 void AttachedWindow::updateWindowRect(void *_attachedPtr)
@@ -609,6 +689,7 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
         {
             ::SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            this->syncChildPopupsTopMost(true);
         }
         else
         {
@@ -625,6 +706,7 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
                 ::SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
+            this->syncChildPopupsTopMost(false);
         }
     }
     float scale = 1.f;

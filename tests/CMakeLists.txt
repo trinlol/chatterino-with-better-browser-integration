@@ -74,6 +74,7 @@ set(test_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/Snapshot.hpp
     ${CMAKE_CURRENT_LIST_DIR}/src/MarqueeEventBuffer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/DraggablePopupTest.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/Settings.cpp
     # Add your new file above this line!
     )
 

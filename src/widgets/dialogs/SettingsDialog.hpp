@@ -46,6 +46,7 @@ public:
     static void showDialog(QWidget *parent,
                            SettingsDialogPreference preferredTab =
                                SettingsDialogPreference::NoPreference);
+    static bool isDialogOpen();
 
 protected:
     void scaleChangedEvent(float newDpi) override;

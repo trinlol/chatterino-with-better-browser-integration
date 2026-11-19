@@ -459,21 +459,57 @@ void BaseWindow::tryApplyTopMost()
     }
     this->waitingForTopMost_ = false;
 
-    if (this->parent())
+    if (!this->isWindow())
     {
-        // Don't change the topmost value of child windows. This would apply
-        // to the top-level window too.
+        // Don't change the topmost value of embedded child widgets.
         return;
     }
 
-    ::SetWindowPos(*hwnd, this->isTopMost_ ? HWND_TOPMOST : HWND_NOTOPMOST, 0,
-                   0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    HWND owner = ::GetWindow(*hwnd, GW_OWNER);
+    HWND hostHwnd = owner;
+    if (hostHwnd == nullptr && this->parentWidget() != nullptr)
+    {
+        if (QWidget *hostWindow = this->parentWidget()->window();
+            hostWindow != nullptr && hostWindow != this &&
+            hostWindow->testAttribute(Qt::WA_WState_Created))
+        {
+            hostHwnd = reinterpret_cast<HWND>(hostWindow->winId());
+        }
+    }
+
+    bool desiredTopMost = this->isTopMost_;
+    if (hostHwnd != nullptr)
+    {
+        const bool hostTopMost =
+            (::GetWindowLongPtr(hostHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+        if (hostTopMost)
+        {
+            // Keep popups in the topmost band when their host window (such as
+            // a topmost MainWindow or browser-attached overlay) is topmost, so
+            // they cannot open behind the window they were launched from.
+            desiredTopMost = true;
+        }
+        else if (owner != nullptr && desiredTopMost)
+        {
+            // Don't promote an owned popup to topmost when its native owner is
+            // non-topmost, as Win32 would promote the owner window too.
+            return;
+        }
+    }
+
+    ::SetWindowPos(*hwnd, desiredTopMost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0,
+                   0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 #endif
 
 bool BaseWindow::isTopMost() const
 {
     return this->isTopMost_ || this->flags_.has(TopMost);
+}
+
+bool BaseWindow::hasFixedTopMost() const
+{
+    return this->flags_.has(TopMost);
 }
 
 QWidget *BaseWindow::getLayoutContainer()

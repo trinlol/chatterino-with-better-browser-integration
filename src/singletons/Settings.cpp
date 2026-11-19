@@ -307,6 +307,26 @@ Settings::Settings(const Modes &modes, const Args &args,
 
     instance_ = this;
 
+    // Persist favourite emote/emoji changes immediately instead of waiting for
+    // a clean app shutdown or SettingsDialog OK, so favourites survive crashes,
+    // restarts, and forced closes.
+    this->favouriteEmotes.connect(
+        [this] {
+            if (Settings::instance_ == this)
+            {
+                this->requestSave();
+            }
+        },
+        this->signalHolder, false);
+    this->favouriteEmojis.connect(
+        [this] {
+            if (Settings::instance_ == this)
+            {
+                this->requestSave();
+            }
+        },
+        this->signalHolder, false);
+
 #ifdef USEWINSDK
     this->autorun = isRegisteredForStartup();
     this->autorun.connect(

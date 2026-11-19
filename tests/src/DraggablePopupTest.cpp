@@ -1,7 +1,12 @@
 #include "widgets/DraggablePopup.hpp"
+#include "widgets/BasePopup.hpp"
 #include "widgets/BaseWindow.hpp"
 #include "Test.hpp"
 #include <QWindow>
+
+#ifdef USEWINSDK
+#    include <Windows.h>
+#endif
 
 
 #include "controllers/accounts/AccountController.hpp"
@@ -117,6 +122,64 @@ TEST(DraggablePopupTest, NullParentLifecycleAndSignalCleanup)
 
     EXPECT_TRUE(weakPopup.isNull());
 }
+
+#ifdef USEWINSDK
+TEST(DraggablePopupTest, DialogPopupInheritsTopMostFromTopMostHost)
+{
+    MockApplication mockApp;
+    mockApp.settings.windowTopMost = false;
+
+    QWidget hostWindow(nullptr, Qt::FramelessWindowHint | Qt::Window);
+    hostWindow.show();
+    auto hostHwnd = reinterpret_cast<HWND>(hostWindow.winId());
+    ::SetWindowPos(hostHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    ASSERT_NE(::GetWindowLongPtr(hostHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST, 0);
+
+    auto *popup = new BasePopup(
+        {BaseWindow::EnableCustomFrame, BaseWindow::DisableLayoutSave},
+        &hostWindow);
+    popup->show();
+
+    // Allow BaseWindow::showEvent's deferred tryApplyTopMost() timer to fire.
+    QEventLoop loop;
+    QTimer::singleShot(50, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    auto popupHwnd = reinterpret_cast<HWND>(popup->winId());
+    EXPECT_NE(::GetWindowLongPtr(popupHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST, 0);
+
+    popup->close();
+    popup->deleteLater();
+}
+
+TEST(DraggablePopupTest, DialogPopupDoesNotPromoteNonTopMostHost)
+{
+    MockApplication mockApp;
+    mockApp.settings.windowTopMost = false;
+
+    QWidget hostWindow(nullptr, Qt::Window);
+    hostWindow.show();
+    auto hostHwnd = reinterpret_cast<HWND>(hostWindow.winId());
+    ASSERT_EQ(::GetWindowLongPtr(hostHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST, 0);
+
+    auto *popup = new BasePopup(
+        {BaseWindow::EnableCustomFrame, BaseWindow::DisableLayoutSave},
+        &hostWindow);
+    popup->show();
+
+    QEventLoop loop;
+    QTimer::singleShot(50, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    auto popupHwnd = reinterpret_cast<HWND>(popup->winId());
+    EXPECT_EQ(::GetWindowLongPtr(popupHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST, 0);
+    EXPECT_EQ(::GetWindowLongPtr(hostHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST, 0);
+
+    popup->close();
+    popup->deleteLater();
+}
+#endif
 
 }  // namespace chatterino
 

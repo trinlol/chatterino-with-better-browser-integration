@@ -97,6 +97,8 @@ public:
     /// @returns true if the window is the top-most window.
     ///          Either #setTopMost was called or the `TopMost` flag is set which overrides this
     bool isTopMost() const;
+    /// @returns true if the window was constructed with the fixed `TopMost` flag
+    bool hasFixedTopMost() const;
     /// Updates the window's top-most status
     /// If the `TopMost` flag is set, this is a no-op
     void setTopMost(bool topMost);

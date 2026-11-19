@@ -28,14 +28,17 @@
 #include "singletons/WindowManager.hpp"
 #include "util/Helpers.hpp"
 #include "util/QStringHash.hpp"
+#include "widgets/AttachedWindow.hpp"
 #include "widgets/helper/ChannelView.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/Scrollbar.hpp"
 
 #include <QAbstractButton>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
+#include <QScreen>
 #include <QStringBuilder>
 #include <QTabWidget>
 
@@ -93,19 +96,6 @@ bool isFavouriteEmoteOrEmoji(const QString &identifier, bool isEmoji)
                                        return identifier == otherEmoteName;
                                    });
     return it != emoteNames.end();
-}
-
-auto saveFavouriteEmojis(const std::unordered_map<QString, EmojiPtr> &emojis)
-{
-    QStringList emojiNames;
-    emojiNames.reserve(static_cast<qsizetype>(emojis.size()));
-
-    std::ranges::transform(emojis, std::back_inserter(emojiNames),
-                           [](const auto &it) {
-                               return it.first;
-                           });
-
-    getSettings()->favouriteEmojis = emojiNames;
 }
 
 auto makeTitleMessage(const QString &title)
@@ -371,6 +361,10 @@ std::pair<QString, QStringList> getSearchWordAndTags(const QString &text)
     return {searchWord, tags};
 }
 
+// Separate remembered bounds for the browser-attached emote popup so moving
+// it beside Twitch chat doesn't clobber the standalone app's saved bounds.
+QRect attachedEmotePopupBounds;
+
 }  // namespace
 
 namespace chatterino {
@@ -383,10 +377,64 @@ EmotePopup::EmotePopup(QWidget *parent)
 {
     // this->setStayInScreenRect(true);
     this->setWindowRole(u"chatterino.emote-popup"_s);
-    auto bounds = getApp()->getWindows()->emotePopupBounds();
-    if (bounds.size().isEmpty())
+
+    auto *attachedHost =
+        parent ? dynamic_cast<AttachedWindow *>(parent->window()) : nullptr;
+    this->attachedToBrowser_ = (attachedHost != nullptr);
+
+    QRect bounds;
+    if (attachedHost != nullptr)
     {
-        bounds.setSize(QSize{300, 500} * this->scale());
+        const QPoint hostTopLeft = attachedHost->mapToGlobal(QPoint(0, 0));
+        const QRect hostRect(hostTopLeft, attachedHost->size());
+        auto *hostScreen = attachedHost->screen();
+        if (!hostScreen)
+        {
+            hostScreen = QGuiApplication::screenAt(hostRect.center());
+        }
+        const QRect avail =
+            hostScreen ? hostScreen->availableGeometry() : QRect{};
+
+        const QSize defaultSize = QSize{300, 500} * this->scale();
+        const bool reuseAttachedBounds =
+            !attachedEmotePopupBounds.isNull() &&
+            !attachedEmotePopupBounds.size().isEmpty() &&
+            (avail.isNull() || avail.intersects(attachedEmotePopupBounds));
+
+        if (reuseAttachedBounds)
+        {
+            bounds = attachedEmotePopupBounds;
+        }
+        else
+        {
+            const QSize popupSize = attachedEmotePopupBounds.size().isEmpty()
+                                        ? defaultSize
+                                        : attachedEmotePopupBounds.size();
+            int x = hostRect.left() - popupSize.width() - 8;
+            int y = hostRect.bottom() - popupSize.height();
+            if (!avail.isNull())
+            {
+                if (x < avail.left())
+                {
+                    x = hostRect.right() + 8;
+                }
+                x = std::clamp(x, avail.left(),
+                               std::max(avail.left(),
+                                        avail.right() - popupSize.width()));
+                y = std::clamp(y, avail.top(),
+                               std::max(avail.top(),
+                                        avail.bottom() - popupSize.height()));
+            }
+            bounds = QRect(QPoint(x, y), popupSize);
+        }
+    }
+    else
+    {
+        bounds = getApp()->getWindows()->emotePopupBounds();
+        if (bounds.size().isEmpty())
+        {
+            bounds.setSize(QSize{300, 500} * this->scale());
+        }
     }
     this->setInitialBounds(bounds, widgets::BoundsChecking::DesiredPosition);
 
@@ -433,11 +481,12 @@ EmotePopup::EmotePopup(QWidget *parent)
                 return;
             }
 
-            if (this->favouritesView_ == page)
-            {
-                auto isEmoji = hoveredElement->getCreator().getFlags().hasAny(
-                    MessageElementFlag::EmojiAll);
+            const bool isSearchView = this->searchView_->isVisible();
+            const bool isEmoji = hoveredElement->getCreator().getFlags().hasAny(
+                MessageElementFlag::EmojiAll);
 
+            if (!isSearchView && this->favouritesView_ == page)
+            {
                 if (isEmoji)
                 {
                     this->removeFavouriteEmoji(toEmojiShortCode(identifier));
@@ -447,7 +496,7 @@ EmotePopup::EmotePopup(QWidget *parent)
                     this->removeFavouriteEmote(EmoteName{identifier});
                 }
             }
-            else if (this->viewEmojis_ == page)
+            else if (isEmoji)
             {
                 this->addFavouriteEmoji(toEmojiShortCode(identifier));
             }
@@ -736,7 +785,9 @@ void EmotePopup::addFavouriteEmoji(const QString &shortCode)
     {
         return;
     }
-    if (this->favouriteEmojis_.contains(shortCode))
+
+    auto shortCodes = getSettings()->favouriteEmojis.getValue();
+    if (shortCodes.contains(shortCode))
     {
         return;
     }
@@ -746,12 +797,12 @@ void EmotePopup::addFavouriteEmoji(const QString &shortCode)
         if (emojiHasShortCode(emoji, shortCode))
         {
             this->favouriteEmojis_.emplace(shortCode, emoji);
-            break;
+            shortCodes.push_back(shortCode);
+            getSettings()->favouriteEmojis = shortCodes;
+            this->updateFavouriteEmotesAndEmojis();
+            return;
         }
     }
-
-    this->updateFavouriteEmotesAndEmojis();
-    saveFavouriteEmojis(this->favouriteEmojis_);
 }
 
 void EmotePopup::addFavouriteEmote(const EmoteName &name)
@@ -790,7 +841,12 @@ void EmotePopup::addFavouriteEmote(const EmoteName &name)
 void EmotePopup::removeFavouriteEmoji(const QString &shortCode)
 {
     this->favouriteEmojis_.erase(shortCode);
-    saveFavouriteEmojis(this->favouriteEmojis_);
+
+    auto shortCodes = getSettings()->favouriteEmojis.getValue();
+    shortCodes.removeIf([&shortCode](const auto &code) {
+        return code == shortCode;
+    });
+    getSettings()->favouriteEmojis = shortCodes;
 
     this->updateFavouriteEmotesAndEmojis();
 }
@@ -840,7 +896,7 @@ void EmotePopup::updateFavouriteEmotesAndEmojis()
     if (!this->favouriteEmojis_.empty())
     {
         std::vector<EmojiPtr> emojis;
-        emojis.reserve(this->favouriteEmotes_.size());
+        emojis.reserve(this->favouriteEmojis_.size());
         std::ranges::transform(this->favouriteEmojis_,
                                std::back_inserter(emojis), [](const auto &v) {
                                    return v.second;
@@ -1177,7 +1233,14 @@ void EmotePopup::saveBounds() const
     auto bounds = this->getBounds();
     if (!bounds.isNull())
     {
-        getApp()->getWindows()->setEmotePopupBounds(bounds);
+        if (this->attachedToBrowser_)
+        {
+            attachedEmotePopupBounds = bounds;
+        }
+        else
+        {
+            getApp()->getWindows()->setEmotePopupBounds(bounds);
+        }
     }
 }
 

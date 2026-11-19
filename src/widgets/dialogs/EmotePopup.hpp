@@ -74,6 +74,8 @@ private:
     void updateFavouriteEmotesAndEmojis();
 
     void saveBounds() const;
+
+    bool attachedToBrowser_ = false;
 };
 
 }  // namespace chatterino
