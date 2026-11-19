@@ -41,6 +41,7 @@
 #include <QScreen>
 #include <QStringBuilder>
 #include <QTabWidget>
+#include <QTimer>
 
 #include <algorithm>
 #include <utility>
@@ -525,6 +526,7 @@ EmotePopup::EmotePopup(QWidget *parent)
             MessageElementFlag::Default, MessageElementFlag::AlwaysShow,
             MessageElementFlag::EmoteImage});
         view->setEnableScrollingToBottom(false);
+        view->setEnablePixelScrolling(true);
         // We can safely ignore this signal connection since the ChannelView is deleted
         // either when the notebook is deleted, or when our main layout is deleted.
         std::ignore = view->elementClicked.connect(clicked);
@@ -944,6 +946,19 @@ void EmotePopup::reloadEmotes()
     auto globalChannel = this->globalEmotesView_->underlyingChannel();
     auto channelChannel = this->channelEmotesView_->underlyingChannel();
 
+    const qreal savedSubScroll =
+        subChannel->hasMessages()
+            ? this->subEmotesView_->getScrollBar().getDesiredValue()
+            : 0.0;
+    const qreal savedGlobalScroll =
+        globalChannel->hasMessages()
+            ? this->globalEmotesView_->getScrollBar().getDesiredValue()
+            : 0.0;
+    const qreal savedChannelScroll =
+        channelChannel->hasMessages()
+            ? this->channelEmotesView_->getScrollBar().getDesiredValue()
+            : 0.0;
+
     subChannel->clearMessages();
     globalChannel->clearMessages();
     channelChannel->clearMessages();
@@ -1003,6 +1018,19 @@ void EmotePopup::reloadEmotes()
                                      MessageColor::System);
         subChannel->addMessage(builder.release(), MessageContext::Original);
     }
+
+    auto restoreScroll = [](ChannelView *view, qreal saved) {
+        if (saved <= 0.0)
+        {
+            return;
+        }
+        QTimer::singleShot(0, view, [view, saved] {
+            view->getScrollBar().setDesiredValue(saved, false);
+        });
+    };
+    restoreScroll(this->subEmotesView_, savedSubScroll);
+    restoreScroll(this->globalEmotesView_, savedGlobalScroll);
+    restoreScroll(this->channelEmotesView_, savedChannelScroll);
 }
 
 bool EmotePopup::eventFilter(QObject *object, QEvent *event)

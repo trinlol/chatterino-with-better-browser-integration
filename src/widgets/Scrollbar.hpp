@@ -153,6 +153,8 @@ public:
     pajlada::Signals::NoArgSignal &getDesiredValueChanged();
     void setCurrentValue(qreal value);
 
+    void setUsePageTrackStep(bool enabled);
+
     void printCurrentState(
         const QString &prefix = QStringLiteral("Scrollbar")) const;
 
@@ -189,6 +191,7 @@ private:
     boost::circular_buffer<ScrollbarHighlight> highlights_;
 
     bool atBottom_{true};
+    bool usePageTrackStep_{false};
     /// This takes precedence over `settingHideThumb`
     bool hideThumb{false};
     /// Controlled by the "Hide scrollbar thumb" setting

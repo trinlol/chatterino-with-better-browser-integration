@@ -117,6 +117,11 @@ public:
 
     void setEnableScrollingToBottom(bool);
     bool getEnableScrollingToBottom() const;
+    /// Use pixel-proportional scrollbar coordinates instead of per-message
+    /// coordinates. Intended for views with few messages of wildly varying
+    /// heights (such as the emote picker).
+    void setEnablePixelScrolling(bool value);
+    bool getEnablePixelScrolling() const;
     void setOverrideFlags(std::optional<MessageElementFlags> value);
     const std::optional<MessageElementFlags> &getOverrideFlags() const;
     void updateLastReadMessage();
@@ -303,6 +308,8 @@ private:
     void layoutVisibleMessages(const std::vector<MessageLayoutPtr> &messages);
     void updateScrollbar(const std::vector<MessageLayoutPtr> &messages,
                          bool causedByScrollbar, bool causedByShow);
+    std::pair<size_t, qreal> resolveScrollStart(
+        const std::vector<MessageLayoutPtr> &messages) const;
 
     void drawMessages(QPainter &painter, const QRect &area);
     void setSelection(const SelectionItem &start, const SelectionItem &end);
@@ -415,6 +422,7 @@ private:
     // "Show latest messages" button
     bool showingLatestMessages_ = true;
     bool enableScrollingToBottom_ = true;
+    bool enablePixelScrolling_ = false;
 
     bool onlyUpdateEmotes_ = false;
 

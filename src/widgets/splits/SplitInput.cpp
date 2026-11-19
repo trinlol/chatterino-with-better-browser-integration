@@ -168,7 +168,7 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
         this->inputHighlighter->setChannel(this->split_->getChannel());
         this->bindNukePreviewChannel();
         this->updateNukePreview(this->ui_.textEdit->toPlainText());
-        if (this->emotePopup_)
+        if (this->emotePopup_ && this->emotePopup_->channel() != channel)
         {
             this->emotePopup_->loadChannel(channel);
         }
@@ -684,7 +684,11 @@ void SplitInput::openEmotePopup()
             });
     }
 
-    this->emotePopup_->loadChannel(this->split_->getChannel());
+    auto currentChannel = this->split_->getChannel();
+    if (this->emotePopup_->channel() != currentChannel)
+    {
+        this->emotePopup_->loadChannel(std::move(currentChannel));
+    }
     if (this->emotePopup_->isMinimized())
     {
         this->emotePopup_->showNormal();

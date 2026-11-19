@@ -772,29 +772,74 @@ void ChannelView::performLayout(bool causedByScrollbar, bool causedByShow)
                                   !this->scrollBar_->isAtBottom());
 }
 
+std::pair<size_t, qreal> ChannelView::resolveScrollStart(
+    const std::vector<MessageLayoutPtr> &messages) const
+{
+    if (messages.empty())
+    {
+        return {0, 0.0};
+    }
+
+    const qreal rel = this->scrollBar_->getRelativeCurrentValue();
+    if (!this->enablePixelScrolling_)
+    {
+        const auto start = size_t(rel);
+        if (start >= messages.size())
+        {
+            return {messages.size(), 0.0};
+        }
+        const qreal y = -(messages[start]->getHeight() * fmod(rel, 1.0));
+        return {start, y};
+    }
+
+    qreal offset = std::max<qreal>(0.0, rel);
+    for (size_t i = 0; i < messages.size(); ++i)
+    {
+        const qreal h = std::max(1, messages[i]->getHeight());
+        if (offset < h || i + 1 == messages.size())
+        {
+            return {i, -offset};
+        }
+        offset -= h;
+    }
+    return {messages.size(), 0.0};
+}
+
 void ChannelView::layoutVisibleMessages(
     const std::vector<MessageLayoutPtr> &messages)
 {
-    const auto start = size_t(this->scrollBar_->getRelativeCurrentValue());
     const auto layoutWidth = this->getLayoutWidth();
     auto redrawRequired = false;
 
-    if (messages.size() > start)
+    if (this->enablePixelScrolling_)
     {
-        auto y = -(messages[start]->getHeight() *
-                   (fmod(this->scrollBar_->getRelativeCurrentValue(), 1)));
-
-        for (auto i = start; i < messages.size() && y <= this->height(); i++)
+        for (const auto &message : messages)
         {
-            const auto &message = messages[i];
-
             redrawRequired |=
                 message->layout(this->makeMessageLayoutContext(layoutWidth),
                                 this->bufferInvalidationQueued_);
-
-            y += message->getHeight();
         }
         this->bufferInvalidationQueued_ = false;
+    }
+    else
+    {
+        const auto [start, startY] = this->resolveScrollStart(messages);
+        if (messages.size() > start)
+        {
+            auto y = startY;
+
+            for (auto i = start; i < messages.size() && y <= this->height(); i++)
+            {
+                const auto &message = messages[i];
+
+                redrawRequired |=
+                    message->layout(this->makeMessageLayoutContext(layoutWidth),
+                                    this->bufferInvalidationQueued_);
+
+                y += message->getHeight();
+            }
+            this->bufferInvalidationQueued_ = false;
+        }
     }
 
     if (redrawRequired)
@@ -809,6 +854,40 @@ void ChannelView::updateScrollbar(const std::vector<MessageLayoutPtr> &messages,
     if (messages.size() == 0)
     {
         this->scrollBar_->setVisible(false);
+        return;
+    }
+
+    if (this->enablePixelScrolling_)
+    {
+        qreal totalHeight = 0.0;
+        const auto layoutWidth = this->getLayoutWidth();
+        for (const auto &message : messages)
+        {
+            message->layout(this->makeMessageLayoutContext(layoutWidth), false);
+            totalHeight += message->getHeight();
+        }
+
+        const qreal viewportHeight = std::max<qreal>(1.0, this->height() - 8);
+        const bool showScrollbar = totalHeight > viewportHeight;
+
+        this->scrollBar_->setMinimum(0);
+        this->scrollBar_->setMaximum(totalHeight);
+        this->scrollBar_->setPageSize(showScrollbar ? viewportHeight
+                                                    : totalHeight);
+        this->scrollBar_->setVisible(showScrollbar);
+
+        if (!showScrollbar && !causedByScrollbar)
+        {
+            this->scrollBar_->scrollToTop();
+        }
+        else if (!causedByScrollbar &&
+                 this->scrollBar_->getDesiredValue() >
+                     this->scrollBar_->getBottom())
+        {
+            this->scrollBar_->setDesiredValue(
+                this->scrollBar_->getDesiredValue(), false);
+        }
+        this->showScrollBar_ = showScrollbar;
         return;
     }
 
@@ -953,6 +1032,22 @@ void ChannelView::setEnableScrollingToBottom(bool value)
 bool ChannelView::getEnableScrollingToBottom() const
 {
     return this->enableScrollingToBottom_;
+}
+
+void ChannelView::setEnablePixelScrolling(bool value)
+{
+    if (this->enablePixelScrolling_ == value)
+    {
+        return;
+    }
+    this->enablePixelScrolling_ = value;
+    this->scrollBar_->setUsePageTrackStep(value);
+    this->queueLayout();
+}
+
+bool ChannelView::getEnablePixelScrolling() const
+{
+    return this->enablePixelScrolling_;
 }
 
 void ChannelView::setOverrideFlags(std::optional<MessageElementFlags> value)
@@ -1110,8 +1205,11 @@ void ChannelView::setChannel(const ChannelPtr &underlyingChannel)
         }
     }
 
-    this->scrollBar_->setMaximum(
-        static_cast<qreal>(std::min(nMessagesAdded, this->messages_.limit())));
+    if (!this->enablePixelScrolling_)
+    {
+        this->scrollBar_->setMaximum(static_cast<qreal>(
+            std::min(nMessagesAdded, this->messages_.limit())));
+    }
 
     //
     // Standard channel connections
@@ -1150,7 +1248,8 @@ void ChannelView::setChannel(const ChannelPtr &underlyingChannel)
     this->updateID();
 
     this->queueLayout();
-    if (!this->isVisible() && !this->scrollBar_->isVisible())
+    if (this->enableScrollingToBottom_ && !this->isVisible() &&
+        !this->scrollBar_->isVisible())
     {
         // If we're not visible and the scrollbar is not (yet) visible,
         // we need to make sure that it's at the bottom when this view is laid
@@ -1256,13 +1355,16 @@ void ChannelView::messageAppended(MessagePtr &message,
     this->lastMessageHasAlternateBackground_ =
         !this->lastMessageHasAlternateBackground_;
 
-    if (this->paused())
+    if (!this->enablePixelScrolling_)
     {
-        this->pauseScrollMaximumOffset_++;
-    }
-    else
-    {
-        this->scrollBar_->offsetMaximum(1);
+        if (this->paused())
+        {
+            this->pauseScrollMaximumOffset_++;
+        }
+        else
+        {
+            this->scrollBar_->offsetMaximum(1);
+        }
     }
 
     if (this->messages_.pushBack(messageRef))
@@ -1395,7 +1497,10 @@ void ChannelView::messagesUpdated()
     this->messages_.clear();
     this->scrollBar_->clearHighlights();
     this->scrollBar_->resetBounds();
-    this->scrollBar_->setMaximum(qreal(snapshot.size()));
+    if (!this->enablePixelScrolling_)
+    {
+        this->scrollBar_->setMaximum(qreal(snapshot.size()));
+    }
     this->scrollBar_->setMinimum(0);
     this->lastMessageHasAlternateBackground_ = false;
     this->lastMessageHasAlternateBackgroundReverse_ = true;
@@ -1682,7 +1787,7 @@ void ChannelView::drawMessages(QPainter &painter, const QRect &area)
 {
     auto &messagesSnapshot = this->getMessagesSnapshot();
 
-    const auto start = size_t(this->scrollBar_->getRelativeCurrentValue());
+    const auto [start, startY] = this->resolveScrollStart(messagesSnapshot);
 
     if (start >= messagesSnapshot.size())
     {
@@ -1703,9 +1808,7 @@ void ChannelView::drawMessages(QPainter &painter, const QRect &area)
         .isMentions = this->underlyingChannel_ ==
                       getApp()->getTwitch()->getMentionsChannel(),
 
-        .y = -static_cast<int>(
-            messagesSnapshot[start]->getHeight() *
-            (fmod(this->scrollBar_->getRelativeCurrentValue(), 1))),
+        .y = static_cast<int>(startY),
         .messageIndex = start,
         .isLastReadMessage = false,
         .hostWidget = this,
@@ -1861,6 +1964,12 @@ void ChannelView::wheelEvent(QWheelEvent *event)
         const qreal minValue = this->scrollBar_->getMinimum();
         qreal desired = std::max(minValue, this->scrollBar_->getDesiredValue());
         qreal delta = event->angleDelta().y() * qreal(1.5) * mouseMultiplier;
+
+        if (this->enablePixelScrolling_)
+        {
+            this->scrollBar_->setDesiredValue(desired - delta, true);
+            return;
+        }
 
         auto &snapshot = this->getMessagesSnapshot();
         int snapshotLength = int(snapshot.size());
@@ -3426,15 +3535,14 @@ bool ChannelView::tryGetMessageAt(QPointF p,
 {
     auto &messagesSnapshot = this->getMessagesSnapshot();
 
-    const auto start = size_t(this->scrollBar_->getRelativeCurrentValue());
+    const auto [start, startY] = this->resolveScrollStart(messagesSnapshot);
 
     if (start >= messagesSnapshot.size())
     {
         return false;
     }
 
-    qreal y = -(messagesSnapshot[start]->getHeight() *
-                (fmod(this->scrollBar_->getRelativeCurrentValue(), 1)));
+    qreal y = startY;
 
     for (size_t i = start; i < messagesSnapshot.size(); ++i)
     {

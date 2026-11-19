@@ -461,15 +461,18 @@ void Scrollbar::mouseReleaseEvent(QMouseEvent *event)
         return;
     }
 
+    const qreal step = this->usePageTrackStep_
+                           ? std::max(SCROLL_DELTA, this->pageSize_ * 0.8)
+                           : SCROLL_DELTA;
     switch (releaseLocation)
     {
         case MouseLocation::AboveThumb:
             // Move scrollbar up a small bit.
-            this->setDesiredValue(this->desiredValue_ - SCROLL_DELTA, true);
+            this->setDesiredValue(this->desiredValue_ - step, true);
             break;
         case MouseLocation::BelowThumb:
             // Move scrollbar down a small bit.
-            this->setDesiredValue(this->desiredValue_ + SCROLL_DELTA, true);
+            this->setDesiredValue(this->desiredValue_ + step, true);
             break;
         default:
             break;
@@ -502,6 +505,11 @@ void Scrollbar::updateScroll()
     };
 
     this->update();
+}
+
+void Scrollbar::setUsePageTrackStep(bool enabled)
+{
+    this->usePageTrackStep_ = enabled;
 }
 
 void Scrollbar::setHideThumb(bool hideThumb)

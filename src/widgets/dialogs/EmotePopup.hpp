@@ -26,6 +26,10 @@ public:
     EmotePopup(QWidget *parent = nullptr);
 
     void loadChannel(ChannelPtr channel);
+    const ChannelPtr &channel() const
+    {
+        return this->channel_;
+    }
 
     void closeEvent(QCloseEvent *event) override;
 

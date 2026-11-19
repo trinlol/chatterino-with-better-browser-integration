@@ -5,14 +5,28 @@
 #include "widgets/Scrollbar.hpp"
 
 #include "Application.hpp"
+#include "common/Channel.hpp"
+#include "common/enums/MessageContext.hpp"
+#include "controllers/accounts/AccountController.hpp"
+#include "controllers/commands/Command.hpp"
+#include "controllers/commands/CommandController.hpp"
+#include "controllers/hotkeys/HotkeyController.hpp"
+#include "messages/layouts/MessageLayoutElement.hpp"
+#include "messages/Message.hpp"
+#include "messages/MessageBuilder.hpp"
+#include "messages/MessageElement.hpp"
 #include "mocks/BaseApplication.hpp"
+#include "mocks/EmoteController.hpp"
+#include "mocks/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
 #include "Test.hpp"
+#include "widgets/helper/ChannelView.hpp"
 #include "widgets/helper/ScrollbarHighlight.hpp"
 
+#include <QMouseEvent>
 #include <QString>
 
 #include <memory>
@@ -27,7 +41,13 @@ public:
     MockApplication()
         : windowManager(this->args_, this->paths_, this->settings, this->theme,
                         this->fonts)
+        , commands(this->paths_)
     {
+    }
+
+    HotkeyController *getHotkeys() override
+    {
+        return &this->hotkeys;
     }
 
     WindowManager *getWindows() override
@@ -35,7 +55,32 @@ public:
         return &this->windowManager;
     }
 
+    AccountController *getAccounts() override
+    {
+        return &this->accounts;
+    }
+
+    CommandController *getCommands() override
+    {
+        return &this->commands;
+    }
+
+    EmoteController *getEmotes() override
+    {
+        return &this->emotes;
+    }
+
+    ITwitchIrcServer *getTwitch() override
+    {
+        return &this->twitch;
+    }
+
+    HotkeyController hotkeys;
     WindowManager windowManager;
+    AccountController accounts;
+    CommandController commands;
+    mock::EmoteController emotes;
+    mock::MockTwitchIrcServer twitch;
 };
 
 }  // namespace
@@ -282,5 +327,79 @@ TEST(Scrollbar, OffsetMinimumPreservesAtBottomWhenEvicting)
     scrollbar.offsetMinimum(20);
     EXPECT_FALSE(scrollbar.isAtBottom());
     EXPECT_DOUBLE_EQ(scrollbar.getDesiredValue(), 0.0);
+}
+
+TEST(Scrollbar, PixelScrollingProportionalAcrossUnevenMessages)
+{
+    MockApplication mockApplication;
+    mockApplication.settings.enableSmoothScrolling = false;
+
+    ChannelView view(nullptr);
+    view.setEnableScrollingToBottom(false);
+    view.setEnablePixelScrolling(true);
+    view.resize(260, 200);
+
+    auto channel = std::make_shared<Channel>("", Channel::Type::None);
+    view.setChannel(channel);
+
+    // Message 0: tiny single-line section title ("7TV")
+    {
+        MessageBuilder title;
+        title
+            .emplace<TextElement>(QStringLiteral("7TV"),
+                                  MessageElementFlag::Text)
+            ->setLink(Link(Link::InsertText, QStringLiteral("title")));
+        channel->addMessage(title.release(), MessageContext::Original);
+    }
+
+    // Message 1: large multi-line block (simulating hundreds of 7TV emotes)
+    {
+        MessageBuilder body;
+        for (int i = 0; i < 200; ++i)
+        {
+            body.emplace<TextElement>(QStringLiteral("EmoteItem%1").arg(i),
+                                      MessageElementFlag::Text)
+                ->setLink(Link(Link::InsertText,
+                               QStringLiteral("item_%1").arg(i)));
+        }
+        channel->addMessage(body.release(), MessageContext::Original);
+    }
+
+    view.show();
+    QCoreApplication::processEvents();
+
+    auto &scrollbar = view.getScrollBar();
+    ASSERT_TRUE(scrollbar.isVisible());
+    // Pixel coordinates: maximum is total pixel height (well above 2 messages),
+    // and pageSize is the viewport height (200 - 8 = 192).
+    EXPECT_GT(scrollbar.getMaximum(), 500.0);
+    EXPECT_DOUBLE_EQ(scrollbar.getPageSize(), 192.0);
+    EXPECT_DOUBLE_EQ(scrollbar.getCurrentValue(), 0.0);
+
+    // Dragging the scrollbar 25% of the way down must advance well past the
+    // tiny title message into Message 1 (previously 0..50% was stuck in msg 0).
+    const qreal quarterScroll = scrollbar.getBottom() * 0.25;
+    scrollbar.setDesiredValue(quarterScroll, false);
+    QCoreApplication::processEvents();
+
+    QString clickedValue;
+    std::ignore = view.elementClicked.connect(
+        [&clickedValue](const MessageLayoutElement *el, Qt::KeyboardModifiers) {
+            if (el != nullptr)
+            {
+                clickedValue = el->getLink().value;
+            }
+        });
+
+    const QPointF clickPos(60, 20);
+    QMouseEvent press(QEvent::MouseButtonPress, clickPos, clickPos,
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent release(QEvent::MouseButtonRelease, clickPos, clickPos,
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&view, &press);
+    QCoreApplication::sendEvent(&view, &release);
+
+    EXPECT_TRUE(clickedValue.startsWith(QStringLiteral("item_")))
+        << "Clicked link was: " << clickedValue.toStdString();
 }
 

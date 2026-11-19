@@ -394,6 +394,10 @@ void AttachedWindow::reportLoss(QString reason)
 
 void AttachedWindow::setChannel(ChannelPtr channel)
 {
+    if (this->ui_.split->getChannel() == channel)
+    {
+        return;
+    }
     this->ui_.split->setChannel(std::move(channel));
 }
 
