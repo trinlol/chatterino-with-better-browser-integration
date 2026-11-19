@@ -291,6 +291,10 @@ let workerRecoveryPending = true;
 // readiness-triggered geometry reply to cross that focus transition.
 const pendingStartupReplayTabs = new Map();
 const pendingAttachRequests = new Map();
+// Tracks the last attach select posted to the native host for each window so
+// tryDetach still sends a native detach even if a tab switch arrives before
+// the first chat-attached acknowledgement is persisted.
+const postedAttachByWindow = new Map();
 const recentlyAttachedRequestIds = new Set();
 function recordAttachedRequestId(requestId) {
   if (!requestId) return;
@@ -311,8 +315,13 @@ function invalidateWindow(windowId) {
 }
 async function isCurrentChannelTab(tabId, windowId, channel) {
   const tab = await chrome.tabs.get(tabId).catch(() => null);
-  return tab?.active === true && tab.windowId === Number(windowId) &&
-    matchChannelName(tab.url) === channel;
+  const currentChannel = matchChannelName(tab?.url);
+  return (
+    tab?.active === true &&
+    Number(tab.windowId) === Number(windowId) &&
+    Boolean(currentChannel) &&
+    currentChannel.toLowerCase() === String(channel || "").toLowerCase()
+  );
 }
 let nextAttachRequestId = 1;
 
@@ -446,10 +455,22 @@ function createSessionId() {
   return `browser:${globalThis.crypto.randomUUID()}`;
 }
 
-let ensureSessionQueue = Promise.resolve();
+// Serialize read-modify-write transitions on sessionStore so concurrent tab
+// switches, focus changes, and geometry replies cannot interleave and
+// resurrect desired=true after a detach.
+let sessionOpQueue = Promise.resolve();
+
+function enqueueSessionOp(run) {
+  const result = sessionOpQueue.then(run, run);
+  sessionOpQueue = result.then(
+    () => {},
+    () => {}
+  );
+  return result;
+}
 
 function ensureDesiredSession(windowId, tabId, channel) {
-  const run = async () => {
+  return enqueueSessionOp(async () => {
     const sessions = await sessionStore.all();
     const existing = Object.values(sessions).find(
       (candidate) =>
@@ -478,30 +499,35 @@ function ensureDesiredSession(windowId, tabId, channel) {
     };
     await sessionStore.put(session);
     return session;
-  };
-  const result = ensureSessionQueue.then(run, run);
-  ensureSessionQueue = result.then(
-    () => {},
-    () => {}
-  );
-  return result;
+  });
 }
 
 // Undo ensureDesiredSession for a measurement that lost a race with a tab
 // switch, unless a newer attach for the same session already took over.
 async function abandonDesiredSession(session) {
-  const current = await sessionStore.get(session.sessionId);
-  if (!current || current.generation !== session.generation) return;
-  if (pendingAttachRequests.get(String(current.windowId))?.sessionId ===
-      current.sessionId) return;
-  if (await isCurrentChannelTab(current.tabId, current.windowId, current.channel)) {
-    return;
+  const cleared = await enqueueSessionOp(async () => {
+    const current = await sessionStore.get(session.sessionId);
+    if (!current || current.generation !== session.generation) return null;
+    if (
+      pendingAttachRequests.get(String(current.windowId))?.sessionId ===
+      current.sessionId
+    ) {
+      return null;
+    }
+    if (
+      await isCurrentChannelTab(current.tabId, current.windowId, current.channel)
+    ) {
+      return null;
+    }
+    current.desired = false;
+    current.attached = false;
+    current.leaseExpiresAt = 0;
+    await sessionStore.put(current);
+    return current;
+  });
+  if (cleared) {
+    await sendOverlayState(cleared, "revealed", "detach");
   }
-  current.desired = false;
-  current.attached = false;
-  current.leaseExpiresAt = 0;
-  await sessionStore.put(current);
-  await sendOverlayState(current, "revealed", "detach");
 }
 
 async function sessionsForWindow(windowId) {
@@ -583,23 +609,53 @@ function scheduleAttachRetry(windowId, requestId) {
   if (!pending || pending.requestId !== requestId) return;
 
   pending.timerId = setTimeout(() => {
-    const current = pendingAttachRequests.get(key);
-    if (!current || current.requestId !== requestId) return;
-    if (current.attempts >= ATTACH_MAX_ATTEMPTS) {
-      pendingAttachRequests.delete(key);
-      return;
-    }
+    void (async () => {
+      const current = pendingAttachRequests.get(key);
+      if (
+        !current ||
+        current.requestId !== requestId ||
+        current.revision !== windowRevision(windowId)
+      ) {
+        return;
+      }
+      if (current.attempts >= ATTACH_MAX_ATTEMPTS) {
+        pendingAttachRequests.delete(key);
+        return;
+      }
+      if (
+        Number.isInteger(current.tabId) &&
+        !(await isCurrentChannelTab(current.tabId, windowId, current.message.name))
+      ) {
+        if (pendingAttachRequests.get(key) === current) {
+          clearPendingAttach(windowId);
+        }
+        return;
+      }
+      if (
+        pendingAttachRequests.get(key) !== current ||
+        current.revision !== windowRevision(windowId)
+      ) {
+        return;
+      }
 
-    current.attempts += 1;
-    const nativePort = getPort();
-    if (nativePort) {
-      nativePort.postMessage({
-        ...current.message,
-        browserWindowFocused: false,
-        startupReplay: true,
-      });
-    }
-    scheduleAttachRetry(windowId, requestId);
+      current.attempts += 1;
+      const nativePort = getPort();
+      if (nativePort) {
+        postedAttachByWindow.set(key, {
+          sessionId: current.sessionId,
+          generation: current.generation,
+          tabId: current.tabId,
+          channel: current.message.name,
+          protocolVersion: current.message.protocolVersion,
+        });
+        nativePort.postMessage({
+          ...current.message,
+          browserWindowFocused: false,
+          startupReplay: true,
+        });
+      }
+      scheduleAttachRetry(windowId, requestId);
+    })();
   }, ATTACH_ACK_TIMEOUT_MS);
 }
 
@@ -617,6 +673,7 @@ function postAttachUntilAcknowledged(windowId, message, sessionMetadata = {}) {
   if (Number(message.protocolVersion) >= 2) {
     correlatedMessage.requestId = requestId;
   }
+  const key = String(windowId);
   const pending = {
     attempts: 1,
     message: correlatedMessage,
@@ -627,20 +684,29 @@ function postAttachUntilAcknowledged(windowId, message, sessionMetadata = {}) {
     revision: sessionMetadata.revision ?? windowRevision(windowId),
     timerId: null,
   };
-  pendingAttachRequests.set(String(windowId), pending);
+  pendingAttachRequests.set(key, pending);
 
   if (pending.sessionId) {
-    void (async () => {
+    void enqueueSessionOp(async () => {
+      if (
+        pendingAttachRequests.get(key) !== pending ||
+        pending.revision !== windowRevision(windowId)
+      ) {
+        return;
+      }
       const existing = await sessionStore.get(pending.sessionId);
       const sameExistingGeneration =
         existing && Number(existing.generation) === Number(pending.generation);
+      if (sameExistingGeneration && existing.desired === false) {
+        return;
+      }
       await sessionStore.put({
         sessionId: pending.sessionId,
         windowId: Number(windowId),
         tabId: pending.tabId,
-        channel: message.name,
+        channel: String(message.name || "").toLowerCase(),
         generation: pending.generation,
-        desired: sameExistingGeneration ? existing.desired !== false : true,
+        desired: true,
         attached: sameExistingGeneration ? existing.attached === true : false,
         retryAt: existing?.retryAt || 0,
         retryAttempt: existing?.retryAttempt || 0,
@@ -648,14 +714,76 @@ function postAttachUntilAcknowledged(windowId, message, sessionMetadata = {}) {
           ? existing.leaseExpiresAt || 0
           : 0,
       });
-    })();
+    });
   }
 
   const nativePort = getPort();
   if (nativePort) {
+    postedAttachByWindow.set(key, {
+      sessionId: pending.sessionId,
+      generation: pending.generation,
+      tabId: pending.tabId,
+      channel: message.name,
+      protocolVersion: correlatedMessage.protocolVersion,
+    });
     nativePort.postMessage(pending.message);
   }
   scheduleAttachRetry(windowId, requestId);
+}
+
+async function detachStaleAcknowledgement(message, fallbackPending, fallbackWindowKey) {
+  const rawWinId = message.winId ?? message.browserWindowId ?? fallbackWindowKey;
+  if (rawWinId === undefined || rawWinId === null || String(rawWinId) === "") {
+    return;
+  }
+  const winKey = String(rawWinId);
+  const sessionId = message.sessionId || fallbackPending?.sessionId || null;
+  const storedSession = sessionId ? await sessionStore.get(sessionId) : null;
+  const generation =
+    message.generation !== undefined
+      ? Number(message.generation)
+      : fallbackPending?.generation !== undefined
+        ? Number(fallbackPending.generation)
+        : storedSession?.generation;
+  const tabId =
+    message.tabId !== undefined
+      ? Number(message.tabId)
+      : fallbackPending?.tabId !== undefined
+        ? Number(fallbackPending.tabId)
+        : storedSession?.tabId;
+  const channel =
+    message.channel ||
+    message.name ||
+    fallbackPending?.message?.name ||
+    storedSession?.channel ||
+    "";
+
+  if (
+    nativeSupportsV2 &&
+    sessionId &&
+    Number.isInteger(generation) &&
+    Number.isInteger(tabId) &&
+    channel
+  ) {
+    await sendDetach(winKey, [
+      {
+        sessionId,
+        windowId: Number(winKey),
+        tabId,
+        generation,
+        channel,
+      },
+    ]);
+    return;
+  }
+
+  const windowSessions = await sessionsForWindow(winKey);
+  if (
+    !pendingAttachRequests.has(winKey) &&
+    !windowSessions.some((session) => session.desired)
+  ) {
+    await sendDetach(winKey, []);
+  }
 }
 
 function acknowledgeAttachedWindow(message) {
@@ -703,26 +831,54 @@ function acknowledgeAttachedWindow(message) {
       const isWindowAttached = key ? await AttachedWindows.isAttached(key) : false;
 
       if (session?.attached || isWindowAttached) {
-        console.log('[ATTACH-DEBUG] Acknowledgement received for already attached session/window:', {
-          key,
-          sessionId: message.sessionId,
-          requestId: responseRequestId,
-        });
-        if (session && nativeSupportsV2 && Number(message.leaseExpiresAt) > (session.leaseExpiresAt || 0)) {
-          session.leaseExpiresAt = Number(message.leaseExpiresAt);
-          await sessionStore.put(session);
+        const stillValid = session
+          ? session.desired === true &&
+            (await isCurrentChannelTab(
+              session.tabId,
+              session.windowId,
+              session.channel
+            ))
+          : true;
+        if (stillValid) {
+          console.log('[ATTACH-DEBUG] Acknowledgement received for already attached session/window:', {
+            key,
+            sessionId: message.sessionId,
+            requestId: responseRequestId,
+          });
+          if (
+            session &&
+            nativeSupportsV2 &&
+            Number(message.leaseExpiresAt) > (session.leaseExpiresAt || 0)
+          ) {
+            await enqueueSessionOp(async () => {
+              const latest = await sessionStore.get(session.sessionId);
+              if (
+                !latest ||
+                !latest.desired ||
+                latest.generation !== session.generation
+              ) {
+                return;
+              }
+              latest.leaseExpiresAt = Math.max(
+                latest.leaseExpiresAt || 0,
+                Number(message.leaseExpiresAt)
+              );
+              await sessionStore.put(latest);
+            });
+          }
+          return;
         }
-        return;
       }
 
       console.log(
-        '[ATTACH-DEBUG] Stale or cancelled acknowledgement ignored: ' +
+        '[ATTACH-DEBUG] Stale or cancelled acknowledgement — detaching overlay: ' +
           JSON.stringify({
             reason: 'no pending request',
             received: responseRequestId,
             key,
           })
       );
+      await detachStaleAcknowledgement(message, null, key);
     })();
     return;
   }
@@ -754,34 +910,63 @@ function acknowledgeAttachedWindow(message) {
   }
 
   void (async () => {
-    if (!(await isCurrentChannelTab(pending.tabId, matchedKey, pending.message.name)) ||
-        pendingAttachRequests.get(matchedKey) !== pending ||
-        pending.revision !== windowRevision(matchedKey)) return;
+    const isActiveChannel = await isCurrentChannelTab(
+      pending.tabId,
+      matchedKey,
+      pending.message.name
+    );
+    if (
+      !isActiveChannel ||
+      pendingAttachRequests.get(matchedKey) !== pending ||
+      pending.revision !== windowRevision(matchedKey)
+    ) {
+      if (pendingAttachRequests.get(matchedKey) === pending) {
+        clearPendingAttach(matchedKey);
+      }
+      if (!isActiveChannel || pending.revision !== windowRevision(matchedKey)) {
+        await detachStaleAcknowledgement(message, pending, matchedKey);
+      }
+      return;
+    }
     clearPendingAttach(matchedKey);
     await AttachedWindows.markAttached(matchedKey);
-    const session = message.sessionId
-      ? await sessionStore.get(message.sessionId)
-      : pending.sessionId
-        ? await sessionStore.get(pending.sessionId)
-        : null;
-    if (session) {
-      if (!session.desired || pending.revision !== windowRevision(matchedKey)) return;
+    const targetSessionId = message.sessionId || pending.sessionId;
+    if (!targetSessionId) {
+      return;
+    }
+    const updatedSession = await enqueueSessionOp(async () => {
+      const session = await sessionStore.get(targetSessionId);
+      if (!session) return { state: "missing" };
+      if (!session.desired || pending.revision !== windowRevision(matchedKey)) {
+        return { state: "stale" };
+      }
       if (
         message.generation !== undefined &&
-        message.generation !== session.generation
+        Number(message.generation) !== Number(session.generation)
       ) {
-        return;
+        return { state: "stale" };
       }
       session.attached = true;
       session.leaseExpiresAt = nativeSupportsV2
         ? Number(message.leaseExpiresAt) || Date.now() + NATIVE_LEASE_MS
         : 0;
       await sessionStore.put(session);
-      if (pending.revision !== windowRevision(matchedKey)) return;
-      console.log('[ATTACH-DEBUG] About to send overlay state "attached" to tab:', session.tabId, 'session:', session);
-      await sendOverlayState(session, "attached");
-      console.log('[ATTACH-DEBUG] Sent overlay state "attached"');
+      return { state: "ok", session };
+    });
+    if (updatedSession.state === "stale") {
+      await AttachedWindows.markDetatched(matchedKey);
+      await detachStaleAcknowledgement(message, pending, matchedKey);
+      return;
     }
+    if (
+      updatedSession.state !== "ok" ||
+      pending.revision !== windowRevision(matchedKey)
+    ) {
+      return;
+    }
+    console.log('[ATTACH-DEBUG] About to send overlay state "attached" to tab:', updatedSession.session.tabId, 'session:', updatedSession.session);
+    await sendOverlayState(updatedSession.session, "attached");
+    console.log('[ATTACH-DEBUG] Sent overlay state "attached"');
   })();
 }
 
@@ -893,25 +1078,29 @@ function connectPort(fromRetry = false) {
           break;
         case "lease-renewed":
           void (async () => {
-            const session = msg.sessionId
-              ? await sessionStore.get(msg.sessionId)
-              : null;
             const leaseExpiresAt = Number(msg.leaseExpiresAt);
-            if (
-              !session ||
-              // A renewal racing a detach must not re-hide Twitch chat.
-              session.desired !== true ||
-              (msg.generation !== undefined &&
-                Number(msg.generation) !== Number(session.generation)) ||
-              !Number.isFinite(leaseExpiresAt) ||
-              leaseExpiresAt <= Date.now()
-            ) {
+            if (!msg.sessionId || !Number.isFinite(leaseExpiresAt) || leaseExpiresAt <= Date.now()) {
               return;
             }
-            session.attached = true;
-            session.leaseExpiresAt = leaseExpiresAt;
-            await sessionStore.put(session);
-            await sendOverlayState(session, "attached");
+            const renewed = await enqueueSessionOp(async () => {
+              const session = await sessionStore.get(msg.sessionId);
+              if (
+                !session ||
+                // A renewal racing a detach must not re-hide Twitch chat.
+                session.desired !== true ||
+                (msg.generation !== undefined &&
+                  Number(msg.generation) !== Number(session.generation))
+              ) {
+                return null;
+              }
+              session.attached = true;
+              session.leaseExpiresAt = leaseExpiresAt;
+              await sessionStore.put(session);
+              return session;
+            });
+            if (renewed) {
+              await sendOverlayState(renewed, "attached");
+            }
           })();
           break;
         case "attachment-lost":
@@ -986,39 +1175,93 @@ async function reconcileDesiredSessions() {
   const tabs = await chrome.tabs
     .query({ url: "*://*.twitch.tv/*" })
     .catch(() => []);
-  const liveTabIds = new Set(tabs.map((tab) => tab.id));
+  const liveTabsById = new Map(tabs.map((tab) => [tab.id, tab]));
   for (const session of Object.values(sessions)) {
     if (!session.desired) continue;
-    if (!liveTabIds.has(session.tabId)) {
-      await sessionStore.remove(session.sessionId);
+    const rev = windowRevision(session.windowId);
+    const liveTab = liveTabsById.get(session.tabId);
+    if (!liveTab) {
+      await enqueueSessionOp(() => sessionStore.remove(session.sessionId));
+      await sendDetach(session.windowId, [session]);
+      const remaining = await sessionsForWindow(session.windowId);
+      if (!remaining.some((candidate) => candidate.desired)) {
+        await AttachedWindows.markDetatched(session.windowId);
+      }
+      continue;
+    }
+    const liveChannel = matchChannelName(liveTab.url || "");
+    if (
+      liveTab.active !== true ||
+      Number(liveTab.windowId) !== Number(session.windowId) ||
+      !liveChannel ||
+      liveChannel.toLowerCase() !== String(session.channel || "").toLowerCase()
+    ) {
+      // A desired session whose Twitch tab is no longer the active tab in its
+      // window must be detached rather than renewed, otherwise a missed or
+      // raced tab-switch event keeps the overlay pinned over the new tab.
+      const stale = await enqueueSessionOp(async () => {
+        const current = await sessionStore.get(session.sessionId);
+        if (!current || !current.desired) return null;
+        current.desired = false;
+        current.attached = false;
+        current.leaseExpiresAt = 0;
+        await sessionStore.put(current);
+        return current;
+      });
+      if (stale) {
+        await sendDetach(stale.windowId, [stale]);
+        const remaining = await sessionsForWindow(stale.windowId);
+        if (!remaining.some((candidate) => candidate.desired)) {
+          await AttachedWindows.markDetatched(stale.windowId);
+        }
+        await sendOverlayState(stale, "revealed", "detach");
+      }
       continue;
     }
     // A service-worker restart should reconnect port and verify geometry
     // rather than tearing down a healthy, already-attached overlay.
-    if (session.leaseExpiresAt && session.leaseExpiresAt <= Date.now()) {
-      session.attached = false;
-      session.leaseExpiresAt = 0;
-      await sessionStore.put(session);
-    } else if (nativeSupportsV2 && session.attached) {
-      session.leaseExpiresAt = Date.now() + NATIVE_LEASE_MS;
-      await sessionStore.put(session);
+    const reconciled = await enqueueSessionOp(async () => {
+      if (rev !== windowRevision(session.windowId)) return null;
+      const current = await sessionStore.get(session.sessionId);
+      if (
+        !current ||
+        !current.desired ||
+        current.generation !== session.generation
+      ) {
+        return null;
+      }
+      if (current.leaseExpiresAt && current.leaseExpiresAt <= Date.now()) {
+        current.attached = false;
+        current.leaseExpiresAt = 0;
+        await sessionStore.put(current);
+        return { action: "remeasure", session: current };
+      }
+      if (nativeSupportsV2 && current.attached) {
+        current.leaseExpiresAt = Date.now() + NATIVE_LEASE_MS;
+        await sessionStore.put(current);
+        return { action: "renew", session: current };
+      }
+      return { action: "remeasure", session: current };
+    });
+    if (!reconciled || rev !== windowRevision(session.windowId)) continue;
+    if (reconciled.action === "renew") {
       forwardNativeMessage({
         action: "leaseRenew",
         protocolVersion: 2,
-        sessionId: session.sessionId,
-        browserWindowId: Number(session.windowId),
-        tabId: session.tabId,
-        generation: session.generation,
-        name: session.channel,
-        leaseExpiresAt: session.leaseExpiresAt,
+        sessionId: reconciled.session.sessionId,
+        browserWindowId: Number(reconciled.session.windowId),
+        tabId: reconciled.session.tabId,
+        generation: reconciled.session.generation,
+        name: reconciled.session.channel,
+        leaseExpiresAt: reconciled.session.leaseExpiresAt,
       });
-      await sendOverlayState(session, "attached");
+      await sendOverlayState(reconciled.session, "attached");
     }
     try {
-      await chrome.tabs.sendMessage(session.tabId, {
+      await chrome.tabs.sendMessage(reconciled.session.tabId, {
         action: "requestChatRect",
-        sessionId: session.sessionId,
-        generation: session.generation,
+        sessionId: reconciled.session.sessionId,
+        generation: reconciled.session.generation,
       });
     } catch {
       // The content script may still be loading; onTabSelected will retry.
@@ -1068,7 +1311,13 @@ void rehydrateRecoveryState().then(reconcileDesiredSessions);
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   if (activeInfo.windowId !== undefined) invalidateWindow(activeInfo.windowId);
   const tab = await chrome.tabs.get(activeInfo.tabId).catch(() => null);
-  if (!tab?.active) return;
+  if (!tab) {
+    if (activeInfo.windowId !== undefined) {
+      await tryDetach(activeInfo.windowId);
+    }
+    return;
+  }
+  if (!tab.active) return;
 
   // `tab.url` is empty whenever we lack host permission for the activated
   // tab's origin, which is the normal case for every non-Twitch page. Bailing
@@ -1088,6 +1337,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     !matchChannelName(tab.url)
   ) {
     await tryDetach(tab.windowId);
+    return;
   }
   await onTabSelected(tab.url, tab);
 });
@@ -1106,8 +1356,9 @@ chrome.windows.onRemoved.addListener(async (windowId) => {
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
   if (windowId == -1) return;
 
+  const focusRevision = windowRevision(windowId);
   const window = await safeGetWindow(windowId);
-  if (!window) return;
+  if (!window || focusRevision !== windowRevision(windowId)) return;
 
   const tabs = await chrome.tabs
     .query({
@@ -1115,6 +1366,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
       active: true,
     })
     .catch(() => []);
+  if (focusRevision !== windowRevision(windowId)) return;
   if (tabs.length === 1) {
     let tab = tabs[0];
 
@@ -1132,10 +1384,19 @@ async function onTabSelected(url, tab, { startupReplay = false } = {}) {
     return;
   }
 
+  let selectionRevision = windowRevision(tab.windowId);
   const sessions = await sessionsForWindow(tab.windowId);
-  if (sessions.some((session) => session.desired &&
-      (session.tabId !== tab.id || session.channel !== channelName))) {
+  if (
+    sessions.some(
+      (session) =>
+        (session.desired || session.attached) &&
+        (session.tabId !== tab.id ||
+          String(session.channel || "").toLowerCase() !==
+            channelName.toLowerCase())
+    )
+  ) {
     await tryDetach(tab.windowId);
+    selectionRevision = windowRevision(tab.windowId);
   }
 
   // A chat-resized message can be emitted while the tab is in the background.
@@ -1145,6 +1406,12 @@ async function onTabSelected(url, tab, { startupReplay = false } = {}) {
   // Without this handshake, a background-loaded Twitch tab stays detached
   // until a later page focus or mouse event happens to trigger a measurement.
   if (tab.id !== undefined) {
+    if (
+      selectionRevision !== windowRevision(tab.windowId) ||
+      !(await isCurrentChannelTab(tab.id, tab.windowId, channelName))
+    ) {
+      return;
+    }
     if (startupReplay) {
       pendingStartupReplayTabs.set(
         tab.id,
@@ -1158,8 +1425,15 @@ async function onTabSelected(url, tab, { startupReplay = false } = {}) {
         const session = await ensureDesiredSession(
           tab.windowId,
           tab.id,
-          matchChannelName(tab.url || "")
+          channelName
         );
+        if (
+          selectionRevision !== windowRevision(tab.windowId) ||
+          !(await isCurrentChannelTab(tab.id, tab.windowId, channelName))
+        ) {
+          await abandonDesiredSession(session);
+          return;
+        }
         request.sessionId = session.sessionId;
         request.generation = session.generation;
       }
@@ -1756,29 +2030,62 @@ async function tryAttach(windowId, fullscreen, data, revision = windowRevision(w
  * @param {number} windowId
  */
 async function tryDetach(windowId) {
+  const key = String(windowId);
+  const posted = postedAttachByWindow.get(key);
+  postedAttachByWindow.delete(key);
   invalidateWindow(windowId);
-  const sessions = (await sessionsForWindow(windowId)).filter(
-    (session) => session.desired || session.attached
-  );
-  for (const session of sessions) {
-    session.desired = false;
-    session.attached = false;
-    session.leaseExpiresAt = 0;
-    await sessionStore.put(session);
-    await sendOverlayState(session, "revealed", "detach");
-  }
+
+  const sessions = await enqueueSessionOp(async () => {
+    const active = (await sessionsForWindow(windowId)).filter(
+      (session) => session.desired || session.attached
+    );
+    for (const session of active) {
+      session.desired = false;
+      session.attached = false;
+      session.leaseExpiresAt = 0;
+      await sessionStore.put(session);
+    }
+    return active;
+  });
 
   // `AttachedWindows` is only written by acknowledgeAttachedWindow, which needs
   // an in-memory pending request. After a service-worker restart that bookkeeping
   // is gone while Chatterino is still drawing, so gating the native detach on it
-  // left the overlay pinned over unrelated tabs. A live session is equally good
-  // evidence that something is attached and must be torn down.
+  // left the overlay pinned over unrelated tabs. A live session or a previously
+  // posted select is equally good evidence that something may be attached and
+  // must be torn down. Send the native detach before awaiting content-script
+  // messaging so backgrounded tabs cannot delay hiding the native overlay.
   const wasAttached = await AttachedWindows.isAttached(windowId);
-  if (wasAttached || sessions.length > 0) {
-    await sendDetach(windowId, sessions);
-  }
   if (wasAttached) {
     await AttachedWindows.markDetatched(windowId);
+  }
+  if (sessions.length > 0) {
+    await sendDetach(windowId, sessions);
+  } else if (wasAttached || posted) {
+    if (
+      posted &&
+      nativeSupportsV2 &&
+      posted.sessionId &&
+      Number.isInteger(posted.generation) &&
+      Number.isInteger(posted.tabId) &&
+      posted.channel
+    ) {
+      await sendDetach(windowId, [
+        {
+          sessionId: posted.sessionId,
+          windowId: Number(windowId),
+          tabId: posted.tabId,
+          generation: posted.generation,
+          channel: posted.channel,
+        },
+      ]);
+    } else {
+      await sendDetach(windowId, []);
+    }
+  }
+
+  for (const session of sessions) {
+    await sendOverlayState(session, "revealed", "detach");
   }
 }
 

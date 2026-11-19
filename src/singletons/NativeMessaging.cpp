@@ -414,30 +414,53 @@ AttachmentSessionRegistry::PrepareResult AttachmentSessionRegistry::prepare(
 {
     QMutexLocker lock(&this->mutex_);
     const auto it = this->sessions_.find(candidate.sessionId);
-    if (it == this->sessions_.end())
+    if (it != this->sessions_.end())
     {
-        this->sessions_.insert(candidate.sessionId, candidate);
-        return PrepareResult::Prepared;
-    }
-    if (candidate.generation < it->generation)
-    {
-        return PrepareResult::Stale;
-    }
-    if (candidate.generation == it->generation)
-    {
-        if (!sameIdentity(*it, candidate))
+        if (candidate.generation < it->generation)
         {
-            return PrepareResult::Conflict;
+            return PrepareResult::Stale;
         }
-        it->leaseExpiresAt =
-            std::max(it->leaseExpiresAt, candidate.leaseExpiresAt);
-        return PrepareResult::AlreadyCurrent;
+        if (candidate.generation == it->generation)
+        {
+            if (!sameIdentity(*it, candidate))
+            {
+                return PrepareResult::Conflict;
+            }
+            it->leaseExpiresAt =
+                std::max(it->leaseExpiresAt, candidate.leaseExpiresAt);
+            return PrepareResult::AlreadyCurrent;
+        }
+        if (replaced != nullptr)
+        {
+            *replaced = *it;
+        }
     }
 
-    if (replaced != nullptr)
+    // One browser window can host at most one active overlay at a time. Evict
+    // any stale session still registered for the same browserWindowId so a
+    // tab switch between Twitch channels never leaves an earlier tab's session
+    // lingering in the registry.
+    if (!candidate.browserWindowId.isEmpty())
     {
-        *replaced = *it;
+        for (auto other = this->sessions_.begin();
+             other != this->sessions_.end();)
+        {
+            if (other.key() != candidate.sessionId &&
+                other->browserWindowId == candidate.browserWindowId)
+            {
+                if (replaced != nullptr && !replaced->has_value())
+                {
+                    *replaced = *other;
+                }
+                other = this->sessions_.erase(other);
+            }
+            else
+            {
+                ++other;
+            }
+        }
     }
+
     this->sessions_.insert(candidate.sessionId, candidate);
     return PrepareResult::Prepared;
 }
@@ -489,6 +512,47 @@ bool AttachmentSessionRegistry::remove(const QString &sessionId,
     }
     this->sessions_.erase(it);
     return true;
+}
+
+std::vector<AttachmentSession> AttachmentSessionRegistry::removeForWindow(
+    const QString &winId)
+{
+    std::vector<AttachmentSession> removed;
+    if (winId.isEmpty())
+    {
+        return removed;
+    }
+    QMutexLocker lock(&this->mutex_);
+    for (auto it = this->sessions_.begin(); it != this->sessions_.end();)
+    {
+        if (it->winId == winId || it->browserWindowId == winId)
+        {
+            removed.emplace_back(*it);
+            it = this->sessions_.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+    return removed;
+}
+
+bool AttachmentSessionRegistry::hasWindow(const QString &winId) const
+{
+    if (winId.isEmpty())
+    {
+        return false;
+    }
+    QMutexLocker lock(&this->mutex_);
+    for (const auto &session : this->sessions_)
+    {
+        if (session.winId == winId || session.browserWindowId == winId)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::vector<AttachmentSession> AttachmentSessionRegistry::expire(qint64 now)
@@ -1402,8 +1466,19 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
 
         if (attach || attachFullscreen)
         {
-            parent.legacyBrowserAttached_ = !v2;
 #ifdef USEWINSDK
+            if (v2)
+            {
+                if (!parent.sessions_.markReady(session.sessionId,
+                                                session.generation))
+                {
+                    // A detach or newer select won while the GUI job was
+                    // queued; do not create or flash the stale overlay.
+                    AttachedWindow::detach(args.winId, session.sessionId);
+                    return;
+                }
+            }
+            parent.legacyBrowserAttached_ = !v2;
             if (replaced && replaced->browserHwnd != session.browserHwnd)
             {
                 AttachedWindow::detach(replaced->winId, replaced->sessionId);
@@ -1417,13 +1492,6 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
 
             if (v2)
             {
-                if (!parent.sessions_.markReady(session.sessionId,
-                                                session.generation))
-                {
-                    // A newer select won while the GUI job was queued.
-                    AttachedWindow::detach(args.winId, session.sessionId);
-                    return;
-                }
                 std::cerr << "[STDERR] handleSelect: marked session ready, calling reportSession with 'chat-attached' - "
                           << "sessionId: " << session.sessionId.toStdString()
                           << ", generation: " << session.generation << std::endl;
@@ -1442,6 +1510,8 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
                     {u"attachRequestId"_s, attachRequestId},
                 });
             }
+#else
+            parent.legacyBrowserAttached_ = !v2;
 #endif
         }
     });
@@ -1466,6 +1536,27 @@ void NativeMessagingServer::ReceiverThread::handleDetach(
         if (!this->parent_.sessions_.remove(session.sessionId,
                                             session.generation))
         {
+            // If no active v2 session owns this browser window (for example,
+            // a legacy v1 overlay attached before v2 capability negotiation
+            // finished), tear down any legacy overlay on this winId instead
+            // of leaving it pinned over another tab.
+            if (!this->parent_.sessions_.hasWindow(session.winId) &&
+                !this->parent_.sessions_.hasWindow(session.browserWindowId) &&
+                this->parent_.legacyBrowserAttached_)
+            {
+#ifdef USEWINSDK
+                this->parent_.postToGui([session, &parent = this->parent_] {
+                    parent.legacyBrowserAttached_ = false;
+                    AttachedWindow::detach(session.winId);
+                    parent.reportSession(session, u"detached"_s);
+                });
+#else
+                this->parent_.legacyBrowserAttached_ = false;
+                this->parent_.reportSession(session, u"detached"_s, {},
+                                            requestId);
+#endif
+                return;
+            }
             this->parent_.reportSession(session, u"attachment-rejected"_s,
                                         u"stale-generation"_s, requestId);
             return;
@@ -1488,6 +1579,11 @@ void NativeMessagingServer::ReceiverThread::handleDetach(
         qCDebug(chatterinoNativeMessage) << "NM winId missing";
         return;
     }
+
+    // Clear any v2 sessions owned by this browser window synchronously so an
+    // already-queued v2 select GUI job cannot recreate the overlay after a
+    // window-level detach.
+    this->parent_.sessions_.removeForWindow(winId);
 
 #ifdef USEWINSDK
     this->parent_.postToGui([winId, &parent = this->parent_] {

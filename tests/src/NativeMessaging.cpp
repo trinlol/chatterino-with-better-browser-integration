@@ -136,6 +136,62 @@ TEST(AttachmentSessionRegistry, ResolvesBrowserHwndForSessionOrWindow)
               std::nullopt);
 }
 
+TEST(AttachmentSessionRegistry,
+     PrepareEvictsPreviousSessionForSameWindowAndRemoveForWindowClearsAll)
+{
+    AttachmentSessionRegistry registry;
+    AttachmentSession first{
+        .sessionId = "tab-1",
+        .browserWindowId = "42",
+        .tabId = 1,
+        .generation = 1,
+        .channel = "channela",
+        .browserHwnd = 100,
+        .leaseExpiresAt = 10000,
+        .winId = "42",
+    };
+    AttachmentSession second{
+        .sessionId = "tab-2",
+        .browserWindowId = "42",
+        .tabId = 2,
+        .generation = 1,
+        .channel = "channelb",
+        .browserHwnd = 100,
+        .leaseExpiresAt = 10000,
+        .winId = "42",
+    };
+    AttachmentSession otherWindow{
+        .sessionId = "tab-3",
+        .browserWindowId = "99",
+        .tabId = 3,
+        .generation = 1,
+        .channel = "channelc",
+        .browserHwnd = 200,
+        .leaseExpiresAt = 10000,
+        .winId = "99",
+    };
+
+    ASSERT_EQ(registry.prepare(first),
+              AttachmentSessionRegistry::PrepareResult::Prepared);
+    ASSERT_TRUE(registry.markReady(first.sessionId, first.generation));
+
+    std::optional<AttachmentSession> replaced;
+    ASSERT_EQ(registry.prepare(second, &replaced),
+              AttachmentSessionRegistry::PrepareResult::Prepared);
+    ASSERT_TRUE(replaced.has_value());
+    EXPECT_EQ(replaced->sessionId, "tab-1");
+    EXPECT_FALSE(registry.containsReady(first.sessionId, first.generation));
+    EXPECT_TRUE(registry.hasWindow("42"));
+
+    ASSERT_EQ(registry.prepare(otherWindow),
+              AttachmentSessionRegistry::PrepareResult::Prepared);
+    const auto removed = registry.removeForWindow("42");
+    ASSERT_EQ(removed.size(), 1);
+    EXPECT_EQ(removed.front().sessionId, "tab-2");
+    EXPECT_FALSE(registry.hasWindow("42"));
+    EXPECT_TRUE(registry.hasWindow("99"));
+}
+
 TEST(IpcQueue, EmptyPayloadHasDefinitiveDeliveryStatus)
 {
     EXPECT_EQ(ipc::sendMessage("chatterino-test-no-queue", QByteArray{}),

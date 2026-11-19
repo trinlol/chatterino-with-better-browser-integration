@@ -100,6 +100,8 @@ public:
     PrepareResult renewLease(const AttachmentSession &candidate);
     bool markReady(const QString &sessionId, qint64 generation);
     bool remove(const QString &sessionId, qint64 generation);
+    std::vector<AttachmentSession> removeForWindow(const QString &winId);
+    bool hasWindow(const QString &winId) const;
     std::vector<AttachmentSession> expire(qint64 now);
     std::optional<AttachmentSession> uniqueReadyForChannel(
         const QString &channel) const;

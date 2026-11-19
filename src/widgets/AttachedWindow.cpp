@@ -369,11 +369,22 @@ void AttachedWindow::detach(const QString &winId, const QString &sessionId)
     for (auto it = items.begin(); it != items.end();)
     {
         if (it->winId == winId &&
-            (sessionId.isEmpty() || it->sessionId == sessionId))
+            (sessionId.isEmpty() || it->sessionId == sessionId ||
+             it->sessionId.isEmpty()))
         {
-            it->window->onLoss_ = {};
-            it->window->deleteLater();
+            auto *window = it->window;
             it = items.erase(it);
+            window->onLoss_ = {};
+            window->requestedVisible_ = false;
+            window->timer_.stop();
+            window->slowTimer_.stop();
+#ifdef USEWINSDK
+            window->targetWindowTransitioning_ = false;
+            window->targetWindowSettleTimer_.stop();
+            unregisterTargetWindowHook(HWND(window->target_), window);
+#endif
+            window->hide();
+            window->deleteLater();
         }
         else
         {

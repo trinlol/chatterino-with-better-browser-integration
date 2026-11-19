@@ -1029,3 +1029,132 @@ test("attached session stays attached and renews across unfocused reconcile and 
     false
   );
 });
+
+test("late chat-attached after a tab switch immediately sends a corrective detach", async () => {
+  const h = await loadTabLifecycleHarness();
+  h.measure();
+  await settle();
+  const select = h.nativeMessages.find((m) => m.action === "select");
+  assert.ok(select);
+
+  // Switch to a non-Twitch tab before chat-attached arrives from desktop.
+  h.activeTab.id = 8;
+  delete h.activeTab.url;
+  h.nativeMessages.length = 0;
+  await h.listeners["tabs.onActivated"]({ tabId: 8, windowId: 42 });
+  await settle();
+
+  // Even without a prior chat-attached ack, tryDetach must have sent detach.
+  assert.equal(
+    h.nativeMessages.some(
+      (m) => m.action === "detach" && m.sessionId === select.sessionId
+    ),
+    true
+  );
+
+  // Now simulate a raced select finishing on the desktop after tryDetach ran.
+  h.nativeMessages.length = 0;
+  h.ack(select);
+  await settle();
+
+  const correctiveDetach = h.nativeMessages.find(
+    (m) => m.action === "detach" && m.sessionId === select.sessionId
+  );
+  assert.ok(
+    correctiveDetach,
+    "expected a corrective detach when chat-attached arrives after tab switch"
+  );
+  assert.equal(h.sessionStorage.attachedWindows?.[42], undefined);
+  assert.equal(
+    h.sessionStorage.desiredSessions[select.sessionId].desired,
+    false
+  );
+
+  // Firing any lingering attach retry timers must never re-send select.
+  for (const timer of [...h.timers]) timer.callback();
+  await settle();
+  assert.equal(
+    h.nativeMessages.some((m) => m.action === "select"),
+    false
+  );
+});
+
+test("reconcile detaches a desired session whose Twitch tab is no longer active", async () => {
+  const h = await loadTabLifecycleHarness();
+  h.measure();
+  await settle();
+  const select = h.nativeMessages.find((m) => m.action === "select");
+  assert.ok(select);
+  h.ack(select);
+  await settle();
+
+  // Simulate the Twitch tab sitting in the background while session.desired
+  // was left true (e.g. after a service-worker sleep or race).
+  const backgroundTwitchTab = { ...h.activeTab, active: false };
+  h.chrome.tabs.query = async () => [backgroundTwitchTab];
+  h.chrome.tabs.get = async () => backgroundTwitchTab;
+  h.nativeMessages.length = 0;
+
+  h.listeners["native.onMessage"]({ type: "status", status: "reconcile" });
+  await settle();
+
+  assert.equal(
+    h.nativeMessages.some((m) => m.action === "leaseRenew"),
+    false,
+    "inactive Twitch tab must not have its lease renewed"
+  );
+  assert.equal(
+    h.nativeMessages.some(
+      (m) => m.action === "detach" && m.sessionId === select.sessionId
+    ),
+    true,
+    "reconcile must detach an inactive desired Twitch tab"
+  );
+  assert.equal(
+    h.sessionStorage.desiredSessions[select.sessionId].desired,
+    false
+  );
+});
+
+test("focus change racing a tab switch cannot resurrect desired state for the old Twitch tab", async () => {
+  const h = await loadTabLifecycleHarness();
+  h.measure();
+  await settle();
+  const select = h.nativeMessages.find((m) => m.action === "select");
+  assert.ok(select);
+  h.ack(select);
+  await settle();
+
+  let releaseWindowGet;
+  const oldTwitchTab = { ...h.activeTab };
+  h.chrome.windows.get = () =>
+    new Promise((resolve) => {
+      releaseWindowGet = resolve;
+    });
+  h.chrome.tabs.query = async () => [oldTwitchTab];
+
+  // User clicks a new tab while browser was unfocused: onFocusChanged fires
+  // first, then onActivated switches to tab 8 before onFocusChanged resumes.
+  const focusPromise = h.listeners["windows.onFocusChanged"](42);
+  h.activeTab.id = 8;
+  delete h.activeTab.url;
+  h.nativeMessages.length = 0;
+  h.sentMessages.length = 0;
+  await h.listeners["tabs.onActivated"]({ tabId: 8, windowId: 42 });
+  releaseWindowGet({ focused: true, state: "normal" });
+  await focusPromise;
+  await settle();
+
+  assert.equal(
+    h.nativeMessages.some((m) => m.action === "detach"),
+    true
+  );
+  assert.equal(
+    h.sessionStorage.desiredSessions[select.sessionId].desired,
+    false
+  );
+  assert.equal(
+    h.sentMessages.some(([, m]) => m.action === "requestChatRect"),
+    false
+  );
+});
