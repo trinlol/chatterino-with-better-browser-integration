@@ -2,6 +2,15 @@
 
 ## Chatterino Better Browser
 
+### v2.7.5 (2026-11-19)
+
+#### Fixed
+
+- **Emote Favourites Persistence**: Adding or removing favourite emotes and emojis now saves `settings.json` to disk immediately instead of waiting for a clean app exit or Settings OK, preventing favourites from disappearing after restarts, updates, or crashes.
+- **Settings Auto-Save & OS Shutdown Flush**: Added a 60-second periodic auto-save for changed runtime settings (skipped while the Settings dialog is open) and flushed settings, hotkeys, and window layout on `QGuiApplication::commitDataRequest`.
+- **Browser Integration Emote Menu & Popups**: Fixed the emote picker (and other popups opened from the attached browser overlay or an always-on-top main window) failing to appear above the overlay/browser because `BaseWindow::tryApplyTopMost()` skipped parented top-level popups. Re-opening a minimized emote popup now restores it cleanly and keeps child popups synced with the overlay's topmost state.
+- **Emote Menu Search & Browser UX**: Fixed Ctrl+clicking emotes inside the emote popup search view, anchored the browser-attached emote popup beside the chat overlay with separate remembered bounds, auto-reloaded an open emote popup on channel switch, dismissed overlay popups when the overlay hides (outside maximize/restore transitions), and kept the emote popup focused during Shift+click multi-emote picking.
+
 ### v2.7.4 (2026-11-19)
 
 #### Fixed

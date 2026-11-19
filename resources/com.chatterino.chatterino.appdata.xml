@@ -35,6 +35,9 @@
         <binary>chatterino</binary>
     </provides>
     <releases>
+        <release version="2.7.5" date="2026-11-19">
+            <url>https://github.com/trinlol/chatterino-with-better-browser-integration/releases/tag/v2.7.5</url>
+        </release>
         <release version="2.7.4" date="2026-11-19">
             <url>https://github.com/trinlol/chatterino-with-better-browser-integration/releases/tag/v2.7.4</url>
         </release>
