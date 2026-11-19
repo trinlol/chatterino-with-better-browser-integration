@@ -176,3 +176,111 @@ TEST(Scrollbar, AddHighlightsAtStart)
         EXPECT_EQ(highlights[9].getColor().red(), 1);
     }
 }
+
+TEST(Scrollbar, ScrollToBottomRestoresAtBottomWhenAlreadyAtTarget)
+{
+    MockApplication mockApplication;
+    mockApplication.settings.enableSmoothScrolling = false;
+
+    Scrollbar scrollbar(100, nullptr);
+    scrollbar.setMaximum(50);
+    scrollbar.setPageSize(20);
+    scrollbar.scrollToBottom(false);
+    ASSERT_TRUE(scrollbar.isAtBottom());
+    ASSERT_DOUBLE_EQ(scrollbar.getCurrentValue(), 30.0);
+
+    // Scroll up, then shrink maximum so getBottom() equals currentValue_.
+    scrollbar.setDesiredValue(25.0, false);
+    ASSERT_FALSE(scrollbar.isAtBottom());
+    ASSERT_DOUBLE_EQ(scrollbar.getCurrentValue(), 25.0);
+
+    scrollbar.setMaximum(45);
+    ASSERT_DOUBLE_EQ(scrollbar.getBottom(), 25.0);
+
+    int desiredNotifications = 0;
+    std::ignore = scrollbar.getDesiredValueChanged().connect([&] {
+        desiredNotifications++;
+    });
+
+    scrollbar.scrollToBottom(false);
+    EXPECT_TRUE(scrollbar.isAtBottom());
+    EXPECT_DOUBLE_EQ(scrollbar.getDesiredValue(), 25.0);
+    EXPECT_EQ(desiredNotifications, 1);
+}
+
+TEST(Scrollbar, ReversingSmoothScrollBackToBottomRestoresAtBottom)
+{
+    MockApplication mockApplication;
+    mockApplication.settings.enableSmoothScrolling = true;
+
+    Scrollbar scrollbar(100, nullptr);
+    scrollbar.setMaximum(100);
+    scrollbar.setPageSize(20);
+    scrollbar.scrollToBottom(false);
+    ASSERT_TRUE(scrollbar.isAtBottom());
+    ASSERT_DOUBLE_EQ(scrollbar.getCurrentValue(), 80.0);
+
+    // Start an animated scroll upward; before the first animation frame ticks,
+    // currentValue_ is still 80.0 while desiredValue_ is 77.0.
+    scrollbar.setDesiredValue(77.0, true);
+    ASSERT_FALSE(scrollbar.isAtBottom());
+    ASSERT_DOUBLE_EQ(scrollbar.getDesiredValue(), 77.0);
+
+    // Immediately scrolling back to the bottom must stop the upward animation
+    // and restore atBottom_.
+    scrollbar.setDesiredValue(80.0, true);
+    EXPECT_TRUE(scrollbar.isAtBottom());
+    EXPECT_DOUBLE_EQ(scrollbar.getDesiredValue(), 80.0);
+    EXPECT_DOUBLE_EQ(scrollbar.getCurrentValue(), 80.0);
+}
+
+TEST(Scrollbar, ScrollToTopKeepsAtBottomWhenContentFits)
+{
+    MockApplication mockApplication;
+    mockApplication.settings.enableSmoothScrolling = false;
+
+    Scrollbar scrollbar(100, nullptr);
+    scrollbar.setMaximum(10);
+    scrollbar.setPageSize(10);
+    scrollbar.scrollToTop(false);
+    EXPECT_TRUE(scrollbar.isAtBottom());
+    EXPECT_DOUBLE_EQ(scrollbar.getDesiredValue(), 0.0);
+
+    scrollbar.setMaximum(5);
+    scrollbar.setPageSize(20);
+    scrollbar.scrollToTop(false);
+    EXPECT_TRUE(scrollbar.isAtBottom());
+    EXPECT_DOUBLE_EQ(scrollbar.getDesiredValue(), 0.0);
+}
+
+TEST(Scrollbar, OffsetMinimumPreservesAtBottomWhenEvicting)
+{
+    MockApplication mockApplication;
+    mockApplication.settings.enableSmoothScrolling = false;
+
+    Scrollbar scrollbar(100, nullptr);
+    scrollbar.setMaximum(100);
+    scrollbar.setPageSize(20);
+    scrollbar.scrollToBottom(false);
+    ASSERT_TRUE(scrollbar.isAtBottom());
+    ASSERT_DOUBLE_EQ(scrollbar.getDesiredValue(), 80.0);
+
+    // Simulate unpausing after a large burst of messages arrived while at bottom.
+    // scrollToBottom() also normalizes bounds via resetBounds().
+    scrollbar.offsetMaximum(90);
+    scrollbar.offsetMinimum(90);
+    EXPECT_TRUE(scrollbar.isAtBottom());
+    EXPECT_DOUBLE_EQ(scrollbar.getMinimum(), 0.0);
+    EXPECT_DOUBLE_EQ(scrollbar.getMaximum(), 100.0);
+    EXPECT_DOUBLE_EQ(scrollbar.getDesiredValue(), 80.0);
+
+    // When scrolled up, eviction past desiredValue_ clamps to top without
+    // falsely re-enabling auto-scroll.
+    scrollbar.setDesiredValue(10.0, false);
+    ASSERT_FALSE(scrollbar.isAtBottom());
+    scrollbar.offsetMaximum(20);
+    scrollbar.offsetMinimum(20);
+    EXPECT_FALSE(scrollbar.isAtBottom());
+    EXPECT_DOUBLE_EQ(scrollbar.getDesiredValue(), 0.0);
+}
+

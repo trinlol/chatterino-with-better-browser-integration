@@ -203,6 +203,70 @@ DWORD parentProcessIdOf(DWORD processId)
     return parent;
 }
 
+DWORD findAncestorBrowserProcessId()
+{
+    DWORD current = ::GetCurrentProcessId();
+    for (int depth = 0; depth < 32; ++depth)
+    {
+        const auto parent = parentProcessIdOf(current);
+        if (parent == 0 || parent == current)
+        {
+            break;
+        }
+        if (isSupportedBrowserProcess(parent))
+        {
+            return parent;
+        }
+        current = parent;
+    }
+    return 0;
+}
+
+bool isProcessAlive(DWORD processId)
+{
+    if (processId == 0)
+    {
+        return false;
+    }
+    auto process =
+        ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (process == nullptr)
+    {
+        return false;
+    }
+    DWORD exitCode = 0;
+    const bool alive =
+        ::GetExitCodeProcess(process, &exitCode) != 0 &&
+        exitCode == STILL_ACTIVE;
+    ::CloseHandle(process);
+    return alive;
+}
+
+HWND resolveBrowserWindowFromForeground()
+{
+    auto foreground = ::GetForegroundWindow();
+    if (foreground == nullptr)
+    {
+        return nullptr;
+    }
+    if (isSupportedBrowserWindow(foreground))
+    {
+        return foreground;
+    }
+    if (auto rootOwner = ::GetAncestor(foreground, GA_ROOTOWNER);
+        rootOwner != nullptr && rootOwner != foreground &&
+        isSupportedBrowserWindow(rootOwner))
+    {
+        return rootOwner;
+    }
+    if (auto owner = ::GetWindow(foreground, GW_OWNER);
+        owner != nullptr && isSupportedBrowserWindow(owner))
+    {
+        return owner;
+    }
+    return nullptr;
+}
+
 struct BrowserWindowSearch {
     DWORD processId = 0;
     HWND result = nullptr;
@@ -312,8 +376,8 @@ QByteArray rememberBrowserWindow(QByteArray message,
     // Chatterino moves focus away from the browser.
     if (root.value("browserWindowFocused").toBool())
     {
-        if (auto foreground = ::GetForegroundWindow();
-            foreground != nullptr && isSupportedBrowserWindow(foreground))
+        if (auto foreground = resolveBrowserWindowFromForeground();
+            foreground != nullptr)
         {
             browserWindows.insert(winId,
                                   reinterpret_cast<quintptr>(foreground));
@@ -398,11 +462,26 @@ void runBrowserOutboundLoop()
     sendToBrowser(QLatin1String{
         R"({"type":"status","status":"native-host-ready","protocolVersion":2,"capabilities":["sessions"]})"});
 
+#ifdef Q_OS_WIN
+    const DWORD ancestorBrowserPid = findAncestorBrowserProcessId();
+#endif
+
     while (true)
     {
         auto buf = messageQueue->receiveFor(std::chrono::milliseconds(250));
         if (buf.isEmpty())
         {
+#ifdef Q_OS_WIN
+            if (ancestorBrowserPid != 0 && !isProcessAlive(ancestorBrowserPid))
+            {
+                std::osyncstream(std::cerr)
+                    << "[BrowserExtension] runBrowserOutboundLoop: ancestor "
+                       "browser process "
+                    << ancestorBrowserPid << " exited, terminating host"
+                    << std::endl;
+                _Exit(0);
+            }
+#endif
             continue;
         }
         std::osyncstream(std::cerr) << "[BrowserExtension] runBrowserOutboundLoop: received "
@@ -423,6 +502,11 @@ void runLoop()
         foreground != nullptr && isSupportedBrowserWindow(foreground))
     {
         startupBrowserWindow = reinterpret_cast<quintptr>(foreground);
+    }
+    else if (auto ownedBrowser = resolveBrowserWindowFromForeground();
+             ownedBrowser != nullptr)
+    {
+        startupBrowserWindow = reinterpret_cast<quintptr>(ownedBrowser);
     }
 #endif
     auto outboundThread = std::thread([] {

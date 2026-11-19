@@ -156,7 +156,14 @@ void Scrollbar::offsetMinimum(qreal value)
 
     if (this->minimum_ > this->desiredValue_)
     {
-        this->scrollToTop();
+        if (this->atBottom_)
+        {
+            this->scrollToBottom();
+        }
+        else
+        {
+            this->scrollToTop();
+        }
     }
 
     this->updateScroll();
@@ -171,20 +178,40 @@ void Scrollbar::setPageSize(qreal value)
 
 void Scrollbar::setDesiredValue(qreal value, bool animated)
 {
-    // this can't use std::clamp, because minimum_ < getBottom() isn't always
-    // true, which is a precondition for std::clamp
-    value = std::max(this->minimum_, std::min(this->getBottom(), value));
-    if (areClose(this->currentValue_, value))
+    const qreal bottom = std::max(this->minimum_, this->getBottom());
+    value = std::clamp(value, this->minimum_, bottom);
+    const bool isAtBottom = areClose(bottom, value);
+
+    if (areClose(this->currentValue_, value) &&
+        areClose(this->desiredValue_, value) &&
+        this->currentValueAnimation_.state() == QPropertyAnimation::Stopped)
     {
-        // value has not changed
+        if (this->atBottom_ != isAtBottom)
+        {
+            this->atBottom_ = isAtBottom;
+            this->desiredValueChanged_.invoke();
+        }
         return;
     }
 
+    const bool desiredOrBottomChanged =
+        !areClose(this->desiredValue_, value) || this->atBottom_ != isAtBottom;
     this->desiredValue_ = value;
+    this->atBottom_ = isAtBottom;
 
-    this->desiredValueChanged_.invoke();
+    if (desiredOrBottomChanged)
+    {
+        this->desiredValueChanged_.invoke();
+    }
 
-    this->atBottom_ = areClose(this->getBottom(), value);
+    if (areClose(this->currentValue_, value))
+    {
+        // Already visually at the requested position; stop any in-flight
+        // animation that was moving toward a different target.
+        this->currentValueAnimation_.stop();
+        this->resetBounds();
+        return;
+    }
 
     if (animated && getSettings()->enableSmoothScrolling)
     {
@@ -263,7 +290,8 @@ pajlada::Signals::NoArgSignal &Scrollbar::getDesiredValueChanged()
 
 void Scrollbar::setCurrentValue(qreal value)
 {
-    value = std::max(this->minimum_, std::min(this->getBottom(), value));
+    const qreal bottom = std::max(this->minimum_, this->getBottom());
+    value = std::clamp(value, this->minimum_, bottom);
     if (areClose(this->currentValue_, value))
     {
         // value has not changed

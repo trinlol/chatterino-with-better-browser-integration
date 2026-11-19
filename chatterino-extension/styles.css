@@ -774,3 +774,22 @@ html.chatterino-companion-active
   user-select: text !important;
 }
 
+/* Block Twitch's GTA VI promotional bottom banner so it never crowds the site
+   or shifts the attached chat layout. */
+div:has(> [class*="banner--"] img[src*="gta6-bottom-banner"]),
+[class*="banner--"]:has(img[src*="gta6-bottom-banner"]),
+div:has(> [class*="banner--"] a[href="/directory/category/grand-theft-auto-vi"]):has(
+    > [class*="banner--"] button[aria-label="Close"]
+  ),
+[class*="banner--"]:has(
+    a[href="/directory/category/grand-theft-auto-vi"]
+  ):has(button[aria-label="Close"]) {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+

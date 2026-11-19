@@ -114,6 +114,28 @@ TEST(AttachmentSessionRegistry, ResultIdentityMustMatchEverySessionField)
     EXPECT_FALSE(registry.matchesReadyIdentity(wrongChannel));
 }
 
+TEST(AttachmentSessionRegistry, ResolvesBrowserHwndForSessionOrWindow)
+{
+    AttachmentSessionRegistry registry;
+    AttachmentSession session{
+        .sessionId = "session-1",
+        .browserWindowId = "42",
+        .tabId = 7,
+        .generation = 1,
+        .channel = "example",
+        .browserHwnd = 98765,
+        .leaseExpiresAt = 10000};
+    ASSERT_EQ(registry.prepare(session),
+              AttachmentSessionRegistry::PrepareResult::Prepared);
+
+    EXPECT_EQ(registry.browserHwndForSessionOrWindow("session-1", "42"),
+              std::optional<quintptr>{98765});
+    EXPECT_EQ(registry.browserHwndForSessionOrWindow("other-session", "42"),
+              std::optional<quintptr>{98765});
+    EXPECT_EQ(registry.browserHwndForSessionOrWindow("other-session", "99"),
+              std::nullopt);
+}
+
 TEST(IpcQueue, EmptyPayloadHasDefinitiveDeliveryStatus)
 {
     EXPECT_EQ(ipc::sendMessage("chatterino-test-no-queue", QByteArray{}),

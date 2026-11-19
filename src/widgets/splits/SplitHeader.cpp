@@ -434,15 +434,18 @@ void SplitHeader::initializeLayout()
         },
         this->managedConnections_);
 
-    this->managedConnections_.managedConnect(
-        getApp()->getWatchStreakController()->minutesUpdated,
-        [this](const QString &channelName, int) {
-            if (this->split_->getChannel()->getName().compare(
-                    channelName, Qt::CaseInsensitive) == 0)
-            {
-                this->updateChannelText();
-            }
-        });
+    if (auto *watchStreak = getApp()->getWatchStreakController())
+    {
+        this->managedConnections_.managedConnect(
+            watchStreak->minutesUpdated,
+            [this](const QString &channelName, int) {
+                if (this->split_->getChannel()->getName().compare(
+                        channelName, Qt::CaseInsensitive) == 0)
+                {
+                    this->updateChannelText();
+                }
+            });
+    }
 
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);

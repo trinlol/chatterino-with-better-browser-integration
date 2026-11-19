@@ -86,6 +86,21 @@ TEST(NativeMessagingProtocol, V2SelectRequiresCompleteIdentityAndGeometry)
     auto oversizedGeometry = valid;
     oversizedGeometry["size"] = QJsonObject{{"width", 32769}, {"height", 480}};
     EXPECT_FALSE(parseNativeMessage(oversizedGeometry));
+
+    auto validBottomOffset = valid;
+    validBottomOffset["size"] =
+        QJsonObject{{"width", 320}, {"height", 480}, {"bottomOffset", 64}};
+    EXPECT_TRUE(parseNativeMessage(validBottomOffset));
+
+    auto negativeBottomOffset = valid;
+    negativeBottomOffset["size"] =
+        QJsonObject{{"width", 320}, {"height", 480}, {"bottomOffset", -1}};
+    EXPECT_FALSE(parseNativeMessage(negativeBottomOffset));
+
+    auto oversizedBottomOffset = valid;
+    oversizedBottomOffset["size"] =
+        QJsonObject{{"width", 320}, {"height", 480}, {"bottomOffset", 40000}};
+    EXPECT_FALSE(parseNativeMessage(oversizedBottomOffset));
 }
 
 TEST(NativeMessagingProtocol, V2SelectAllowsOfficialForegroundWindowFallback)

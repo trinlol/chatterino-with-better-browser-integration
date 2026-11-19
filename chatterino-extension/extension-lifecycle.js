@@ -69,46 +69,77 @@
       }
     }
 
+    let opQueue = Promise.resolve();
+    function serialize(task) {
+      const result = opQueue.then(task, task);
+      opQueue = result.then(
+        () => {},
+        () => {}
+      );
+      return result;
+    }
+
     return {
       async all() {
-        return load();
+        return serialize(() => load());
       },
       async get(sessionId) {
-        const sessions = await load();
-        return sessions[sessionId] ?? null;
+        return serialize(async () => {
+          const sessions = await load();
+          return sessions[sessionId] ?? null;
+        });
       },
       async put(session) {
         if (!session?.sessionId) return;
-        const sessions = await load();
-        sessions[session.sessionId] = {
-          sessionId: String(session.sessionId),
-          windowId: Number.isInteger(session.windowId)
-            ? session.windowId
-            : undefined,
-          tabId: Number.isInteger(session.tabId) ? session.tabId : undefined,
-          channel: typeof session.channel === "string" ? session.channel : "",
-          generation: Number.isInteger(session.generation)
-            ? session.generation
-            : 0,
-          desired: session.desired !== false,
-          attached: session.attached === true,
-          retryAt: Number.isFinite(session.retryAt) ? session.retryAt : 0,
-          retryAttempt: Number.isInteger(session.retryAttempt)
-            ? session.retryAttempt
-            : 0,
-          leaseExpiresAt: Number.isFinite(session.leaseExpiresAt)
-            ? session.leaseExpiresAt
-            : 0,
-        };
-        await save(sessions);
+        return serialize(async () => {
+          const sessions = await load();
+          const sessionId = String(session.sessionId);
+          if (
+            Number.isInteger(session.windowId) &&
+            Number.isInteger(session.tabId)
+          ) {
+            for (const [id, existing] of Object.entries(sessions)) {
+              if (
+                id !== sessionId &&
+                existing?.windowId === session.windowId &&
+                existing?.tabId === session.tabId
+              ) {
+                delete sessions[id];
+              }
+            }
+          }
+          sessions[sessionId] = {
+            sessionId,
+            windowId: Number.isInteger(session.windowId)
+              ? session.windowId
+              : undefined,
+            tabId: Number.isInteger(session.tabId) ? session.tabId : undefined,
+            channel: typeof session.channel === "string" ? session.channel : "",
+            generation: Number.isInteger(session.generation)
+              ? session.generation
+              : 0,
+            desired: session.desired !== false,
+            attached: session.attached === true,
+            retryAt: Number.isFinite(session.retryAt) ? session.retryAt : 0,
+            retryAttempt: Number.isInteger(session.retryAttempt)
+              ? session.retryAttempt
+              : 0,
+            leaseExpiresAt: Number.isFinite(session.leaseExpiresAt)
+              ? session.leaseExpiresAt
+              : 0,
+          };
+          await save(sessions);
+        });
       },
       async remove(sessionId) {
-        const sessions = await load();
-        delete sessions[sessionId];
-        await save(sessions);
+        return serialize(async () => {
+          const sessions = await load();
+          delete sessions[sessionId];
+          await save(sessions);
+        });
       },
       async clear() {
-        await save({});
+        return serialize(() => save({}));
       },
     };
   }

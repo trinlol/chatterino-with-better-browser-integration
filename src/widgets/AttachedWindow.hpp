@@ -30,6 +30,7 @@ public:
         double pixelRatio = -1;
         int width = -1;
         int height = -1;
+        double bottomOffset = 0.0;
         bool fullscreen = false;
         QString sessionId;
         qint64 generation = -1;
@@ -81,6 +82,7 @@ private:
     double pixelRatio_ = -1;
     int width_ = 360;
     int height_ = -1;
+    double bottomOffset_ = 0.0;
     bool fullscreen_ = false;
     bool requestedVisible_ = false;
     QString sessionId_;

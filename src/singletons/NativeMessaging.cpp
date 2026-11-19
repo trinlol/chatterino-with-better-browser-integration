@@ -556,6 +556,32 @@ bool AttachmentSessionRegistry::matchesReadyIdentity(
            it->channel.compare(candidate.channel, Qt::CaseInsensitive) == 0;
 }
 
+std::optional<quintptr> AttachmentSessionRegistry::browserHwndForSessionOrWindow(
+    const QString &sessionId, const QString &browserWindowId) const
+{
+    QMutexLocker lock(&this->mutex_);
+    if (!sessionId.isEmpty())
+    {
+        const auto it = this->sessions_.find(sessionId);
+        if (it != this->sessions_.end() && it->browserHwnd != 0)
+        {
+            return it->browserHwnd;
+        }
+    }
+    if (!browserWindowId.isEmpty())
+    {
+        for (const auto &existing : this->sessions_)
+        {
+            if (existing.browserWindowId == browserWindowId &&
+                existing.browserHwnd != 0)
+            {
+                return existing.browserHwnd;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 bool AttachmentSessionRegistry::empty() const
 {
     QMutexLocker lock(&this->mutex_);
@@ -1175,6 +1201,7 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
         .pixelRatio = sizeObject["pixelRatio"_L1].toDouble(-1.0),
         .width = sizeObject["width"_L1].toInt(-1),
         .height = sizeObject["height"_L1].toInt(-1),
+        .bottomOffset = sizeObject["bottomOffset"_L1].toDouble(0.0),
         .fullscreen = attachFullscreen,
     };
     if (v2)
@@ -1238,6 +1265,20 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
             << "browserHwnd:" << browserHwnd;
     }
 
+    if (v2 && (!root["browserWindowFocused"_L1].toBool() ||
+               browserTarget == nullptr))
+    {
+        if (const auto existingHwnd =
+                this->parent_.sessions_.browserHwndForSessionOrWindow(
+                    session.sessionId, session.browserWindowId);
+            existingHwnd &&
+            isSupportedOverlayTarget(reinterpret_cast<HWND>(*existingHwnd)))
+        {
+            browserTarget = reinterpret_cast<HWND>(*existingHwnd);
+            session.browserHwnd = *existingHwnd;
+        }
+    }
+
     // Chromium can launch the native host with --parent-window=0. Preserve
     // Chatterino's original foreground-window attach behavior, but capture
     // and validate the HWND here before the GUI-thread handoff. Looking up the
@@ -1248,11 +1289,26 @@ void NativeMessagingServer::ReceiverThread::handleSelect(
         auto foreground = ::GetForegroundWindow();
         const bool foregroundWasReportedByBrowser =
             !v2 || root["browserWindowFocused"_L1].toBool();
-        if (foregroundWasReportedByBrowser &&
-            isSupportedOverlayTarget(foreground))
+        if (foregroundWasReportedByBrowser && foreground != nullptr)
         {
-            browserTarget = foreground;
-            session.browserHwnd = reinterpret_cast<quintptr>(foreground);
+            if (isSupportedOverlayTarget(foreground))
+            {
+                browserTarget = foreground;
+                session.browserHwnd = reinterpret_cast<quintptr>(foreground);
+            }
+            else if (auto rootOwner = ::GetAncestor(foreground, GA_ROOTOWNER);
+                     rootOwner != nullptr && rootOwner != foreground &&
+                     isSupportedOverlayTarget(rootOwner))
+            {
+                browserTarget = rootOwner;
+                session.browserHwnd = reinterpret_cast<quintptr>(rootOwner);
+            }
+            else if (auto owner = ::GetWindow(foreground, GW_OWNER);
+                     owner != nullptr && isSupportedOverlayTarget(owner))
+            {
+                browserTarget = owner;
+                session.browserHwnd = reinterpret_cast<quintptr>(owner);
+            }
         }
     }
 

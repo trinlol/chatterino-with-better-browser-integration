@@ -42,6 +42,66 @@
   let observedChatShell = null;
   let chatShellRetry = null;
   let contextTornDown = false;
+  const dismissedPromoBanners = new WeakSet();
+
+  // Twitch occasionally injects a site-wide promotional banner across the
+  // bottom of the viewport (e.g. GTA VI launch). Hide its wrapper immediately
+  // and click its own Close button once so React unmounts it cleanly and
+  // restores the full chat height.
+  function dismissPromotionalBottomBanners() {
+    if (contextTornDown || typeof document?.querySelectorAll !== "function") {
+      return false;
+    }
+
+    let dismissedAny = false;
+    const candidates = new Set();
+    for (const img of document.querySelectorAll(
+      'img[src*="gta6-bottom-banner"]'
+    )) {
+      const banner = img.closest?.('[class*="banner--"]');
+      if (banner) {
+        candidates.add(banner);
+      }
+    }
+    for (const link of document.querySelectorAll(
+      '[class*="banner--"] a[href="/directory/category/grand-theft-auto-vi"]'
+    )) {
+      const banner = link.closest?.('[class*="banner--"]');
+      if (banner?.querySelector?.('button[aria-label="Close"]')) {
+        candidates.add(banner);
+      }
+    }
+
+    for (const banner of candidates) {
+      const wrapper =
+        banner.parentElement &&
+        banner.parentElement !== document.body &&
+        banner.parentElement !== document.documentElement &&
+        banner.parentElement.childElementCount === 1
+          ? banner.parentElement
+          : banner;
+
+      wrapper.style?.setProperty?.("display", "none", "important");
+      banner.style?.setProperty?.("display", "none", "important");
+
+      if (!dismissedPromoBanners.has(banner)) {
+        dismissedPromoBanners.add(banner);
+        dismissedAny = true;
+        const closeBtn = banner.querySelector?.('button[aria-label="Close"]');
+        try {
+          closeBtn?.click?.();
+        } catch (_err) {
+          // CSS hiding above already keeps the banner invisible.
+        }
+      }
+    }
+
+    if (dismissedAny && showingChat) {
+      queryChatRect();
+      setTimeout(queryChatRect, 150);
+    }
+    return dismissedAny;
+  }
 
   function isContextInvalidated() {
     try {
@@ -281,11 +341,24 @@
     } */
     lastRect = rect;
 
+    const viewportHeight =
+      typeof window.innerHeight === "number" &&
+      Number.isFinite(window.innerHeight)
+        ? window.innerHeight
+        : 0;
+    const bottomOffset =
+      viewportHeight > 0 &&
+      Number.isFinite(rect.y) &&
+      Number.isFinite(rect.height)
+        ? Math.max(0, viewportHeight - (rect.y + rect.height))
+        : 0;
+
     let data = {
       type: "chat-resized",
       rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
       dpr: window.devicePixelRatio,
       viewportX: calcViewportX(),
+      bottomOffset,
     };
 
     isCollapsed = rect.width == 0;
@@ -379,12 +452,10 @@
           attachment.leaseTimer = setTimeout(() => {
             if (attachment.phase === "attached") {
               revealChat("lease-expired");
-              sendRuntimeMessage({ type: "detach" });
             }
           }, 15000);
         } else {
           revealChat("lease-expired");
-          sendRuntimeMessage({ type: "detach" });
         }
       }, Math.max(1000, leaseMs - 15000));
     }
@@ -394,9 +465,23 @@
       sessionId: message.sessionId,
       generation: message.generation
     });
-    attachment.phase = "prepared";
-    attachment.sessionId = message.sessionId || null;
-    attachment.generation = message.generation ?? null;
+    const keepAttached =
+      attachment.phase === "attached" &&
+      (!message.sessionId ||
+        !attachment.sessionId ||
+        message.sessionId === attachment.sessionId) &&
+      (message.generation === undefined ||
+        attachment.generation === null ||
+        Number(message.generation) === Number(attachment.generation));
+    if (!keepAttached) {
+      attachment.phase = "prepared";
+    }
+    if (message.sessionId || !keepAttached) {
+      attachment.sessionId = message.sessionId || null;
+    }
+    if (message.generation !== undefined || !keepAttached) {
+      attachment.generation = message.generation ?? null;
+    }
     attachment.preparedAt = Date.now();
     console.log('[OVERLAY-DEBUG] Attachment state after prepare:', attachment);
   }
@@ -491,7 +576,14 @@
   }
 
   // event listeners
-  window.addEventListener("load", () => setTimeout(queryChatRect, 1000));
+  dismissPromotionalBottomBanners();
+  window.addEventListener("load", () => {
+    dismissPromotionalBottomBanners();
+    setTimeout(() => {
+      dismissPromotionalBottomBanners();
+      queryChatRect();
+    }, 1000);
+  });
   window.addEventListener("resize", () => {
     queryChatRect();
     syncNotificationsOverlay();
@@ -598,6 +690,7 @@
     if (notificationsSyncTimer !== null) return;
     notificationsSyncTimer = setTimeout(() => {
       notificationsSyncTimer = null;
+      dismissPromotionalBottomBanners();
       syncNotificationsOverlay();
     }, 100);
   });
@@ -675,6 +768,7 @@
     if (location.pathname != path) {
       path = location.pathname;
       ensureChatShellObserved();
+      dismissPromotionalBottomBanners();
 
       log("path changed");
 

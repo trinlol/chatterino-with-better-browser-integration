@@ -35,3 +35,9 @@
 - Commit the bump as `chore(release): bump version to X.Y.Z` on `master` before creating the GitHub release.
 - Never rebuild/publish a prebuilt package whose embedded version was not bumped — an unverifiable binary is a release blocker.
 - Release evidence contract (gates, smoke matrix, artifact collection): `docs/testing/browser-native-release-gate.md`
+
+### Working preferences (set by the owner)
+
+- Do the work directly: run builds, copies, restarts and releases yourself instead of handing scripts to the owner. On this Windows PC, use the Desktop Commander PowerShell tools for anything the Linux shell cannot do (closing/restarting apps, Windows paths).
+- The owner has said Claude may act freely on this project and its build/release tooling without asking first.
+- Still stop and ask before irreversible actions outside this project: deleting unrelated files, force-pushing, or rewriting published history.

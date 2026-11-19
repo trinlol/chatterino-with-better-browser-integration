@@ -132,6 +132,7 @@ ParsedNativeMessage parseNativeMessage(const QJsonObject &root)
             const auto height = size["height"_L1];
             const auto x = size["x"_L1];
             const auto pixelRatio = size["pixelRatio"_L1];
+            const auto bottomOffset = size["bottomOffset"_L1];
             if (!width.isDouble() || !height.isDouble() ||
                 std::floor(width.toDouble()) != width.toDouble() ||
                 std::floor(height.toDouble()) != height.toDouble() ||
@@ -140,7 +141,12 @@ ParsedNativeMessage parseNativeMessage(const QJsonObject &root)
                 (x.isDouble() && !std::isfinite(x.toDouble())) ||
                 (pixelRatio.isDouble() &&
                  (!std::isfinite(pixelRatio.toDouble()) ||
-                  pixelRatio.toDouble() <= 0 || pixelRatio.toDouble() > 16)))
+                  pixelRatio.toDouble() <= 0 || pixelRatio.toDouble() > 16)) ||
+                (!bottomOffset.isUndefined() &&
+                 (!bottomOffset.isDouble() ||
+                  !std::isfinite(bottomOffset.toDouble()) ||
+                  bottomOffset.toDouble() < 0 ||
+                  bottomOffset.toDouble() > 32768)))
             {
                 parsed.error = u"v2 select geometry is out of range"_s;
                 return parsed;

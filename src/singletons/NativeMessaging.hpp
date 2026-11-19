@@ -105,6 +105,8 @@ public:
         const QString &channel) const;
     bool containsReady(const QString &sessionId, qint64 generation) const;
     bool matchesReadyIdentity(const AttachmentSession &candidate) const;
+    std::optional<quintptr> browserHwndForSessionOrWindow(
+        const QString &sessionId, const QString &browserWindowId) const;
     bool empty() const;
 
 private:

@@ -242,9 +242,14 @@ BaseWindow::BaseWindow(FlagsEnum<Flags> _flags, QWidget *parent)
 #ifdef Q_OS_LINUX
         this->setWindowFlags(Qt::ToolTip);
 #else
-        this->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint |
-                             Qt::WindowDoesNotAcceptFocus |
-                             Qt::BypassWindowManagerHint);
+        Qt::WindowFlags flags = Qt::Tool | Qt::FramelessWindowHint |
+                                Qt::WindowDoesNotAcceptFocus |
+                                Qt::BypassWindowManagerHint;
+        if (_flags.has(TopMost))
+        {
+            flags |= Qt::WindowStaysOnTopHint;
+        }
+        this->setWindowFlags(flags);
 #endif
     }
 

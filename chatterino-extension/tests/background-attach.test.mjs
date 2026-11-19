@@ -888,3 +888,144 @@ test("native acknowledgement correlates by requestId when window key differs", a
   assert.ok(attachedState);
   assert.equal(attachedState.sessionId, select.sessionId);
 });
+
+test("attached session stays attached and renews across unfocused reconcile and chat-resized", async () => {
+  const h = await loadTabLifecycleHarness();
+  const pending = [];
+  const classes = new Set();
+  const document = {
+    fullscreenElement: null,
+    documentElement: {
+      classList: {
+        add: (k) => classes.add(k),
+        remove: (k) => classes.delete(k),
+      },
+      setAttribute() {},
+      removeAttribute() {},
+    },
+    addEventListener() {},
+    getElementsByClassName: () => [
+      {
+        children: [{}],
+        getBoundingClientRect: () => ({
+          x: 1200,
+          y: 50,
+          width: 306,
+          height: 720,
+        }),
+      },
+    ],
+  };
+  const location = { href: h.activeTab.url, pathname: "/example" };
+  const overlayContext = vm.createContext({
+    console: { log() {}, warn() {}, error() {} },
+    document,
+    location,
+    window: {
+      location,
+      devicePixelRatio: 1,
+      addEventListener() {},
+      dispatchEvent() {},
+    },
+    chrome: {
+      runtime: {
+        sendMessage: (message, callback) => {
+          if (message.type === "get-setting") return callback(true);
+          if (message.type === "get-os") return callback("win");
+          pending.push(message);
+        },
+        onMessage: {
+          addListener: (fn) => {
+            h.deliverOverlay = fn;
+          },
+        },
+      },
+      storage: { onChanged: { addListener() {} } },
+    },
+    MutationObserver: class {
+      observe() {}
+    },
+    CustomEvent: class {},
+    setTimeout: h.setTimeout,
+    clearTimeout: h.clearTimeout,
+    setInterval() {},
+  });
+  for (const file of ["extension-lifecycle.js", "overlay.js"]) {
+    vm.runInContext(
+      await readFile(new URL(`../${file}`, import.meta.url), "utf8"),
+      overlayContext
+    );
+  }
+  h.chrome.tabs.sendMessage = async (tabId, message) => {
+    h.sentMessages.push([tabId, message]);
+    h.deliverOverlay(message);
+  };
+  async function drain() {
+    for (let i = 0; i < 12; i++) {
+      const batch = pending.splice(0);
+      for (const m of batch) {
+        h.listeners["runtime.onMessage"](
+          m,
+          { tab: { ...h.activeTab } },
+          () => {}
+        );
+      }
+      await settle();
+      if (!pending.length) return;
+    }
+    assert.fail("overlay/background messaging failed to settle");
+  }
+
+  // Trigger concurrent tab activation and initial measurement
+  void h.listeners["tabs.onActivated"]({ tabId: 7, windowId: 42 });
+  h.measure();
+  await drain();
+
+  // Only one session should exist for (windowId: 42, tabId: 7)
+  const sessions = Object.values(h.sessionStorage.desiredSessions || {});
+  assert.equal(sessions.length, 1);
+
+  const select = h.nativeMessages.filter((m) => m.action === "select").at(-1);
+  assert.ok(select);
+  h.ack(select);
+  await settle();
+  assert.equal(classes.has("chatterino-companion-active"), true);
+
+  // User clicks into the Chatterino overlay or another window (browser window unfocused)
+  h.chrome.windows.get = async () => ({ focused: false, state: "normal" });
+  h.nativeMessages.length = 0;
+
+  // Trigger reconcile while browser window is unfocused
+  h.listeners["native.onMessage"]({ type: "status", status: "reconcile" });
+  await settle();
+  await drain();
+
+  // Reconcile must renew lease and geometry without detaching or losing companion-active
+  assert.equal(classes.has("chatterino-companion-active"), true);
+  assert.equal(
+    h.nativeMessages.some((m) => m.action === "detach"),
+    false
+  );
+  assert.ok(h.nativeMessages.some((m) => m.action === "leaseRenew"));
+  const unfocusedSelect = h.nativeMessages
+    .filter((m) => m.action === "select")
+    .at(-1);
+  assert.ok(unfocusedSelect);
+  assert.equal(unfocusedSelect.sessionId, select.sessionId);
+  h.ack(unfocusedSelect);
+  await settle();
+  assert.equal(classes.has("chatterino-companion-active"), true);
+
+  // Same-channel loading update while unfocused must not detach the overlay
+  h.nativeMessages.length = 0;
+  await h.listeners["tabs.onUpdated"](
+    7,
+    { status: "loading" },
+    { ...h.activeTab }
+  );
+  await drain();
+  assert.equal(
+    h.nativeMessages.some((m) => m.action === "detach"),
+    false
+  );
+});

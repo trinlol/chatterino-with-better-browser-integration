@@ -223,7 +223,9 @@ function isValidChatGeometry(message) {
     isFiniteInRange(rect.height, 0, MAX_GEOMETRY_PX) &&
     (message.dpr === undefined || isFiniteInRange(message.dpr, 0.05, 16)) &&
     (message.viewportX === undefined ||
-      isFiniteInRange(message.viewportX, -MAX_GEOMETRY_PX, MAX_GEOMETRY_PX))
+      isFiniteInRange(message.viewportX, -MAX_GEOMETRY_PX, MAX_GEOMETRY_PX)) &&
+    (message.bottomOffset === undefined ||
+      isFiniteInRange(message.bottomOffset, 0, MAX_GEOMETRY_PX))
   );
 }
 
@@ -342,6 +344,7 @@ async function persistRecoveryState() {
         retryAt: nativeRetryAt,
         retryAttempt: nativeConnection.retryAttempt,
         lastError: lastNativeError,
+        supportsV2: nativeSupportsV2,
       },
     });
   } catch {
@@ -353,6 +356,9 @@ async function rehydrateRecoveryState() {
   try {
     const { nativeLifecycle } =
       await chrome.storage.session.get("nativeLifecycle");
+    if (nativeLifecycle?.supportsV2 === true) {
+      nativeSupportsV2 = true;
+    }
     if (nativeLifecycle?.retryAt > Date.now()) {
       nativeRetryAt = nativeLifecycle.retryAt;
       lastNativeError = String(nativeLifecycle.lastError || "");
@@ -440,35 +446,45 @@ function createSessionId() {
   return `browser:${globalThis.crypto.randomUUID()}`;
 }
 
-async function ensureDesiredSession(windowId, tabId, channel) {
-  const sessions = await sessionStore.all();
-  const existing = Object.values(sessions).find(
-    (candidate) =>
-      Number(candidate.windowId) === Number(windowId) &&
-      Number(candidate.tabId) === Number(tabId)
-  );
-  const normalizedChannel = String(channel || "").toLowerCase();
-  const channelChanged =
-    existing &&
-    String(existing.channel || "").toLowerCase() !== normalizedChannel;
-  const newAttachment = channelChanged || existing?.desired === false;
-  const sessionId = existing?.sessionId || createSessionId();
-  const session = {
-    sessionId,
-    windowId: Number(windowId),
-    tabId: Number.isInteger(tabId) ? tabId : undefined,
-    channel: normalizedChannel,
-    generation: existing
-      ? Number(existing.generation || 0) + (newAttachment ? 1 : 0)
-      : 1,
-    desired: true,
-    attached: newAttachment ? false : existing?.attached === true,
-    retryAt: existing?.retryAt || 0,
-    retryAttempt: existing?.retryAttempt || 0,
-    leaseExpiresAt: newAttachment ? 0 : existing?.leaseExpiresAt || 0,
+let ensureSessionQueue = Promise.resolve();
+
+function ensureDesiredSession(windowId, tabId, channel) {
+  const run = async () => {
+    const sessions = await sessionStore.all();
+    const existing = Object.values(sessions).find(
+      (candidate) =>
+        Number(candidate.windowId) === Number(windowId) &&
+        Number(candidate.tabId) === Number(tabId)
+    );
+    const normalizedChannel = String(channel || "").toLowerCase();
+    const channelChanged =
+      existing &&
+      String(existing.channel || "").toLowerCase() !== normalizedChannel;
+    const newAttachment = channelChanged || existing?.desired === false;
+    const sessionId = existing?.sessionId || createSessionId();
+    const session = {
+      sessionId,
+      windowId: Number(windowId),
+      tabId: Number.isInteger(tabId) ? tabId : undefined,
+      channel: normalizedChannel,
+      generation: existing
+        ? Number(existing.generation || 0) + (newAttachment ? 1 : 0)
+        : 1,
+      desired: true,
+      attached: newAttachment ? false : existing?.attached === true,
+      retryAt: existing?.retryAt || 0,
+      retryAttempt: existing?.retryAttempt || 0,
+      leaseExpiresAt: newAttachment ? 0 : existing?.leaseExpiresAt || 0,
+    };
+    await sessionStore.put(session);
+    return session;
   };
-  await sessionStore.put(session);
-  return session;
+  const result = ensureSessionQueue.then(run, run);
+  ensureSessionQueue = result.then(
+    () => {},
+    () => {}
+  );
+  return result;
 }
 
 // Undo ensureDesiredSession for a measurement that lost a race with a tab
@@ -543,6 +559,21 @@ async function markSessionLost(message, reason) {
     session.leaseExpiresAt = 0;
     await sessionStore.put(session);
     await sendOverlayState(session, "revealed", reason);
+    if (
+      session.desired &&
+      session.tabId !== undefined &&
+      (reason === "lease-expired" || reason === "unknown-session")
+    ) {
+      try {
+        await chrome.tabs.sendMessage(session.tabId, {
+          action: "requestChatRect",
+          sessionId: session.sessionId,
+          generation: session.generation,
+        });
+      } catch {
+        // Reconciliation will retry if the tab is still loading.
+      }
+    }
   }
 }
 
@@ -599,18 +630,25 @@ function postAttachUntilAcknowledged(windowId, message, sessionMetadata = {}) {
   pendingAttachRequests.set(String(windowId), pending);
 
   if (pending.sessionId) {
-    void sessionStore.put({
-      sessionId: pending.sessionId,
-      windowId: Number(windowId),
-      tabId: pending.tabId,
-      channel: message.name,
-      generation: pending.generation,
-      desired: true,
-      attached: false,
-      retryAt: 0,
-      retryAttempt: 0,
-      leaseExpiresAt: 0,
-    });
+    void (async () => {
+      const existing = await sessionStore.get(pending.sessionId);
+      const sameExistingGeneration =
+        existing && Number(existing.generation) === Number(pending.generation);
+      await sessionStore.put({
+        sessionId: pending.sessionId,
+        windowId: Number(windowId),
+        tabId: pending.tabId,
+        channel: message.name,
+        generation: pending.generation,
+        desired: sameExistingGeneration ? existing.desired !== false : true,
+        attached: sameExistingGeneration ? existing.attached === true : false,
+        retryAt: existing?.retryAt || 0,
+        retryAttempt: existing?.retryAttempt || 0,
+        leaseExpiresAt: sameExistingGeneration
+          ? existing.leaseExpiresAt || 0
+          : 0,
+      });
+    })();
   }
 
   const nativePort = getPort();
@@ -838,6 +876,7 @@ function connectPort(fromRetry = false) {
               protocolVersion: msg.protocolVersion,
             });
           }
+          void persistRecoveryState();
           void requestActiveTwitchChatRect();
           break;
         case "chat-attached":
@@ -942,6 +981,7 @@ function disconnectPort() {
 }
 
 async function reconcileDesiredSessions() {
+  if (!port && Date.now() >= nativeRetryAt) getPort();
   const sessions = await sessionStore.all();
   const tabs = await chrome.tabs
     .query({ url: "*://*.twitch.tv/*" })
@@ -955,17 +995,11 @@ async function reconcileDesiredSessions() {
     }
     // A service-worker restart should reconnect port and verify geometry
     // rather than tearing down a healthy, already-attached overlay.
-    if (session.leaseExpiresAt && session.leaseExpiresAt <= Date.now() && !liveTabIds.has(session.tabId)) {
+    if (session.leaseExpiresAt && session.leaseExpiresAt <= Date.now()) {
       session.attached = false;
       session.leaseExpiresAt = 0;
       await sessionStore.put(session);
-      await sendOverlayState(session, "revealed", "lease-expired");
-    } else if (
-      nativeSupportsV2 &&
-      session.attached &&
-      session.leaseExpiresAt &&
-      session.leaseExpiresAt - Date.now() < NATIVE_LEASE_MS / 2
-    ) {
+    } else if (nativeSupportsV2 && session.attached) {
       session.leaseExpiresAt = Date.now() + NATIVE_LEASE_MS;
       await sessionStore.put(session);
       forwardNativeMessage({
@@ -991,7 +1025,6 @@ async function reconcileDesiredSessions() {
     }
   }
   workerRecoveryPending = false;
-  if (!port && Date.now() >= nativeRetryAt) getPort();
 }
 
 if (chrome.alarms?.onAlarm?.addListener) {
@@ -1050,7 +1083,10 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 // url changed
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (!tab.active) return;
-  if (changeInfo.url || changeInfo.status === "loading") {
+  if (
+    (changeInfo.url || changeInfo.status === "loading") &&
+    !matchChannelName(tab.url)
+  ) {
     await tryDetach(tab.windowId);
   }
   await onTabSelected(tab.url, tab);
@@ -1530,8 +1566,16 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
       if (!isTwitchTabSender(sender) || !sender.tab.active) return;
       const locationChannel = matchChannelName(sender.tab.url);
       if (!locationChannel) return;
-      safeGetWindow(sender.tab.windowId).then((window) => {
-        if (!window?.focused) return;
+      safeGetWindow(sender.tab.windowId).then(async (window) => {
+        const windowSessions = await sessionsForWindow(sender.tab.windowId);
+        const hasExistingSession =
+          (await AttachedWindows.isAttached(sender.tab.windowId)) ||
+          windowSessions.some(
+            (session) =>
+              (session.desired || session.attached) &&
+              session.tabId === sender.tab.id
+          );
+        if (!window?.focused && !hasExistingSession) return;
 
         let data = {
           action: "select",
@@ -1566,12 +1610,28 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
       // is window focused
       safeGetWindow(sender.tab.windowId).then(async (window) => {
         if (!window) return;
-        // Chatterino's attach contract is foreground-window based. Never send
-        // a geometry replay while some other application owns focus: doing so
-        // can bind the overlay to that unrelated HWND and break move/resize
-        // tracking. Native readiness still requests fresh geometry; the next
-        // focused browser event performs the attach.
-        if (!window.focused) return;
+        const windowSessions = await sessionsForWindow(sender.tab.windowId);
+        const hasExistingSession =
+          (await AttachedWindows.isAttached(sender.tab.windowId)) ||
+          windowSessions.some(
+            (session) =>
+              (session.desired || session.attached) &&
+              session.tabId === sender.tab.id
+          );
+        // Chatterino's legacy v1 attach contract is foreground-window based.
+        // Never send an initial v1 geometry replay while some other
+        // application owns focus: doing so can bind the overlay to that
+        // unrelated HWND. Once a window has an active/desired session (or on
+        // a v2 startup replay where the host resolves the browser HWND),
+        // allow geometry and lease renewals even when focus is in Chatterino
+        // or another application.
+        if (
+          !window.focused &&
+          !hasExistingSession &&
+          !(isStartupReplay && nativeSupportsV2)
+        ) {
+          return;
+        }
 
         const dpr = message.dpr ?? 1;
         // devicePixelRatio combines both zoom and display scaling set in the
@@ -1587,11 +1647,13 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
         // with sub-pixel sizes, so flooring can shave up to 1px off each
         // edge of the overlay, leaving visible hairline gaps at its top and
         // right (the overlay is anchored bottom-left).
+        const bottomOffset = Math.round((message.bottomOffset ?? 0) * zoom);
         let size = {
           x: message.rect.x * zoom + xOffset,
           pixelRatio: 1,
           width: Math.round(message.rect.width * zoom),
           height: Math.round(message.rect.height * zoom),
+          ...(bottomOffset > 0 ? { bottomOffset } : {}),
         };
 
         // attach to window
@@ -1606,7 +1668,9 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
           await abandonDesiredSession(session);
           return;
         }
-        await sendOverlayState(session, "prepare");
+        if (!session.attached) {
+          await sendOverlayState(session, "prepare");
+        }
         if (measurementRevision !== windowRevision(sender.tab.windowId)) {
           await abandonDesiredSession(session);
           return;

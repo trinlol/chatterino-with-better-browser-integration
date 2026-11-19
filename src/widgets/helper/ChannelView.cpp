@@ -464,6 +464,14 @@ void ChannelView::initializeScrollbar()
             this->layoutQueued_ = true;
         }
     });
+    std::ignore = this->scrollBar_->getDesiredValueChanged().connect([this] {
+        if (this->goToBottom_)
+        {
+            this->goToBottom_->setVisible(this->enableScrollingToBottom_ &&
+                                          this->scrollBar_->isVisible() &&
+                                          !this->scrollBar_->isAtBottom());
+        }
+    });
 }
 
 void ChannelView::initializeSignals()
@@ -638,7 +646,7 @@ void ChannelView::updatePauses()
         auto pauseEnd =
             std::max_element(this->pauses_.begin(), this->pauses_.end(),
                              [](auto &&a, auto &&b) {
-                                 return a.second > b.second;
+                                 return a.second < b.second;
                              })
                 ->second.value();
 
@@ -829,6 +837,11 @@ void ChannelView::updateScrollbar(const std::vector<MessageLayoutPtr> &messages,
         }
     }
 
+    if (!showScrollbar)
+    {
+        this->scrollBar_->setPageSize(static_cast<qreal>(messages.size()));
+    }
+
     /// Update scrollbar values
     this->scrollBar_->setVisible(showScrollbar);
 
@@ -857,6 +870,8 @@ void ChannelView::clearMessages()
     this->scrollBar_->resetBounds();
     this->scrollBar_->setMaximum(0);
     this->scrollBar_->setMinimum(0);
+    this->scrollBar_->setPageSize(0);
+    this->scrollBar_->scrollToBottom(false);
     this->queueLayout();
     this->update();
 
@@ -1843,13 +1858,17 @@ void ChannelView::wheelEvent(QWheelEvent *event)
         float mouseMultiplier = getSettings()->mouseScrollMultiplier;
 
         // This ensures snapshot won't be indexed out of bounds when scrolling really fast
-        qreal desired = std::max<qreal>(0, this->scrollBar_->getDesiredValue());
+        const qreal minValue = this->scrollBar_->getMinimum();
+        qreal desired = std::max(minValue, this->scrollBar_->getDesiredValue());
         qreal delta = event->angleDelta().y() * qreal(1.5) * mouseMultiplier;
 
         auto &snapshot = this->getMessagesSnapshot();
         int snapshotLength = int(snapshot.size());
-        int i = std::min<int>(int(desired - this->scrollBar_->getMinimum()),
-                              snapshotLength - 1);
+        if (snapshotLength == 0)
+        {
+            return;
+        }
+        int i = std::clamp<int>(int(desired - minValue), 0, snapshotLength - 1);
 
         if (delta > 0)
         {
@@ -1872,7 +1891,7 @@ void ChannelView::wheelEvent(QWheelEvent *event)
 
                 if (i == 0)
                 {
-                    desired = 0;
+                    desired = minValue;
                 }
                 else
                 {
@@ -1907,7 +1926,7 @@ void ChannelView::wheelEvent(QWheelEvent *event)
 
                 if (i == snapshotLength - 1)
                 {
-                    desired = snapshot.size();
+                    desired = this->scrollBar_->getMaximum();
                 }
                 else
                 {
@@ -3200,6 +3219,9 @@ void ChannelView::mouseDoubleClickEvent(QMouseEvent *event)
 
 void ChannelView::hideEvent(QHideEvent * /*event*/)
 {
+    this->unpause(PauseReason::Mouse);
+    this->unpause(PauseReason::KeyboardModifier);
+
     for (const auto &layout : this->messagesOnScreen_)
     {
         layout->deleteBuffer();

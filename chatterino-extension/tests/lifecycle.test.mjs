@@ -150,3 +150,44 @@ test("overlay preserves Twitch DOM and only commits hide after an acknowledgemen
   assert.match(source, /phase\s*=\s*["']attached["']/);
   assert.match(source, /lease-expired/);
 });
+
+test("sessionStore serializes concurrent writes and deduplicates by windowId and tabId", async () => {
+  const { createSessionStore } = await loadLifecycle();
+  let state = {};
+  const storage = {
+    async get(key) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      return { [key]: state[key] };
+    },
+    async set(next) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      state = { ...state, ...next };
+    },
+  };
+
+  const store = createSessionStore(storage);
+  await Promise.all([
+    store.put({
+      sessionId: "browser:first",
+      windowId: 42,
+      tabId: 7,
+      channel: "example",
+      generation: 1,
+      desired: true,
+      attached: false,
+    }),
+    store.put({
+      sessionId: "browser:second",
+      windowId: 42,
+      tabId: 7,
+      channel: "example",
+      generation: 1,
+      desired: true,
+      attached: true,
+    }),
+  ]);
+
+  const all = await store.all();
+  assert.deepEqual(Object.keys(all), ["browser:second"]);
+  assert.equal(all["browser:second"].attached, true);
+});

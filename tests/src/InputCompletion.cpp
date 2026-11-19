@@ -297,6 +297,14 @@ TEST_F(InputCompletionTest, CompletionRendersAndCyclesInlineEmotes)
     EXPECT_EQ(edit.textUnderCursor(), QStringLiteral(":pa"));
 }
 
+TEST_F(InputCompletionTest, PopupStaysTopMostAboveAlwaysOnTopWindow)
+{
+    QWidget parent;
+    InputCompletionPopup popup(&parent);
+    EXPECT_TRUE(popup.isTopMost());
+    EXPECT_TRUE(popup.windowFlags().testFlag(Qt::WindowStaysOnTopHint));
+}
+
 TEST_F(InputCompletionTest, SeventvOnlyPopupCompletion)
 {
     for (const auto &query : {QStringLiteral(":cla"), QStringLiteral("cla")})

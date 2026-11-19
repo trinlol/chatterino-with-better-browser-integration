@@ -127,6 +127,35 @@ std::optional<RECT> getVisibleFrameBounds(HWND attached)
     {
         return std::nullopt;
     }
+
+    // On some Windows/Chromium setups, DWMWA_EXTENDED_FRAME_BOUNDS for a
+    // maximized window still includes the off-screen resize border beyond the
+    // monitor work area, which would leave zero bottom/left insets and shift
+    // the overlay down into the taskbar. Clamping to rcWork is a no-op when
+    // DWM already clips maximized bounds and fixes the overhang when it doesn't.
+    if (::IsZoomed(attached))
+    {
+        MONITORINFO monitorInfo{};
+        monitorInfo.cbSize = sizeof(monitorInfo);
+        if (HMONITOR monitor =
+                ::MonitorFromWindow(attached, MONITOR_DEFAULTTONEAREST);
+            monitor != nullptr &&
+            ::GetMonitorInfo(monitor, &monitorInfo) != 0)
+        {
+            const RECT &work = monitorInfo.rcWork;
+            RECT clamped{
+                .left = std::max(extended.left, work.left),
+                .top = std::max(extended.top, work.top),
+                .right = std::min(extended.right, work.right),
+                .bottom = std::min(extended.bottom, work.bottom),
+            };
+            if (clamped.left < clamped.right && clamped.top < clamped.bottom)
+            {
+                extended = clamped;
+            }
+        }
+    }
+
     return extended;
 }
 
@@ -279,6 +308,8 @@ AttachedWindow *AttachedWindow::get(void *target, const GetArgs &args)
 
     window->x_ = args.x;
     window->pixelRatio_ = args.pixelRatio;
+    window->bottomOffset_ =
+        std::isfinite(args.bottomOffset) ? std::max(0.0, args.bottomOffset) : 0.0;
 
     if (args.height != -1)
     {
@@ -640,6 +671,9 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
             return {8, 8, 8, 8};
         }();
 
+        const auto totalBottomSpan =
+            std::lround((this->height_ + this->bottomOffset_) * scale);
+
         if (this->pixelRatio_ != -1.0)
         {
             // The extension already positions the chat's x inside the
@@ -651,8 +685,7 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
                 hwnd,
                 int(rect.left + insets.left +
                     std::lround(this->x_ * scale * this->pixelRatio_)),
-                int(rect.bottom - insets.bottom -
-                    std::lround(this->height_ * scale)),
+                int(rect.bottom - insets.bottom - totalBottomSpan),
                 int(std::lround(this->width_ * scale)),
                 int(std::lround(this->height_ * scale)));
         }
@@ -663,7 +696,7 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
                               int(rect.left + insets.left +
                                   std::lround(this->x_ * scale)),
                               int(rect.bottom - insets.bottom -
-                                  std::lround(this->height_ * scale)),
+                                  totalBottomSpan),
                               int(std::lround(this->width_ * scale)),
                               int(std::lround(this->height_ * scale)));
         }
@@ -674,7 +707,7 @@ void AttachedWindow::updateWindowRect(void *_attachedPtr)
                               int(rect.right - insets.right -
                                   std::lround(this->width_ * scale)),
                               int(rect.bottom - insets.bottom -
-                                  std::lround(this->height_ * scale)),
+                                  totalBottomSpan),
                               int(std::lround(this->width_ * scale)),
                               int(std::lround(this->height_ * scale)));
         }
