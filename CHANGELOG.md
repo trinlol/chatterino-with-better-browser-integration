@@ -2,6 +2,14 @@
 
 ## Chatterino Better Browser
 
+### v2.7.6 (2026-11-19)
+
+#### Fixed
+
+- **Tab Switch Overlay Detach**: Fixed race conditions where the chat overlay could stay visible or reappear on a newly switched tab (immediate hide/timer teardown on detach, serialized session transitions, corrective detach on late acknowledgements, and detaching inactive tabs during reconciliation).
+- **Emote Menu Scroll Jump**: Stopped browser extension heartbeats and background emote reloads from resetting the emote menu scroll position back to the top.
+- **Emote Menu Scrollbar Scaling**: Switched the emote picker to pixel-proportional scrolling so tabs with large 7TV/BTTV/FFZ emote sets scroll smoothly from top to bottom.
+
 ### v2.7.5 (2026-11-19)
 
 #### Fixed

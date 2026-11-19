@@ -1,7 +1,7 @@
 {
   "applicationName": "Chatterino Better Browser",
-  "applicationVersion": "2.7.5",
-  "extensionVersion": "2.7.5",
+  "applicationVersion": "2.7.6",
+  "extensionVersion": "2.7.6",
   "nativeProtocolVersion": 1,
   "extensionBundleName": "chatterino-browser-extension"
 }
