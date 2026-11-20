@@ -99,7 +99,7 @@ Chatterino Better Browser on a live Twitch channel - full chat in the overlay, s
 </details>
 
 <p align="center">
-  <sub>Showcase captured on <a href="https://www.twitch.tv/alveussanctuary">alveussanctuary</a> for demonstration only.</sub>
+  <sub>Showcase captured on <a href="https://www.twitch.tv/alveussanctuary">alveussanctuary</a> for demonstration only (chat and toolbar captures originally recorded on v1.0.1 - newer releases include additional UI refinements and themes).</sub>
 </p>
 
 ---
