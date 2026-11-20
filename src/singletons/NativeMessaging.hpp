@@ -34,7 +34,12 @@ Expected<void, WriteManifestError> writeManifestTo(QString directory,
                                                    const QString &filename,
                                                    const QJsonDocument &json);
 
-#ifndef Q_OS_WIN
+QJsonDocument buildChromeManifest(const QStringList &extensionIDs);
+QJsonDocument buildFirefoxManifest(const QStringList &extensionIDs);
+
+#ifdef Q_OS_WIN
+bool writeRegistryDefaultString(const QString &subKey, const QString &value);
+#else
 /// Parse `path` by replacing '~', '$XDG_CONFIG_HOME' and '$XDG_DATA_HOME'
 /// with their respective values.
 /// Returns nullopt if the path is empty or relative.

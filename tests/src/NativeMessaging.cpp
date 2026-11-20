@@ -19,6 +19,10 @@
 
 #include <chrono>
 
+#ifdef Q_OS_WIN
+#    include <Windows.h>
+#endif
+
 
 using namespace chatterino;
 
@@ -298,6 +302,95 @@ TEST_F(NativeMessagingFixture, writeManifestToWindowsCurrentDir)
 
     ASSERT_TRUE(QFile(combinePath(this->dir.path(), "test.json")).exists());
 }
+
+TEST(NativeMessaging, buildFirefoxManifestFiltersNonFirefoxIds)
+{
+    const auto doc = buildFirefoxManifest({
+        QStringLiteral("bogfpdfoagkaebimmlcbgmfmanhbhhlm"),
+        QStringLiteral("custom-addon@example.org"),
+        QStringLiteral("{12345678-1234-1234-1234-123456789abc}"),
+        QStringLiteral("chatterino-better-browser@trinlol.github.io"),
+        QStringLiteral("not valid id"),
+    });
+    const auto obj = doc.object();
+    const auto allowed = obj.value(QStringLiteral("allowed_extensions")).toArray();
+
+    QStringList values;
+    for (const auto &entry : allowed)
+    {
+        values.append(entry.toString());
+    }
+
+    EXPECT_TRUE(values.contains(QStringLiteral("chatterino_native@chatterino.com")));
+    EXPECT_TRUE(
+        values.contains(QStringLiteral("chatterino-better-browser@trinlol.github.io")));
+    EXPECT_TRUE(values.contains(QStringLiteral("custom-addon@example.org")));
+    EXPECT_TRUE(values.contains(
+        QStringLiteral("{12345678-1234-1234-1234-123456789abc}")));
+    EXPECT_FALSE(
+        values.contains(QStringLiteral("bogfpdfoagkaebimmlcbgmfmanhbhhlm")));
+    EXPECT_FALSE(values.contains(QStringLiteral("not valid id")));
+    EXPECT_EQ(values.count(
+                  QStringLiteral("chatterino-better-browser@trinlol.github.io")),
+              1);
+
+#ifdef Q_OS_WIN
+    EXPECT_FALSE(obj.value(QStringLiteral("path")).toString().contains('/'));
+#endif
+}
+
+TEST(NativeMessaging, buildChromeManifestFiltersNonChromeIds)
+{
+    const auto doc = buildChromeManifest({
+        QStringLiteral("bogfpdfoagkaebimmlcbgmfmanhbhhlm"),
+        QStringLiteral("abcdefghijklmnopabcdefghijklmnop"),
+        QStringLiteral("custom-addon@example.org"),
+        QStringLiteral("{12345678-1234-1234-1234-123456789abc}"),
+    });
+    const auto obj = doc.object();
+    const auto allowed = obj.value(QStringLiteral("allowed_origins")).toArray();
+
+    QStringList values;
+    for (const auto &entry : allowed)
+    {
+        values.append(entry.toString());
+    }
+
+    EXPECT_TRUE(values.contains(
+        QStringLiteral("chrome-extension://bogfpdfoagkaebimmlcbgmfmanhbhhlm/")));
+    EXPECT_EQ(values.count(QStringLiteral(
+                  "chrome-extension://bogfpdfoagkaebimmlcbgmfmanhbhhlm/")),
+              1);
+    EXPECT_TRUE(values.contains(
+        QStringLiteral("chrome-extension://abcdefghijklmnopabcdefghijklmnop/")));
+    EXPECT_FALSE(values.contains(
+        QStringLiteral("chrome-extension://custom-addon@example.org/")));
+}
+
+#ifdef Q_OS_WIN
+TEST(NativeMessaging, writeRegistryDefaultStringCreatesKeyAndDefaultValue)
+{
+    const QString testRoot = QStringLiteral("Software\\ChatterinoUnitTestTmp");
+    const QString testSubKey =
+        testRoot + QStringLiteral("\\NativeMessagingHosts\\com.chatterino.test");
+    const QString expectedValue =
+        QStringLiteral("C:\\Users\\Example\\native-messaging-manifest-firefox.json");
+
+    ASSERT_TRUE(writeRegistryDefaultString(testSubKey, expectedValue));
+
+    wchar_t buffer[512]{};
+    DWORD bufferBytes = sizeof(buffer);
+    const auto wideSubKey = testSubKey.toStdWString();
+    const LSTATUS queryStatus = ::RegGetValueW(
+        HKEY_CURRENT_USER, wideSubKey.c_str(), nullptr, RRF_RT_REG_SZ, nullptr,
+        buffer, &bufferBytes);
+
+    ::RegDeleteTreeW(HKEY_CURRENT_USER, testRoot.toStdWString().c_str());
+
+    ASSERT_EQ(queryStatus, ERROR_SUCCESS);
+    EXPECT_EQ(QString::fromWCharArray(buffer), expectedValue);
+}
+#endif
 
 #ifndef Q_OS_WIN
 TEST(NativeMessaging, parseCustomPath)

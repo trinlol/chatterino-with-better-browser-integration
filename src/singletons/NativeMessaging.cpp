@@ -34,7 +34,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QMutexLocker>
-#include <QSettings>
+#include <QRegularExpression>
 #include <QStringBuilder>
 #include <QTimer>
 
@@ -81,7 +81,7 @@ const Config FIREFOX{
 #ifdef Q_OS_WIN
     .fileName = u"native-messaging-manifest-firefox.json"_s,
     .registryKey =
-        u"HKCU\\Software\\Mozilla\\NativeMessagingHosts\\com.chatterino.chatterino"_s,
+        u"Software\\Mozilla\\NativeMessagingHosts\\com.chatterino.chatterino"_s,
 #elif defined(Q_OS_MACOS)
     .browserDirectory = u"~/Library/Application Support/Mozilla"_s,
     .nmDirectory = u"NativeMessagingHosts"_s,
@@ -95,7 +95,7 @@ const Config CHROME{
 #ifdef Q_OS_WIN
     .fileName = u"native-messaging-manifest-chrome.json"_s,
     .registryKey =
-        u"HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.chatterino.chatterino"_s,
+        u"Software\\Google\\Chrome\\NativeMessagingHosts\\com.chatterino.chatterino"_s,
 #elif defined(Q_OS_MACOS)
     .browserDirectory = u"~/Library/Application Support/Google/Chrome/"_s,
     .nmDirectory = u"NativeMessagingHosts"_s,
@@ -109,7 +109,7 @@ const Config EDGE{
 #ifdef Q_OS_WIN
     .fileName = u"native-messaging-manifest-edge.json"_s,
     .registryKey =
-        u"HKCU\\Software\\Microsoft\\Edge\\NativeMessagingHosts\\com.chatterino.chatterino"_s,
+        u"Software\\Microsoft\\Edge\\NativeMessagingHosts\\com.chatterino.chatterino"_s,
 #elif defined(Q_OS_MACOS)
     .browserDirectory = u"~/Library/Application Support/Microsoft Edge/"_s,
     .nmDirectory = u"NativeMessagingHosts"_s,
@@ -178,9 +178,9 @@ void registerNmManifest([[maybe_unused]] const Paths &paths,
     std::ignore =
         writeManifestTo(paths.miscDirectory, u"."_s, config.fileName, document);
 
-    QSettings registry(config.registryKey, QSettings::NativeFormat);
-    registry.setValue("",
-                      QString(paths.miscDirectory % u'/' % config.fileName));
+    const QString manifestPath = QDir::toNativeSeparators(
+        QDir(paths.miscDirectory).filePath(config.fileName));
+    std::ignore = writeRegistryDefaultString(config.registryKey, manifestPath);
 #else
     std::ignore =
         writeManifestTo(config.browserDirectory, config.nmDirectory,
@@ -190,57 +190,33 @@ void registerNmManifest([[maybe_unused]] const Paths &paths,
 
 QJsonObject buildBaseDocument()
 {
+    QString executablePath = QCoreApplication::applicationFilePath();
+#ifdef Q_OS_WIN
+    executablePath = QDir::toNativeSeparators(executablePath);
+#endif
     return QJsonObject{
         {u"name"_s, "com.chatterino.chatterino"_L1},
         {u"description"_s, "Browser interaction with chatterino."_L1},
-        {u"path"_s, QCoreApplication::applicationFilePath()},
+        {u"path"_s, executablePath},
         {u"type"_s, "stdio"_L1},
     };
 }
 
-QJsonDocument buildChromeManifest(const QStringList &extensionIDs)
+bool isValidChromeExtensionId(const QString &id)
 {
-    auto obj = buildBaseDocument();
-    QJsonArray allowedOriginsArr = {
-        u"chrome-extension://%1/"_s.arg(EXTENSION_ID),
-        u"chrome-extension://bogfpdfoagkaebimmlcbgmfmanhbhhlm/"_s,
-        u"chrome-extension://ihmcbbdgnogenblkicmkhbmgglcepmfp/"_s};
-
-    for (const auto &id : extensionIDs)
-    {
-        QString trimmedID = id.trimmed();
-        if (!trimmedID.isEmpty())
-        {
-            allowedOriginsArr.append(
-                u"chrome-extension://%1/"_s.arg(trimmedID));
-        }
-    }
-
-    obj.insert("allowed_origins", allowedOriginsArr);
-
-    return QJsonDocument{obj};
+    static const QRegularExpression pattern(u"^[a-p]{32}$"_s,
+                                            QRegularExpression::CaseInsensitiveOption);
+    return pattern.match(id).hasMatch();
 }
 
-QJsonDocument buildFirefoxManifest(const QStringList &extensionIDs)
+bool isValidFirefoxExtensionId(const QString &id)
 {
-    auto obj = buildBaseDocument();
-    QJsonArray allowedExtensions = {
-        "chatterino_native@chatterino.com",
-        "chatterino-better-browser@trinlol.github.io",
-    };
-
-    for (const auto &id : extensionIDs)
-    {
-        QString trimmedID = id.trimmed();
-        if (!trimmedID.isEmpty())
-        {
-            allowedExtensions.append(trimmedID);
-        }
-    }
-
-    obj.insert("allowed_extensions", allowedExtensions);
-
-    return QJsonDocument{obj};
+    static const QRegularExpression emailPattern(
+        u"^[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+$"_s);
+    static const QRegularExpression guidPattern(
+        u"^\\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\}$"_s);
+    return emailPattern.match(id).hasMatch() ||
+           guidPattern.match(id).hasMatch();
 }
 
 #ifndef Q_OS_WIN
@@ -301,7 +277,95 @@ Expected<void, WriteManifestError> writeManifestTo(QString directory,
     return {};
 }
 
-#ifndef Q_OS_WIN
+QJsonDocument buildChromeManifest(const QStringList &extensionIDs)
+{
+    auto obj = buildBaseDocument();
+    QJsonArray allowedOriginsArr = {
+        u"chrome-extension://%1/"_s.arg(EXTENSION_ID),
+        u"chrome-extension://bogfpdfoagkaebimmlcbgmfmanhbhhlm/"_s,
+        u"chrome-extension://ihmcbbdgnogenblkicmkhbmgglcepmfp/"_s};
+
+    for (const auto &id : extensionIDs)
+    {
+        const QString trimmedID = id.trimmed().toLower();
+        if (!isValidChromeExtensionId(trimmedID))
+        {
+            continue;
+        }
+        const QString origin = u"chrome-extension://%1/"_s.arg(trimmedID);
+        if (!allowedOriginsArr.contains(origin))
+        {
+            allowedOriginsArr.append(origin);
+        }
+    }
+
+    obj.insert("allowed_origins", allowedOriginsArr);
+
+    return QJsonDocument{obj};
+}
+
+QJsonDocument buildFirefoxManifest(const QStringList &extensionIDs)
+{
+    auto obj = buildBaseDocument();
+    QJsonArray allowedExtensions = {
+        "chatterino_native@chatterino.com",
+        "chatterino-better-browser@trinlol.github.io",
+    };
+
+    for (const auto &id : extensionIDs)
+    {
+        const QString trimmedID = id.trimmed();
+        if (!isValidFirefoxExtensionId(trimmedID))
+        {
+            continue;
+        }
+        if (!allowedExtensions.contains(trimmedID))
+        {
+            allowedExtensions.append(trimmedID);
+        }
+    }
+
+    obj.insert("allowed_extensions", allowedExtensions);
+
+    return QJsonDocument{obj};
+}
+
+#ifdef Q_OS_WIN
+bool writeRegistryDefaultString(const QString &subKey, const QString &value)
+{
+    const auto wideSubKey = subKey.toStdWString();
+    const auto wideValue = value.toStdWString();
+
+    HKEY key = nullptr;
+    const LSTATUS createStatus = ::RegCreateKeyExW(
+        HKEY_CURRENT_USER, wideSubKey.c_str(), 0, nullptr,
+        REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr, &key, nullptr);
+    if (createStatus != ERROR_SUCCESS)
+    {
+        qCWarning(chatterinoNativeMessage)
+            << "Failed to create registry key HKCU\\" << subKey
+            << "error:" << createStatus;
+        return false;
+    }
+
+    const auto byteLength =
+        static_cast<DWORD>((wideValue.size() + 1) * sizeof(wchar_t));
+    const LSTATUS setStatus = ::RegSetValueExW(
+        key, nullptr, 0, REG_SZ,
+        reinterpret_cast<const BYTE *>(wideValue.c_str()), byteLength);
+    ::RegCloseKey(key);
+
+    if (setStatus != ERROR_SUCCESS)
+    {
+        qCWarning(chatterinoNativeMessage)
+            << "Failed to set default registry value for HKCU\\" << subKey
+            << "error:" << setStatus;
+        return false;
+    }
+
+    return true;
+}
+#else
 std::optional<QString> parseCustomPath(QString path)
 {
     if (path.isEmpty())

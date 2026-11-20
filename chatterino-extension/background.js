@@ -1131,8 +1131,11 @@ function connectPort(fromRetry = false) {
       return;
     }
   });
-  thisPort.onDisconnect.addListener(() => {
-    const lastError = chrome.runtime.lastError?.message ?? "";
+  thisPort.onDisconnect.addListener((disconnectedPort) => {
+    const lastError =
+      disconnectedPort?.error?.message ??
+      chrome.runtime.lastError?.message ??
+      "";
     if (port !== thisPort) return;
     lastNativeError = lastError;
     if (
@@ -1154,7 +1157,9 @@ function connectPort(fromRetry = false) {
     nativeSupportsV2 = false;
     void markSessionLost({}, "native-disconnected");
     scheduleNativeReconnect(
-      /forbidden|not found|specified native messaging host/i.test(lastError)
+      /forbidden|not found|specified native messaging host|no such native application/i.test(
+        lastError
+      )
         ? "configuration"
         : "disconnect"
     );
