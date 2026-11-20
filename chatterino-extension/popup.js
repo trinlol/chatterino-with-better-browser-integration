@@ -6,6 +6,37 @@ document.addEventListener("DOMContentLoaded", () => {
   const debugPanel = document.getElementById("debugPanel");
   const healthDot = document.getElementById("healthDot");
   const healthHeadline = document.getElementById("healthHeadline");
+  const permissionsCard = document.getElementById("permissionsCard");
+  const grantTwitchPermissionBtn = document.getElementById(
+    "grantTwitchPermissionBtn"
+  );
+  const TWITCH_ORIGINS = ["*://*.twitch.tv/*"];
+
+  function refreshHostPermissions() {
+    if (!permissionsCard || !chrome.permissions?.contains) {
+      return;
+    }
+    try {
+      chrome.permissions.contains({ origins: TWITCH_ORIGINS }, (granted) => {
+        if (chrome.runtime.lastError) return;
+        permissionsCard.style.display = granted ? "none" : "block";
+      });
+    } catch {
+      // Ignore if permissions API is unavailable in the host environment.
+    }
+  }
+
+  if (grantTwitchPermissionBtn && chrome.permissions?.request) {
+    grantTwitchPermissionBtn.addEventListener("click", () => {
+      chrome.permissions.request({ origins: TWITCH_ORIGINS }, (granted) => {
+        if (chrome.runtime.lastError) return;
+        if (granted) {
+          if (permissionsCard) permissionsCard.style.display = "none";
+          refreshIntegrationHealth();
+        }
+      });
+    });
+  }
 
   function refreshIntegrationHealth() {
     chrome.runtime.sendMessage({ type: "get-integration-health" }, (health) => {
@@ -69,6 +100,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  refreshHostPermissions();
   refreshIntegrationHealth();
   const healthTimer = setInterval(refreshIntegrationHealth, 2000);
   window.addEventListener("unload", () => clearInterval(healthTimer), {

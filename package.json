@@ -15,7 +15,8 @@
     "test:fixture:prediction-bet": "node scripts/prediction-bet-popup-fixture.mjs",
     "test:browser-native": "npm run test:extension && npm run test:e2e:contract",
     "smoke:browser-native:windows": "powershell -ExecutionPolicy Bypass -File scripts/browser-integration/run-windows-smoke.ps1",
-    "package:extension": "node scripts/package-extension.mjs"
+    "package:extension": "node scripts/package-extension.mjs",
+    "package:extension:firefox": "node scripts/package-extension.mjs --target=firefox"
   },
   "repository": {
     "type": "git",

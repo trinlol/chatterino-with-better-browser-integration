@@ -224,7 +224,10 @@ QJsonDocument buildChromeManifest(const QStringList &extensionIDs)
 QJsonDocument buildFirefoxManifest(const QStringList &extensionIDs)
 {
     auto obj = buildBaseDocument();
-    QJsonArray allowedExtensions = {"chatterino_native@chatterino.com"};
+    QJsonArray allowedExtensions = {
+        "chatterino_native@chatterino.com",
+        "chatterino-better-browser@trinlol.github.io",
+    };
 
     for (const auto &id : extensionIDs)
     {

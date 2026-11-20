@@ -1,4 +1,12 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,9 +15,30 @@ const source = path.join(root, "chatterino-extension");
 const contract = JSON.parse(
   readFileSync(path.join(root, "release-contract.json"), "utf8")
 );
+
+const cliArgs = process.argv.slice(2);
+let target = "chromium";
+let explicitDestination = "";
+for (const arg of cliArgs) {
+  if (arg.startsWith("--target=")) {
+    target = arg.slice("--target=".length).toLowerCase();
+  } else if (!arg.startsWith("-")) {
+    explicitDestination = arg;
+  }
+}
+if (target !== "chromium" && target !== "firefox") {
+  throw new Error(
+    `extension package: unsupported --target=${target} (expected chromium or firefox)`
+  );
+}
+
+const defaultDirName =
+  target === "firefox"
+    ? `${contract.extensionBundleName}-firefox`
+    : contract.extensionBundleName;
 const destination = path.resolve(
   root,
-  process.argv[2] || path.join("dist", contract.extensionBundleName)
+  explicitDestination || path.join("dist", defaultDirName)
 );
 const rootPrefix = `${root}${path.sep}`.toLowerCase();
 
@@ -21,7 +50,7 @@ if (!destination.toLowerCase().startsWith(rootPrefix)) {
 
 // Everything the browser loads is derived from manifest.json, so a new
 // content script can never be left out of the package (a missing file makes
-// Chrome refuse to load the whole extension).
+// Chrome/Firefox refuse to load the whole extension).
 const manifest = JSON.parse(
   readFileSync(path.join(source, "manifest.json"), "utf8")
 );
@@ -47,12 +76,17 @@ if (popup) {
     runtimeFiles.add(match[1]);
   }
 }
-// The service worker pulls helpers in with importScripts().
+// The service worker pulls helpers in with importScripts(). Preserve load order
+// so Firefox's background.scripts event page loads them before background.js.
+const importedWorkerScripts = [];
 const worker = manifest.background?.service_worker;
 if (worker) {
   const code = readFileSync(path.join(source, worker), "utf8");
   for (const call of code.matchAll(/importScripts\(([^)]*)\)/g)) {
     for (const name of call[1].matchAll(/["']([^"']+\.js)["']/g)) {
+      if (!importedWorkerScripts.includes(name[1])) {
+        importedWorkerScripts.push(name[1]);
+      }
       runtimeFiles.add(name[1]);
     }
   }
@@ -73,6 +107,62 @@ for (const file of runtimeFiles) {
   cpSync(path.join(source, file), path.join(destination, file));
 }
 
-console.log(
-  `extension package: ${path.relative(root, destination)} (${contract.extensionVersion})`
-);
+if (target === "firefox") {
+  const firefoxManifest = structuredClone(manifest);
+  // Chrome's public key is rejected/warned by Firefox AMO linter.
+  delete firefoxManifest.key;
+  if (worker) {
+    firefoxManifest.background = {
+      scripts: [...importedWorkerScripts, worker],
+    };
+  }
+  const gecko = firefoxManifest.browser_specific_settings?.gecko;
+  if (!gecko?.id || gecko.id === "chatterino_native@chatterino.com") {
+    throw new Error(
+      "extension package (firefox): browser_specific_settings.gecko.id must be set to this fork's own AMO add-on ID"
+    );
+  }
+  writeFileSync(
+    path.join(destination, "manifest.json"),
+    `${JSON.stringify(firefoxManifest, null, 2)}\n`,
+    "utf8"
+  );
+
+  // Build an AMO-ready zip archive (manifest.json at archive root).
+  const zipPath = path.join(
+    path.dirname(destination),
+    `${contract.extensionBundleName}-firefox-v${contract.extensionVersion}.zip`
+  );
+  if (existsSync(zipPath)) {
+    rmSync(zipPath, { force: true });
+  }
+  if (process.platform === "win32") {
+    const zipCmd = spawnSync(
+      "powershell",
+      [
+        "-NoProfile",
+        "-Command",
+        `Compress-Archive -Path '${destination}\\*' -DestinationPath '${zipPath}' -CompressionLevel Optimal -Force`,
+      ],
+      { stdio: "inherit" }
+    );
+    if (zipCmd.status !== 0) {
+      throw new Error("extension package (firefox): failed to create zip");
+    }
+  } else {
+    const zipCmd = spawnSync("zip", ["-rq", zipPath, "."], {
+      cwd: destination,
+      stdio: "inherit",
+    });
+    if (zipCmd.status !== 0) {
+      throw new Error("extension package (firefox): failed to create zip");
+    }
+  }
+  console.log(
+    `extension package (firefox): ${path.relative(root, destination)} + ${path.relative(root, zipPath)} (${contract.extensionVersion})`
+  );
+} else {
+  console.log(
+    `extension package: ${path.relative(root, destination)} (${contract.extensionVersion})`
+  );
+}

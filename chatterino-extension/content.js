@@ -623,18 +623,60 @@
 
   const BADGE_REPLICA_VERSION = "3";
 
-  const BADGE_REPLICA_MARKUP = `
-<button type="button" class="chatterino-badge-replica-btn" aria-hidden="true" tabindex="-1">
-  <span class="chatterino-badge-replica-btn__icon" aria-hidden="true">
-    <svg width="32" height="32" viewBox="0 0 24 24" focusable="false" role="presentation">
-      <path fill="currentColor" d="M12 1.25 3.5 5v7c0 5.45 3.85 10.35 8.5 12 4.65-1.65 8.5-6.55 8.5-12V5L12 1.25z"/>
-      <path fill="#efeff1" d="M12 6.5l2.1 4.25 4.7.68-3.4 3.31.8 4.68L12 17.2l-4.2 2.42.8-4.68-3.4-3.31 4.7-.68L12 6.5z"/>
-    </svg>
-  </span>
-</button>`;
+  function createSvgNode(tag, attrs = {}) {
+    const el =
+      typeof document.createElementNS === "function"
+        ? document.createElementNS("http://www.w3.org/2000/svg", tag)
+        : document.createElement(tag);
+    for (const [key, value] of Object.entries(attrs)) {
+      el.setAttribute(key, value);
+    }
+    return el;
+  }
+
+  function clearElementChildren(el) {
+    if (typeof el.replaceChildren === "function") {
+      el.replaceChildren();
+    } else {
+      el.textContent = "";
+    }
+  }
 
   function applyBadgeReplicaMarkup(replica) {
-    replica.innerHTML = BADGE_REPLICA_MARKUP;
+    clearElementChildren(replica);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chatterino-badge-replica-btn";
+    btn.setAttribute("aria-hidden", "true");
+    btn.setAttribute("tabindex", "-1");
+
+    const iconWrap = document.createElement("span");
+    iconWrap.className = "chatterino-badge-replica-btn__icon";
+    iconWrap.setAttribute("aria-hidden", "true");
+
+    const svg = createSvgNode("svg", {
+      width: "32",
+      height: "32",
+      viewBox: "0 0 24 24",
+      focusable: "false",
+      role: "presentation",
+    });
+    svg.appendChild(
+      createSvgNode("path", {
+        fill: "currentColor",
+        d: "M12 1.25 3.5 5v7c0 5.45 3.85 10.35 8.5 12 4.65-1.65 8.5-6.55 8.5-12V5L12 1.25z",
+      })
+    );
+    svg.appendChild(
+      createSvgNode("path", {
+        fill: "#efeff1",
+        d: "M12 6.5l2.1 4.25 4.7.68-3.4 3.31.8 4.68L12 17.2l-4.2 2.42.8-4.68-3.4-3.31 4.7-.68L12 6.5z",
+      })
+    );
+
+    iconWrap.appendChild(svg);
+    btn.appendChild(iconWrap);
+    replica.appendChild(btn);
     replica.dataset.ccBadgeVersion = BADGE_REPLICA_VERSION;
   }
 
@@ -2645,14 +2687,21 @@
       minIcon.className = "chatterino-prediction-minimized-icon";
       minIcon.title = "Expand Prediction";
       minIcon.type = "button";
-      minIcon.innerHTML = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="9" r="7"/>
-          <path d="M17 16l-2 4H9l-2-4"/>
-          <path d="M8 20h8"/>
-          <path d="M12 6a2 2 0 0 1 2 2"/>
-        </svg>
-      `;
+      const minSvg = createSvgNode("svg", {
+        width: "18",
+        height: "18",
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "2",
+        "stroke-linecap": "round",
+        "stroke-linejoin": "round",
+      });
+      minSvg.appendChild(createSvgNode("circle", { cx: "12", cy: "9", r: "7" }));
+      minSvg.appendChild(createSvgNode("path", { d: "M17 16l-2 4H9l-2-4" }));
+      minSvg.appendChild(createSvgNode("path", { d: "M8 20h8" }));
+      minSvg.appendChild(createSvgNode("path", { d: "M12 6a2 2 0 0 1 2 2" }));
+      minIcon.appendChild(minSvg);
       minIcon.addEventListener("click", () => {
         isMinimized = false;
         updateDisplayState(banner);
@@ -2763,8 +2812,12 @@
       pill.id = "chatterino-prediction-fallback";
       pill.type = "button";
       pill.className = "chatterino-prediction-vote-pill";
-      pill.innerHTML =
-        '<span class="dot"></span><span class="label"></span>';
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      const label = document.createElement("span");
+      label.className = "label";
+      pill.appendChild(dot);
+      pill.appendChild(label);
       pill.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -2835,7 +2888,12 @@
       pill = document.createElement("div");
       pill.id = "chatterino-poll-fallback";
       pill.className = "chatterino-poll-fallback-pill";
-      pill.innerHTML = '<span class="dot"></span><span class="label"></span>';
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      const label = document.createElement("span");
+      label.className = "label";
+      pill.appendChild(dot);
+      pill.appendChild(label);
     }
 
     pill.querySelector(".label").textContent = poll.title;

@@ -486,31 +486,100 @@
     console.log('[OVERLAY-DEBUG] Attachment state after prepare:', attachment);
   }
 
+  function createSvgNode(tag, attrs = {}) {
+    const el =
+      typeof document.createElementNS === "function"
+        ? document.createElementNS("http://www.w3.org/2000/svg", tag)
+        : document.createElement(tag);
+    for (const [key, value] of Object.entries(attrs)) {
+      el.setAttribute(key, value);
+    }
+    return el;
+  }
+
+  function buildErrorCloseButton() {
+    const btn = document.createElement("div");
+    btn.style.padding = "5px";
+    btn.style.left = "-30px";
+    btn.style.width = "30px";
+    btn.style.height = "30px";
+    btn.style.background = "#222";
+    btn.style.zIndex = "100";
+    btn.style.cursor = "pointer";
+    btn.style.top = "10px";
+    btn.style.position = "absolute";
+    btn.style.transform = "rotateZ(180deg)";
+    btn.style.color = "white";
+    btn.addEventListener("click", () => {
+      document
+        .getElementsByClassName("right-column__toggle-visibility")[0]
+        ?.children?.[0]?.children?.[0]?.click?.();
+    });
+
+    const svg = createSvgNode("svg", {
+      class: "tw-icon__svg",
+      width: "100%",
+      height: "100%",
+      version: "1.1",
+      viewBox: "0 0 20 20",
+      x: "0px",
+      y: "0px",
+    });
+    const group = createSvgNode("g");
+    group.appendChild(
+      createSvgNode("path", {
+        fill: "#bbbbbb",
+        d: "M16 16V4h2v12h-2zM6 9l2.501-2.5-1.5-1.5-5 5 5 5 1.5-1.5-2.5-2.5h8V9H6z",
+      })
+    );
+    svg.appendChild(group);
+    btn.appendChild(svg);
+    return btn;
+  }
+
+  function appendErrorLines(container, lines) {
+    lines.forEach((line, index) => {
+      if (index > 0) {
+        container.appendChild(document.createElement("br"));
+      }
+      if (line) {
+        container.appendChild(document.createTextNode(line));
+      }
+    });
+  }
+
   function updateErrors() {
     if (!errorDiv) return;
 
-    if (errors.osUnsupported) {
-      errorDiv.innerHTML =
-        "The Chatterino Native Host browser extension currently only works on Windows.";
+    if (typeof errorDiv.replaceChildren === "function") {
+      errorDiv.replaceChildren();
+    } else {
+      errorDiv.textContent = "";
+    }
 
+    if (errors.osUnsupported) {
+      errorDiv.textContent =
+        "The Chatterino Native Host browser extension currently only works on Windows.";
       return;
     }
 
-    let closeButton =
-      '<div onclick="document.getElementsByClassName(`right-column__toggle-visibility`)[0].children[0].children[0].click()" style="padding:5px; left: -30px; width: 30px; height: 30px; background: #222;z-index: 100;cursor: pointer;top: 10px;position: absolute;transform: rotateZ(180deg);color: white;"><svg class="tw-icon__svg" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px"><g><path fill="#bbbbbb" d="M16 16V4h2v12h-2zM6 9l2.501-2.5-1.5-1.5-5 5 5 5 1.5-1.5-2.5-2.5h8V9H6z"></path></g></svg></div>';
+    errorDiv.appendChild(buildErrorCloseButton());
 
     if (errors.sendMessage) {
-      errorDiv.innerHTML =
-        closeButton +
-        "Connection to the Chatterino extension lost!<br><br>" +
-        "Please reload the page.";
+      appendErrorLines(errorDiv, [
+        "Connection to the Chatterino extension lost!",
+        "",
+        "Please reload the page.",
+      ]);
     } else {
-      errorDiv.innerHTML =
-        closeButton +
-        "Chatterino should show here:<br><br>" +
-        "Try deselecting and selecting the page.<br>" +
-        "Chatterino also needs to be running.<br><br>" +
-        "You can temporarily disable the extension in the extension.";
+      appendErrorLines(errorDiv, [
+        "Chatterino should show here:",
+        "",
+        "Try deselecting and selecting the page.",
+        "Chatterino also needs to be running.",
+        "",
+        "You can temporarily disable the extension in the extension.",
+      ]);
     }
   }
 

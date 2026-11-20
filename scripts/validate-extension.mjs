@@ -49,6 +49,17 @@ if (manifest) {
   if (manifest.manifest_version !== 3) {
     fail(`expected manifest_version 3, got ${manifest.manifest_version}`);
   }
+  const gecko = manifest.browser_specific_settings?.gecko;
+  if (!gecko?.id || gecko.id === "chatterino_native@chatterino.com") {
+    fail(
+      `browser_specific_settings.gecko.id must use this fork's own AMO ID (got ${gecko?.id || "missing"})`
+    );
+  }
+  if (!Array.isArray(gecko?.data_collection_permissions?.required)) {
+    fail(
+      "browser_specific_settings.gecko.data_collection_permissions.required must be declared for Firefox AMO"
+    );
+  }
   for (const relative of referencedManifestFiles(manifest)) {
     if (!existsSync(path.join(extensionDir, relative))) {
       fail(`manifest references missing file: ${relative}`);

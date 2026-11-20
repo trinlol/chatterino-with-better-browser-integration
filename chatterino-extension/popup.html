@@ -153,6 +153,23 @@
         background: #ef4444;
         box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
       }
+
+      .permission-btn {
+        margin-top: 10px;
+        width: 100%;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 7px;
+        background: #9146ff;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .permission-btn:hover {
+        background: #772ce8;
+      }
     </style>
   </head>
   <body>
@@ -173,6 +190,19 @@
       </svg>
       Chatterino Better Browser
     </h3>
+
+    <div class="card" id="permissionsCard" style="display: none">
+      <div class="label-group">
+        <span class="title">Allow access on Twitch</span>
+        <span class="description"
+          >Firefox requires granting twitch.tv access for chat overlay, pins,
+          and channel points.</span
+        >
+      </div>
+      <button type="button" id="grantTwitchPermissionBtn" class="permission-btn">
+        Enable on Twitch
+      </button>
+    </div>
 
     <div class="card">
       <div class="setting-row chatterino-if-windows">
