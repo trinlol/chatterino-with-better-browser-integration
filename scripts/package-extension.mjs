@@ -109,8 +109,9 @@ for (const file of runtimeFiles) {
 
 if (target === "firefox") {
   const firefoxManifest = structuredClone(manifest);
-  // Chrome's public key is rejected/warned by Firefox AMO linter.
+  // Chrome's public key and editor $schema field trigger warnings in Firefox.
   delete firefoxManifest.key;
+  delete firefoxManifest.$schema;
   if (worker) {
     firefoxManifest.background = {
       scripts: [...importedWorkerScripts, worker],
