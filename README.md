@@ -46,13 +46,13 @@ When stock Chatterino replaces Twitch's chat column, Twitch features living insi
 Chatterino Better Browser on a live Twitch channel - full chat in the overlay, synced pins, toolbar integration beside the player, and live extension health diagnostics.
 
 <p align="center">
-  <img src="./docs/amo-screenshots/01-chat-overlay-and-emotes.png" width="100%" alt="Native Chatterino chat docked inside Twitch with emote picker">
+  <img src="./docs/showcase/card-01-chat-overlay-and-emotes.gif" width="100%" alt="Native Chatterino chat docked inside Twitch with emote picker">
 </p>
 
 <table>
   <tr>
     <td width="50%" align="center" valign="top">
-      <img src="./docs/amo-screenshots/02-channel-points-and-toolbar.png" width="100%" alt="Keep Twitch Power-Ups, Channel Points rewards, and badges working">
+      <img src="./docs/showcase/card-02-channel-points-and-toolbar.gif" width="100%" alt="Keep Twitch Power-Ups, Channel Points rewards, and badges working">
       <br>
       <sub><b>Channel points &amp; toolbar</b> - Power-Ups, rewards, watch streak, and Chat Identity stay accessible beside the player.</sub>
     </td>
@@ -63,40 +63,6 @@ Chatterino Better Browser on a live Twitch channel - full chat in the overlay, s
     </td>
   </tr>
 </table>
-
-<details>
-<summary><b>Animated GIF demos (chat overlay, emote favourites, channel points)</b></summary>
-<br>
-
-<table>
-  <tr>
-    <td rowspan="2" valign="top" align="center" width="42%">
-      <img src="./docs/showcase/chatterino-overlay.gif" width="300" alt="Full Chatterino chat overlay on Twitch with pinned banner, replies, and emotes">
-      <br>
-      <sub><b>Full chat preview</b> - pinned messages, inline input emotes, and ctrl+click to input emotes directly from user messages.</sub>
-    </td>
-    <td valign="top" align="center" width="58%">
-      <img src="./docs/showcase/emote-picker.gif" width="300" alt="Emote favourites picker with channel, 7TV, and search tabs">
-      <br>
-      <sub><b>Emote favourites</b> - save per-channel, global, and 7TV emotes with search and Tab completion.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td valign="top" align="center">
-      <table width="100%">
-        <tr>
-          <td width="50%" valign="top" align="center">
-            <img src="./docs/showcase/twitch-toolbar.gif" width="300" alt="Channel points menu beside the Twitch player toolbar">
-            <br>
-            <sub><b>Channel points</b> - balance and rewards menu beside the player.</sub>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-
-</details>
 
 <p align="center">
   <sub>Showcase captured on <a href="https://www.twitch.tv/alveussanctuary">alveussanctuary</a> for demonstration only.</sub>
