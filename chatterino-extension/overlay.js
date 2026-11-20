@@ -71,9 +71,28 @@
         candidates.add(banner);
       }
     }
+    for (const footer of document.querySelectorAll(
+      "#twilight-sticky-footer-root"
+    )) {
+      const hasUpsellClass = Boolean(
+        footer.querySelector?.(
+          '.upsell-bottom-banner__coolcat, [class*="upsell-bottom-banner"]'
+        )
+      );
+      const hasSignUpCallout =
+        Boolean(footer.querySelector?.(".tw-callout-message")) &&
+        /\bsign\s*up\b/i.test(
+          footer.querySelector?.('[data-a-target="tw-core-button-label-text"]')
+            ?.textContent ?? ""
+        );
+      if (hasUpsellClass || hasSignUpCallout) {
+        candidates.add(footer);
+      }
+    }
 
     for (const banner of candidates) {
       const wrapper =
+        banner.id !== "twilight-sticky-footer-root" &&
         banner.parentElement &&
         banner.parentElement !== document.body &&
         banner.parentElement !== document.documentElement &&

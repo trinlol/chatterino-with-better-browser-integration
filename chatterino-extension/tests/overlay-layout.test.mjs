@@ -32,6 +32,7 @@ function runOverlayHarness({
   rect = { x: 1000, y: 50, width: 340, height: 800 },
   innerHeight = 900,
   promoBanners = [],
+  stickyFooters = [],
 } = {}) {
   const sentMessages = [];
   const runtimeListeners = [];
@@ -73,6 +74,9 @@ function runOverlayHarness({
         ) {
           results.push(banner.link);
         }
+      }
+      if (selector === "#twilight-sticky-footer-root") {
+        results.push(...stickyFooters);
       }
       return results;
     },
@@ -232,6 +236,45 @@ test("overlay.js hides and dismisses Twitch's GTA VI bottom banner once and re-m
 test("styles.css hides the GTA VI promotional bottom banner wrapper and inner banner", () => {
   assert.match(stylesSource, /gta6-bottom-banner/);
   assert.match(stylesSource, /\/directory\/category\/grand-theft-auto-vi/);
+  assert.match(stylesSource, /#twilight-sticky-footer-root/);
+  assert.match(stylesSource, /upsell-bottom-banner/);
+});
+
+test("overlay.js hides Twitch's logged-out Sign Up sticky footer without touching its parent or unrelated footers", () => {
+  const parentStyle = createStyleBag();
+  const upsellFooterStyle = createStyleBag();
+  const otherFooterStyle = createStyleBag();
+  const parent = { childElementCount: 1, style: parentStyle };
+
+  const upsellFooter = {
+    id: "twilight-sticky-footer-root",
+    parentElement: parent,
+    style: upsellFooterStyle,
+    querySelector(sel) {
+      if (sel.includes("upsell-bottom-banner")) {
+        return { className: "upsell-bottom-banner__coolcat" };
+      }
+      return null;
+    },
+  };
+  const otherFooter = {
+    id: "twilight-sticky-footer-root",
+    parentElement: parent,
+    style: otherFooterStyle,
+    querySelector() {
+      return null;
+    },
+  };
+
+  runOverlayHarness({
+    rect: { x: 1000, y: 50, width: 340, height: 850 },
+    innerHeight: 900,
+    stickyFooters: [upsellFooter, otherFooter],
+  });
+
+  assert.equal(upsellFooterStyle.getPropertyValue("display"), "none");
+  assert.equal(parentStyle.getPropertyValue("display"), "");
+  assert.equal(otherFooterStyle.getPropertyValue("display"), "");
 });
 
 test("background.js scales and forwards bottomOffset and rejects negative bottomOffset", async () => {
