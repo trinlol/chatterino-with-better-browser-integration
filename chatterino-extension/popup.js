@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const grantTwitchPermissionBtn = document.getElementById(
     "grantTwitchPermissionBtn"
   );
-  const TWITCH_ORIGINS = ["*://*.twitch.tv/*"];
+  const TWITCH_ORIGINS = ["https://*.twitch.tv/*"];
 
   function refreshHostPermissions() {
     if (!permissionsCard || !chrome.permissions?.contains) {

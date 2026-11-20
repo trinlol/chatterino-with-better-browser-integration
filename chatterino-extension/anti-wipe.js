@@ -111,6 +111,7 @@
   function injectPageScript(file) {
     try {
       const script = document.createElement("script");
+      script.async = false;
       script.src = chrome.runtime.getURL(file);
       script.onload = () => script.remove();
       (document.head || document.documentElement).appendChild(script);
