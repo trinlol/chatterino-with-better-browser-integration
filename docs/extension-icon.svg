@@ -1,77 +1,115 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
   <defs>
-    <linearGradient id="tileBg" x1="20" y1="16" x2="236" y2="240" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1E1B2E"/>
-      <stop offset="55%" stop-color="#151421"/>
-      <stop offset="100%" stop-color="#101018"/>
+    <!-- Main lower C body: rich deep twilight indigo to vivid Twitch purple -->
+    <linearGradient id="bodyGrad" x1="34" y1="90" x2="216" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2F2650"/>
+      <stop offset="46%" stop-color="#583599"/>
+      <stop offset="100%" stop-color="#8F49FF"/>
     </linearGradient>
-    <linearGradient id="tileBorder" x1="28" y1="16" x2="228" y2="240" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#76D4FF" stop-opacity="0.55"/>
-      <stop offset="50%" stop-color="#9146FF" stop-opacity="0.4"/>
-      <stop offset="100%" stop-color="#2E2A45" stop-opacity="0.7"/>
+
+    <!-- Upper sweeping ribbon: silky Chatterino sky-cyan gradient with top-left sheen -->
+    <linearGradient id="crestGrad" x1="20" y1="150" x2="220" y2="18" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#35A7FF"/>
+      <stop offset="45%" stop-color="#6DD8FF"/>
+      <stop offset="100%" stop-color="#A6EEFF"/>
     </linearGradient>
-    <linearGradient id="dockGrad" x1="146" y1="48" x2="224" y2="216" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#6DD5FF"/>
-      <stop offset="52%" stop-color="#6F8CFF"/>
-      <stop offset="100%" stop-color="#9146FF"/>
+
+    <!-- Soft top-left radial gloss on the cyan crest -->
+    <radialGradient id="crestSheen" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(94 34) rotate(28) scale(110 42)">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.48"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Inner docked-browser badge gradients -->
+    <linearGradient id="winBg" x1="112" y1="99" x2="188" y2="149" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1E1A33"/>
+      <stop offset="100%" stop-color="#2D254D"/>
     </linearGradient>
-    <linearGradient id="playGrad" x1="72" y1="106" x2="114" y2="156" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#B993FF"/>
-      <stop offset="100%" stop-color="#7E42F5"/>
+    <linearGradient id="winDock" x1="158" y1="99" x2="188" y2="149" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#76E4FF"/>
+      <stop offset="100%" stop-color="#9656FF"/>
     </linearGradient>
-    <linearGradient id="screenBg" x1="40" y1="74" x2="136" y2="204" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#26223A"/>
-      <stop offset="100%" stop-color="#1A1829"/>
-    </linearGradient>
-    <filter id="dockGlow" x="128" y="36" width="112" height="196" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feDropShadow dx="-3" dy="6" stdDeviation="8" flood-color="#5B8EFF" flood-opacity="0.35"/>
+
+    <!-- Smooth depth shadow cast by the cyan crest onto the purple lower body -->
+    <filter id="crestShadow" x="-10" y="-10" width="276" height="230" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="7" flood-color="#120926" flood-opacity="0.5"/>
     </filter>
+
+    <!-- Subtle drop shadow for the docked browser badge -->
+    <filter id="badgeShadow" x="98" y="88" width="108" height="78" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#110A24" flood-opacity="0.34"/>
+    </filter>
+
+    <!-- Clip mask for the iconic C speech-bubble silhouette -->
+    <clipPath id="cBubbleClip">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="
+        M 136 10
+        C 178 10 214 31 234 64
+        L 186 100
+        C 175 80 157 68 136 68
+        C 104 68 78 93 78 124
+        C 78 155 104 180 136 180
+        C 158 180 177 167 187 147
+        L 234 183
+        C 214 217 177 239 134 239
+        C 110 239 87 232 68 220
+        C 54 236 39 243 16 245
+        C 34 228 36 209 28 184
+        C 21 166 18 146 18 125
+        C 18 61 71 10 136 10
+        Z
+      "/>
+    </clipPath>
   </defs>
 
-  <!-- Outer rounded app tile -->
-  <rect x="10" y="10" width="236" height="236" rx="54" fill="url(#tileBg)" stroke="url(#tileBorder)" stroke-width="4"/>
+  <!-- Main C speech-bubble body -->
+  <g clip-path="url(#cBubbleClip)">
+    <!-- Lower purple/indigo base -->
+    <rect x="0" y="0" width="256" height="256" fill="url(#bodyGrad)"/>
 
-  <!-- Browser frame (left viewport + top chrome) -->
-  <rect x="34" y="44" width="188" height="168" rx="22" fill="#171625" stroke="#363252" stroke-width="4"/>
+    <!-- Soft luminous highlight along the lower-right purple sweep -->
+    <ellipse cx="184" cy="212" rx="76" ry="44" fill="#BA85FF" fill-opacity="0.22"/>
 
-  <!-- Browser top bar -->
-  <path d="M36 66C36 54.954 44.954 46 56 46H142V76H36V66Z" fill="#232037"/>
-  <circle cx="56" cy="61" r="5" fill="#FF6B7A"/>
-  <circle cx="74" cy="61" r="5" fill="#FFD166"/>
-  <circle cx="92" cy="61" r="5" fill="#5CE1A6"/>
+    <!-- Upper sweeping cyan wave crest (with clean seamless shadow) -->
+    <g filter="url(#crestShadow)">
+      <path d="
+        M 10 176
+        C 16 120 50 74 106 56
+        C 146 43 182 56 202 88
+        L 248 56
+        L 240 0
+        L 0 0
+        Z
+      " fill="url(#crestGrad)"/>
+      <path d="
+        M 10 176
+        C 16 120 50 74 106 56
+        C 146 43 182 56 202 88
+        L 248 56
+        L 240 0
+        L 0 0
+        Z
+      " fill="url(#crestSheen)"/>
+    </g>
 
-  <!-- Stream viewport area on left -->
-  <path d="M36 76H142V210H56C44.954 210 36 201.046 36 190V76Z" fill="url(#screenBg)"/>
-
-  <!-- Subtle play mark inside stream viewport -->
-  <circle cx="89" cy="136" r="27" fill="#141222" fill-opacity="0.7" stroke="#53497D" stroke-width="2.5"/>
-  <path d="M81 123.5L103 136L81 148.5V123.5Z" fill="url(#playGrad)"/>
-
-  <!-- Docked Chatterino chat column on right (hero element) -->
-  <g filter="url(#dockGlow)">
-    <path d="M142 44H200C212.15 44 222 53.85 222 66V190C222 202.15 212.15 212 200 212H154L142 222V44Z" fill="url(#dockGrad)"/>
+    <!-- Thin crisp rim right along the wave crest edge -->
+    <path d="M 10 176 C 16 120 50 74 106 56 C 146 43 182 56 202 88" stroke="#C8F4FF" stroke-opacity="0.7" stroke-width="2" stroke-linecap="round"/>
   </g>
 
-  <!-- Crisp inner seam highlight on the docked edge -->
-  <rect x="142" y="44" width="3.5" height="178" fill="#FFFFFF" fill-opacity="0.45"/>
-
-  <!-- Chat message bars inside docked chat panel -->
-  <!-- Message 1 -->
-  <circle cx="160" cy="76" r="6" fill="#FFFFFF" fill-opacity="0.95"/>
-  <rect x="172" y="70" width="36" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.95"/>
-
-  <!-- Message 2 -->
-  <circle cx="160" cy="106" r="6" fill="#D8F4FF" fill-opacity="0.92"/>
-  <rect x="172" y="100" width="28" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.82"/>
-
-  <!-- Message 3 -->
-  <circle cx="160" cy="136" r="6" fill="#FFFFFF" fill-opacity="0.95"/>
-  <rect x="172" y="130" width="36" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.92"/>
-
-  <!-- Message 4 -->
-  <circle cx="160" cy="166" r="6" fill="#E8D8FF" fill-opacity="0.95"/>
-  <rect x="172" y="160" width="24" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.8"/>
-
-  <!-- Mini chat input bar at bottom of docked panel -->
-  <rect x="154" y="186" width="56" height="14" rx="7" fill="#131122" fill-opacity="0.42"/>
+  <!-- Docked browser-integration emblem nested cleanly in the C's open center with breathing room -->
+  <g filter="url(#badgeShadow)">
+    <rect x="114" y="99" width="76" height="50" rx="11" fill="url(#winBg)" stroke="#7CE2FF" stroke-opacity="0.82" stroke-width="2.75"/>
+    <!-- Left stream pane traffic dots -->
+    <circle cx="126" cy="110" r="2.8" fill="#FF6B7A"/>
+    <circle cx="135.5" cy="110" r="2.8" fill="#FFD166"/>
+    <circle cx="145" cy="110" r="2.8" fill="#5CE1A6"/>
+    <!-- Stream play triangle -->
+    <path d="M 130.5 122 L 145.5 130.5 L 130.5 139 Z" fill="#B18AFF"/>
+    <!-- Docked glowing chat sidebar on right -->
+    <path d="M 157 100.4 H 179 C 184.3 100.4 188.6 104.7 188.6 110 V 138 C 188.6 143.3 184.3 147.6 179 147.6 H 157 V 100.4 Z" fill="url(#winDock)"/>
+    <!-- Crisp chat message bars inside docked panel -->
+    <rect x="162.5" y="109.5" width="19" height="4.8" rx="2.4" fill="#FFFFFF" fill-opacity="0.96"/>
+    <rect x="162.5" y="119.5" width="14" height="4.8" rx="2.4" fill="#FFFFFF" fill-opacity="0.86"/>
+    <rect x="162.5" y="129.5" width="19" height="4.8" rx="2.4" fill="#FFFFFF" fill-opacity="0.92"/>
+  </g>
 </svg>
