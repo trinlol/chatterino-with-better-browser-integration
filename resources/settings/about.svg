@@ -1,19 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-  <defs>
-    <clipPath id="cMono">
-      <path fill-rule="evenodd" clip-rule="evenodd" d="M53.1 3.9C69.5 3.9 83.6 12.1 91.4 25L72.7 39.1C68.4 31.3 61.3 26.6 53.1 26.6C40.6 26.6 30.5 36.3 30.5 48.4C30.5 60.5 40.6 70.3 53.1 70.3C61.7 70.3 69.1 65.2 73 57.4L91.4 71.5C83.6 84.8 69.1 93.4 52.3 93.4C43 93.4 34 90.6 26.6 85.9C21.1 92.2 15.2 94.9 6.3 95.7C13.3 89.1 14.1 81.6 10.9 71.9C8.2 64.8 7 57 7 48.8C7 23.8 27.7 3.9 53.1 3.9Z"/>
-    </clipPath>
-  </defs>
-  <g clip-path="url(#cMono)">
-    <!-- Lower monochrome body (dark slate/grey-white contrast) -->
-    <rect x="0" y="0" width="100" height="100" fill="#8e8e8e"/>
-    <!-- Sweeping upper crest in crisp bright white -->
-    <path d="M3.9 68.8C6.3 46.9 19.5 28.9 41.4 21.9C57 16.8 71.1 21.9 78.9 34.4L96.9 21.9L93.8 0H0Z" fill="#ffffff"/>
-  </g>
-  <!-- Crisp white outline around the C for black-and-white clarity -->
-  <path d="M53.1 3.9C69.5 3.9 83.6 12.1 91.4 25L72.7 39.1C68.4 31.3 61.3 26.6 53.1 26.6C40.6 26.6 30.5 36.3 30.5 48.4C30.5 60.5 40.6 70.3 53.1 70.3C61.7 70.3 69.1 65.2 73 57.4L91.4 71.5C83.6 84.8 69.1 93.4 52.3 93.4C43 93.4 34 90.6 26.6 85.9C21.1 92.2 15.2 94.9 6.3 95.7C13.3 89.1 14.1 81.6 10.9 71.9C8.2 64.8 7 57 7 48.8C7 23.8 27.7 3.9 53.1 3.9Z" stroke="#ffffff" stroke-width="3.2" stroke-linejoin="round"/>
-  <!-- Monochrome mini docked browser + chat emblem inside the C -->
-  <rect x="44" y="38" width="31" height="21" rx="4.5" fill="#181818" stroke="#ffffff" stroke-width="3"/>
+  <!-- Lower monochrome C speech-bubble body (no clipPath, transparent outside) -->
+  <path fill="#9a9a9a" fill-rule="evenodd" d="M53.1 3.9C69.5 3.9 83.6 12.1 91.4 25L72.7 39.1C68.4 31.3 61.3 26.6 53.1 26.6C40.6 26.6 30.5 36.3 30.5 48.4C30.5 60.5 40.6 70.3 53.1 70.3C61.7 70.3 69.1 65.2 73 57.4L91.4 71.5C83.6 84.8 69.1 93.4 52.3 93.4C43 93.4 34 90.6 26.6 85.9C21.1 92.2 15.2 94.9 6.3 95.7C13.3 89.1 14.1 81.6 10.9 71.9C8.2 64.8 7 57 7 48.8C7 23.8 27.7 3.9 53.1 3.9Z"/>
+  <!-- Upper sweeping crest in crisp bright white (exact closed crescent inside the C, no clipPath) -->
+  <path fill="#ffffff" d="M53.1 3.9C69.5 3.9 83.6 12.1 91.4 25L72.7 39.1C67.4 29.8 57.8 24.4 45.6 26.4C26.5 29.5 13.5 46.2 10.6 69.5C8.3 63.1 7 56.1 7 48.8C7 23.8 27.7 3.9 53.1 3.9Z"/>
+  <!-- Crisp white outline around the C -->
+  <path stroke="#ffffff" stroke-width="3.2" stroke-linejoin="round" fill="none" d="M53.1 3.9C69.5 3.9 83.6 12.1 91.4 25L72.7 39.1C68.4 31.3 61.3 26.6 53.1 26.6C40.6 26.6 30.5 36.3 30.5 48.4C30.5 60.5 40.6 70.3 53.1 70.3C61.7 70.3 69.1 65.2 73 57.4L91.4 71.5C83.6 84.8 69.1 93.4 52.3 93.4C43 93.4 34 90.6 26.6 85.9C21.1 92.2 15.2 94.9 6.3 95.7C13.3 89.1 14.1 81.6 10.9 71.9C8.2 64.8 7 57 7 48.8C7 23.8 27.7 3.9 53.1 3.9Z"/>
+  <!-- Monochrome mini docked browser + chat emblem (transparent interior) -->
+  <rect x="44" y="38" width="31" height="21" rx="4.5" fill="none" stroke="#ffffff" stroke-width="3"/>
   <path d="M62 39.5H71.5C73.2 39.5 74.5 40.8 74.5 42.5V54.5C74.5 56.2 73.2 57.5 71.5 57.5H62V39.5Z" fill="#ffffff"/>
   <path d="M50.5 44.5L57.5 48.5L50.5 52.5V44.5Z" fill="#e0e0e0"/>
 </svg>
