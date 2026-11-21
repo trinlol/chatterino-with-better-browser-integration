@@ -2,6 +2,15 @@
 
 ## Chatterino Better Browser
 
+### v2.7.7 (2026-11-21)
+
+#### Added
+
+- **Mozilla Firefox MV3 Extension Support**: Added Firefox build target, AMO compliance (`data_collection_permissions`, HTTPS-only Twitch `host_permissions`, in-popup Twitch permission prompt), and native Win32 Registry registration so Firefox connects out of the box alongside Chrome and Edge.
+- **Minimize Main Window to System Tray**: Clicking X on the main Chatterino window hides it to the system tray (with Open, Settings, and Quit actions) whenever browser integration is active, while keeping the browser chat overlay off the Windows taskbar. Without browser integration active, closing exits Chatterino completely.
+- **New Branding & About Page**: Added a new Chatterino Better Browser logo across the Windows executable, taskbar, Settings icons, extension icon, and About banner, plus dedicated About links for this fork and original Chatterino contributors.
+- **Logged-Out Twitch Sign-Up Banner Block**: Automatically hides Twitch's sticky logged-out "Sign Up" bottom banner so attached chat keeps full height.
+
 ### v2.7.6 (2026-11-19)
 
 #### Fixed

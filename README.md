@@ -13,7 +13,7 @@
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/trinlol/chatterino-with-better-browser-integration?style=flat-square" alt="License"></a>
 </p>
 
-Current release: **2.7.6**
+Current release: **2.7.7**
 
 A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes Twitch browser integration feel native and complete - Chatterino chat overlaid on Twitch, plus pinned messages, predictions, channel points, chat identity badges, inline 7TV emotes, and built-in themes.
 
