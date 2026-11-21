@@ -10,6 +10,9 @@
 #include <pajlada/signals/signal.hpp>
 #include <pajlada/signals/signalholder.hpp>
 
+class QMenu;
+class QSystemTrayIcon;
+
 namespace chatterino {
 
 class PixmapButton;
@@ -53,12 +56,17 @@ private:
     void addLayout();
     void onAccountSelected();
     void addMenuBar();
+    void minimizeToTray();
+    void restoreFromTray();
 
     WindowType type_;
 
     SplitNotebook *notebook_;
     LabelButton *userLabel_ = nullptr;
     std::shared_ptr<UpdateDialog> updateDialogHandle_;
+    QSystemTrayIcon *trayIcon_ = nullptr;
+    QMenu *trayMenu_ = nullptr;
+    bool forceClose_ = false;
 
     pajlada::Signals::SignalHolder signalHolder_;
 

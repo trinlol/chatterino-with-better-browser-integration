@@ -14,12 +14,14 @@
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "singletons/NativeMessaging.hpp"
 #include "singletons/Resources.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
 #include "singletons/Theme.hpp"
 #include "singletons/Updates.hpp"
 #include "singletons/WindowManager.hpp"
+#include "util/ApplicationIcon.hpp"
 #include "util/RapidJsonSerializeQSize.hpp"
 #include "widgets/AccountSwitchPopup.hpp"
 #include "widgets/buttons/InitUpdateButton.hpp"
@@ -45,12 +47,15 @@
 #endif
 
 #include <QApplication>
+#include <QCloseEvent>
 #include <QDesktopServices>
 #include <QHeaderView>
+#include <QMenu>
 #include <QMenuBar>
 #include <QObject>
 #include <QPalette>
 #include <QStandardItemModel>
+#include <QSystemTrayIcon>
 #include <QVBoxLayout>
 
 namespace chatterino {
@@ -164,7 +169,7 @@ bool Window::event(QEvent *event)
     return BaseWindow::event(event);
 }
 
-void Window::closeEvent(QCloseEvent *)
+void Window::closeEvent(QCloseEvent *event)
 {
     if (isAppAboutToQuit())
     {
@@ -175,8 +180,23 @@ void Window::closeEvent(QCloseEvent *)
 
     auto *app = getApp();
 
+    if (this->type_ == WindowType::Main && !this->forceClose_ &&
+        QSystemTrayIcon::isSystemTrayAvailable() &&
+        NativeMessagingServer::hasActiveBrowserIntegration())
+    {
+        app->getWindows()->save();
+        event->ignore();
+        this->minimizeToTray();
+        return;
+    }
+
+    if (this->trayIcon_ != nullptr)
+    {
+        this->trayIcon_->hide();
+    }
     if (this->type_ == WindowType::Main)
     {
+        QApplication::setQuitOnLastWindowClosed(true);
         app->getWindows()->save();
         app->getWindows()->closeAll();
     }
@@ -197,6 +217,64 @@ void Window::closeEvent(QCloseEvent *)
     {
         QApplication::exit();
     }
+}
+
+void Window::minimizeToTray()
+{
+    if (this->trayIcon_ == nullptr)
+    {
+        this->trayMenu_ = new QMenu(this);
+        auto *openAction =
+            this->trayMenu_->addAction("Open Chatterino Better Browser");
+        QObject::connect(openAction, &QAction::triggered, this,
+                         &Window::restoreFromTray);
+
+        auto *settingsAction = this->trayMenu_->addAction("Settings...");
+        QObject::connect(settingsAction, &QAction::triggered, this, [this] {
+            this->restoreFromTray();
+            getApp()->getWindows()->showSettingsDialog(this);
+        });
+
+        this->trayMenu_->addSeparator();
+
+        auto *quitAction = this->trayMenu_->addAction("Quit");
+        QObject::connect(quitAction, &QAction::triggered, this, [this] {
+            this->forceClose_ = true;
+            this->close();
+        });
+
+        this->trayIcon_ = new QSystemTrayIcon(applicationIcon(), this);
+        this->trayIcon_->setToolTip(
+            "Chatterino Better Browser - running for browser integration");
+        this->trayIcon_->setContextMenu(this->trayMenu_);
+        QObject::connect(
+            this->trayIcon_, &QSystemTrayIcon::activated, this,
+            [this](QSystemTrayIcon::ActivationReason reason) {
+                if (reason == QSystemTrayIcon::Trigger ||
+                    reason == QSystemTrayIcon::DoubleClick)
+                {
+                    this->restoreFromTray();
+                }
+            });
+    }
+
+    QApplication::setQuitOnLastWindowClosed(false);
+    this->trayIcon_->show();
+    this->hide();
+}
+
+void Window::restoreFromTray()
+{
+    if (this->trayIcon_ != nullptr)
+    {
+        this->trayIcon_->hide();
+    }
+    QApplication::setQuitOnLastWindowClosed(true);
+    this->show();
+    this->setWindowState((this->windowState() & ~Qt::WindowMinimized) |
+                         Qt::WindowActive);
+    this->raise();
+    this->activateWindow();
 }
 
 void Window::addLayout()

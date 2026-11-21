@@ -51,6 +51,10 @@
 #    include "widgets/AttachedWindow.hpp"
 
 #    include <Windows.h>
+// clang-format off
+// TlHelp32.h must follow Windows.h.
+#    include <TlHelp32.h>
+// clang-format on
 #endif
 
 namespace {
@@ -168,6 +172,62 @@ bool isSupportedOverlayTarget(HWND window)
            executable.compare(u"opera.exe", Qt::CaseInsensitive) == 0 ||
            executable.compare(u"msedge.exe", Qt::CaseInsensitive) == 0 ||
            executable.compare(u"brave.exe", Qt::CaseInsensitive) == 0;
+}
+
+bool hasRunningSiblingHostProcess()
+{
+    const DWORD selfPid = ::GetCurrentProcessId();
+    const QString selfPath =
+        QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
+    if (selfPath.isEmpty())
+    {
+        return false;
+    }
+
+    auto snapshot = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE)
+    {
+        return false;
+    }
+
+    bool found = false;
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    if (::Process32FirstW(snapshot, &entry) != 0)
+    {
+        do
+        {
+            if (entry.th32ProcessID == 0 || entry.th32ProcessID == selfPid)
+            {
+                continue;
+            }
+            auto process = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                         FALSE, entry.th32ProcessID);
+            if (process == nullptr)
+            {
+                continue;
+            }
+            wchar_t path[1024]{};
+            DWORD pathLength = 1024;
+            const bool havePath =
+                ::QueryFullProcessImageNameW(process, 0, path, &pathLength) !=
+                0;
+            ::CloseHandle(process);
+            if (!havePath)
+            {
+                continue;
+            }
+            const QString otherPath = QDir::toNativeSeparators(
+                QString::fromWCharArray(path, static_cast<qsizetype>(pathLength)));
+            if (otherPath.compare(selfPath, Qt::CaseInsensitive) == 0)
+            {
+                found = true;
+                break;
+            }
+        } while (::Process32NextW(snapshot, &entry) != 0);
+    }
+    ::CloseHandle(snapshot);
+    return found;
 }
 #endif
 
@@ -1002,6 +1062,26 @@ bool NativeMessagingServer::isBrowserAttached()
     return instance_->legacyBrowserAttached_ || !instance_->sessions_.empty();
 }
 
+bool NativeMessagingServer::hasActiveBrowserIntegration()
+{
+    if (!instance_)
+    {
+        return false;
+    }
+    if (isBrowserAttached())
+    {
+        return true;
+    }
+#ifdef Q_OS_WIN
+    if (instance_->hasReceivedBrowserMessage_.load(std::memory_order_relaxed) &&
+        hasRunningSiblingHostProcess())
+    {
+        return true;
+    }
+#endif
+    return false;
+}
+
 ipc::DeliveryStatus NativeMessagingServer::sendNativeChat(
     const QString &channel, const QString &message, const QString &requestId)
 {
@@ -1222,6 +1302,12 @@ void NativeMessagingServer::ReceiverThread::handleMessage(
             }
         }
         return;
+    }
+
+    if (!this->isInterruptionRequested())
+    {
+        this->parent_.hasReceivedBrowserMessage_.store(
+            true, std::memory_order_relaxed);
     }
 
     switch (message.action)

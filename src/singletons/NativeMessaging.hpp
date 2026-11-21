@@ -17,6 +17,7 @@
 #include <QString>
 #include <QThread>
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -135,6 +136,9 @@ public:
 
     static NativeMessagingServer *instance();
     static bool isBrowserAttached();
+    /// True when a browser chat overlay is currently attached or a connected
+    /// browser extension native host process is still running.
+    static bool hasActiveBrowserIntegration();
     /// Returns a delivery result only when exactly one live browser overlay
     /// owns `channel`; ambiguous duplicate-channel sessions are never routed.
     /// Synchronous: the caller (SplitInput) falls back to IRC unless this
@@ -213,6 +217,7 @@ private:
     static NativeMessagingServer *instance_;
     AttachmentSessionRegistry sessions_;
     bool legacyBrowserAttached_ = false;
+    std::atomic<bool> hasReceivedBrowserMessage_{false};
 
     /// This vector contains all channels that are open the user's browser.
     /// These channels are joined to be able to switch channels more quickly.
