@@ -31,6 +31,12 @@ constexpr int PIXMAP_WIDTH = 500;
 
 constexpr QStringView LINK_CHATTERINO_FEATURES =
     u"https://chatterino.com/#features";
+constexpr QStringView LINK_FORK_GITHUB =
+    u"https://github.com/trinlol/chatterino-with-better-browser-integration";
+constexpr QStringView LINK_FORK_RELEASES =
+    u"https://github.com/trinlol/chatterino-with-better-browser-integration/releases";
+constexpr QStringView LINK_FORK_ISSUES =
+    u"https://github.com/trinlol/chatterino-with-better-browser-integration/issues";
 
 AboutPage::AboutPage()
 {
@@ -83,8 +89,22 @@ AboutPage::AboutPage()
             label->setTextInteractionFlags(Qt::TextBrowserInteraction);
         }
 
-        // About Chatterino
-        auto aboutChatterino = layout.emplace<QGroupBox>("About Chatterino...");
+        // About Chatterino Better Browser
+        auto aboutFork =
+            layout.emplace<QGroupBox>("About Chatterino Better Browser...");
+        {
+            auto l = aboutFork.emplace<QVBoxLayout>();
+
+            // clang-format off
+            l.emplace<QLabel>("Chatterino Better Browser on <a href=\"" % LINK_FORK_GITHUB % "\">GitHub</a>")->setOpenExternalLinks(true);
+            l.emplace<QLabel>("Latest releases and changelog can be found <a href=\"" % LINK_FORK_RELEASES % "\">here</a>")->setOpenExternalLinks(true);
+            l.emplace<QLabel>("Report bugs or request features on <a href=\"" % LINK_FORK_ISSUES % "\">GitHub Issues</a>")->setOpenExternalLinks(true);
+            // clang-format on
+        }
+
+        // Original Chatterino
+        auto aboutChatterino =
+            layout.emplace<QGroupBox>("Original Chatterino...");
         {
             auto l = aboutChatterino.emplace<QVBoxLayout>();
 
@@ -184,10 +204,19 @@ AboutPage::AboutPage()
             // clang-format on
         }
 
-        // Contributors
-        auto contributors = layout.emplace<QGroupBox>("People");
+        // Original Chatterino maintainers & contributors
+        auto contributors = layout.emplace<QGroupBox>(
+            "People (Original Chatterino Maintainers & Contributors)");
         {
-            auto l = contributors.emplace<FlowLayout>();
+            auto outer = contributors.emplace<QVBoxLayout>();
+            auto *note = new QLabel(
+                "Chatterino Better Browser is a fork of Chatterino 2. "
+                "The people listed below are the original Chatterino "
+                "maintainers, collaborators, and contributors.");
+            note->setWordWrap(true);
+            outer->addWidget(note);
+
+            auto l = outer.emplace<FlowLayout>();
 
             QFile contributorsFile(":/contributors.txt");
             if (!contributorsFile.open(QFile::ReadOnly))
@@ -211,12 +240,12 @@ AboutPage::AboutPage()
                 {
                     if (l->count() != 0)
                     {
-                        l->addLinebreak(20);
+                        l->addLinebreak(16);
                     }
                     auto *label = new QLabel(QStringLiteral("<h1>%1</h1>")
                                                  .arg(line.mid(8).trimmed()));
                     l->addWidget(label);
-                    l->addLinebreak(8);
+                    l->addLinebreak(6);
                     continue;
                 }
 
@@ -231,43 +260,13 @@ AboutPage::AboutPage()
 
                 QString username = contributorParts[0].trimmed();
                 QString url = contributorParts[1].trimmed();
-                QString avatarUrl = contributorParts[2].trimmed();
 
                 auto *usernameLabel =
                     new QLabel("<a href=\"" + url + "\">" + username + "</a>");
                 usernameLabel->setOpenExternalLinks(true);
                 usernameLabel->setToolTip(url);
-
-                auto contributorBox2 = l.emplace<QVBoxLayout>();
-
-                const auto addAvatar = [&] {
-                    auto *avatar = new QLabel();
-                    QPixmap avatarPixmap;
-                    if (avatarUrl.isEmpty())
-                    {
-                        // TODO: or anon.png
-                        avatarPixmap.load(":/avatars/anon.png");
-                    }
-                    else
-                    {
-                        avatarPixmap.load(avatarUrl);
-                    }
-
-                    avatar->setPixmap(avatarPixmap);
-                    avatar->setFixedSize(64, 64);
-                    avatar->setScaledContents(true);
-                    contributorBox2->addWidget(avatar, 0, Qt::AlignCenter);
-                };
-
-                const auto addLabels = [&] {
-                    auto *labelBox = new QVBoxLayout();
-                    contributorBox2->addLayout(labelBox);
-
-                    labelBox->addWidget(usernameLabel, 0, Qt::AlignCenter);
-                };
-
-                addAvatar();
-                addLabels();
+                usernameLabel->setContentsMargins(0, 2, 10, 2);
+                l->addWidget(usernameLabel);
             }
         }
     }
