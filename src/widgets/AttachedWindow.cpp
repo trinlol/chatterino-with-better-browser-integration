@@ -200,7 +200,13 @@ BOOL CALLBACK enumWindows(HWND hwnd, LPARAM)
 #endif
 
 AttachedWindow::AttachedWindow(void *_target)
-    : QWidget(nullptr, Qt::FramelessWindowHint | Qt::Window)
+    : QWidget(nullptr,
+#ifdef Q_OS_WIN
+              Qt::FramelessWindowHint | Qt::Tool
+#else
+              Qt::FramelessWindowHint | Qt::Window
+#endif
+      )
     , target_(_target)
 {
     this->setAttribute(Qt::WA_QuitOnClose, false);
@@ -461,6 +467,14 @@ void AttachedWindow::attachToHwnd(void *_attachedPtr)
     this->attached_ = true;
     this->targetWindowZoomed_ = ::IsZoomed(attached) != 0;
     this->targetWindowStateInitialized_ = true;
+
+    // Keep the attached overlay off the Windows taskbar and Alt+Tab switcher.
+    // Otherwise hiding the main window to the system tray lets the overlay
+    // surface as its own taskbar window button.
+    const auto exStyle = ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    ::SetWindowLongPtrW(
+        hwnd, GWL_EXSTYLE,
+        (exStyle | WS_EX_TOOLWINDOW) & ~static_cast<LONG_PTR>(WS_EX_APPWINDOW));
 
     // Set the browser window as the owner of this window to prevent Z-order flickering
     ::SetLastError(0);
