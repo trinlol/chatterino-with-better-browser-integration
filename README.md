@@ -8,6 +8,7 @@
   <a href="https://github.com/trinlol/chatterino-with-better-browser-integration/releases/latest"><img src="https://img.shields.io/github/v/release/trinlol/chatterino-with-better-browser-integration?style=flat-square&color=9146ff&label=release" alt="Latest release"></a>
   <a href="https://github.com/trinlol/chatterino-with-better-browser-integration/releases"><img src="https://img.shields.io/github/downloads/trinlol/chatterino-with-better-browser-integration/total?style=flat-square&color=2ea44f" alt="Total downloads"></a>
   <a href="https://github.com/trinlol/chatterino-with-better-browser-integration/stargazers"><img src="https://img.shields.io/github/stars/trinlol/chatterino-with-better-browser-integration?style=flat-square&color=f0b429" alt="GitHub stars"></a>
+  <a href="https://addons.mozilla.org/firefox/addon/chatterino-better-browser/"><img src="https://img.shields.io/amo/v/chatterino-better-browser?style=flat-square&color=ff7139&label=Firefox%20Add-on" alt="Get the Firefox Add-on"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20x64-0078d4?style=flat-square" alt="Windows x64">
   <img src="https://img.shields.io/badge/extension-Firefox%20%7C%20Chrome%20%7C%20Edge-9146ff?style=flat-square" alt="Firefox, Chrome, and Edge extension">
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/trinlol/chatterino-with-better-browser-integration?style=flat-square" alt="License"></a>
@@ -17,7 +18,7 @@ Current release: **2.7.7**
 
 A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes Twitch browser integration feel native and complete - Chatterino chat overlaid on Twitch, plus pinned messages, predictions, channel points, chat identity badges, inline 7TV emotes, and built-in themes.
 
-> 🧩 **One extension only** - works in **Mozilla Firefox**, **Chrome**, and **Edge** using [`chatterino-extension/`](./chatterino-extension/). No separate Native Host or Companion install.
+> 🧩 **One extension only** - works in [**Mozilla Firefox**](https://addons.mozilla.org/firefox/addon/chatterino-better-browser/), **Chrome**, and **Edge** using [`chatterino-extension/`](./chatterino-extension/). No separate Native Host or Companion install.
 
 > [!IMPORTANT]
 > Chatterino Better Browser stores settings locally in `%APPDATA%\Chatterino2\` and communicates only with Twitch and the services used for chat features. Its updater and first-run release notes point exclusively to this fork's [GitHub Releases](https://github.com/trinlol/chatterino-with-better-browser-integration/releases). Remove the unpacked browser extension and delete the extracted app folder to stop using the fork; your Chatterino settings remain untouched.
@@ -62,7 +63,7 @@ Chatterino Better Browser on a live Twitch channel - full chat in the overlay, s
 3. 📂 Extract the zip **anywhere you like** (e.g. `C:\Apps\Chatterino Better Browser\`)
 4. 🔗 Right-click **`Chatterino Better Browser.exe`** → **Send to** → **Desktop (create shortcut)** _(or pin to Start / taskbar)_
 5. ▶️ Launch from your new shortcut
-6. 🧩 Install the **one** browser extension below _(required)_
+6. 🧩 Install the **one** browser extension below _(required - [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/chatterino-better-browser/) or unpacked for Chrome / Edge)_
 7. 🔄 Restart the app after loading the extension so native messaging registers
 
 > 💡 **Already use Chatterino?** Your existing settings, accounts, and window layout load automatically - uninstalling the old app does **not** delete them. See [Settings & migration](#-settings--migration) below.
@@ -144,9 +145,9 @@ Everything runs through a **single** extension for **Mozilla Firefox**, **Chrome
 
 ### Mozilla Firefox
 
-1. Install **Chatterino Better Browser** from Mozilla Add-ons (or build locally with `npm run package:extension:firefox` and load `dist/chatterino-browser-extension-firefox/manifest.json` in `about:debugging`)
-2. Open the extension popup and click **Enable on Twitch** if prompted for Twitch site access
-3. Restart **Chatterino Better Browser** once so the Firefox native messaging host is registered
+1. 🦊 Install [**Chatterino Better Browser** from Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/chatterino-better-browser/) (or build locally with `npm run package:extension:firefox` and load `dist/chatterino-browser-extension-firefox/manifest.json` in `about:debugging`)
+2. ✅ Open the extension popup and click **Enable on Twitch** if prompted for Twitch site access
+3. 🔄 Restart **Chatterino Better Browser** once so the Firefox native messaging host is registered
 
 ### Chrome / Edge
 

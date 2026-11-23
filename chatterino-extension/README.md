@@ -6,7 +6,7 @@ One browser extension for Firefox, Chrome, and Edge - chat overlay, pinned messa
 
 ### Firefox
 
-1. Install from Mozilla Add-ons (or load `dist/chatterino-browser-extension-firefox/manifest.json` via `about:debugging`)
+1. Install [**Chatterino Better Browser** from Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/chatterino-better-browser/) (or load `dist/chatterino-browser-extension-firefox/manifest.json` via `about:debugging`)
 2. Open the extension popup and click **Enable on Twitch** if Firefox prompts for Twitch site access
 3. Start **Chatterino Better Browser** on your computer so the native messaging host (`com.chatterino.chatterino`) is registered
 
