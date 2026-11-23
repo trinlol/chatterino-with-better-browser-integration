@@ -24,23 +24,6 @@ A fork of [Chatterino 2](https://github.com/Chatterino/chatterino2) that makes T
 
 ---
 
-## 🆚 Why switch from stock Chatterino?
-
-When stock Chatterino replaces Twitch's chat column, Twitch features living inside that column disappear. **Chatterino Better Browser** brings them back natively without leaving Chatterino:
-
-| Feature | Stock Chatterino | Chatterino Better Browser |
-| --- | :---: | :---: |
-| **Twitch chat overlay** | Basic overlay | Flicker-free DWM alignment, clean tab-switch detach, popup z-order fixes |
-| **Moderator pinned messages** | Missing | Compact purple pin banner with clickable links & dismiss |
-| **Polls & predictions** | Missing | Live banner with real lock deadline + clickable voting controls beside player |
-| **Channel points & bonus chests** | Missing | Auto-claim bonus chests + scrollable rewards menu beside player |
-| **Chat identity / badge picker** | Missing | Native toolbar badge button even while Twitch chat is hidden |
-| **7TV emote input & favourites** | Text-only | Inline input emotes, `:` visual picker, Ctrl+click favourites (instant save) |
-| **Built-in themes** | Basic light/dark | 12 presets (Catppuccin, Dracula, Nord, Tokyo Night, etc.) + Themes Studio |
-| **Browser extension setup** | Separate Native Host | Single unified MV3 extension for Mozilla Firefox, Chrome & Edge |
-
----
-
 ## 📸 Showcase
 
 Chatterino Better Browser on a live Twitch channel - full chat in the overlay, synced pins, toolbar integration beside the player, and live extension health diagnostics.
